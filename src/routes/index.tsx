@@ -269,7 +269,8 @@ function Workstation() {
                 max={24}
                 step={1}
                 onValueChange={(v) => {
-                  const [a, b] = v;
+                  const a = v[0] ?? 0;
+                  const b = v[1] ?? 24;
                   if (b - a >= 3) {
                     setFretFrom(a);
                     setFretTo(b);
