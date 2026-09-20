@@ -33,20 +33,20 @@ export type Degree = string;
 export function parseDegree(label: Degree): { number: number; alter: number } {
   const m = label.trim().match(/^([b#x♭♯]*)(\d{1,2})$/);
   if (!m) return { number: 1, alter: 0 };
-  const acc = m[1];
+  const acc = m[1] ?? "";
   let alter = 0;
   for (const ch of acc) {
     if (ch === "b" || ch === "♭") alter -= 1;
     if (ch === "#" || ch === "♯") alter += 1;
     if (ch === "x") alter += 2;
   }
-  return { number: parseInt(m[2], 10), alter };
+  return { number: parseInt(m[2] ?? "1", 10), alter };
 }
 
 /** Semitones above the root for a degree label (can exceed 12 for extensions). */
 export function degreeToSemitones(label: Degree): number {
   const { number, alter } = parseDegree(label);
-  const base = DEGREE_SEMITONES[number] ?? DEGREE_SEMITONES[((number - 1) % 7) + 1] + 12;
+  const base = DEGREE_SEMITONES[number] ?? (DEGREE_SEMITONES[((number - 1) % 7) + 1] ?? 0) + 12;
   return base + alter;
 }
 
@@ -98,29 +98,29 @@ export const ROOTS: Root[] = [
   { name: "B", pc: 11 },
 ].map((r) => ({
   ...r,
-  letter: r.name[0],
+  letter: r.name[0]!,
   alter: r.name.length > 1 ? (r.name[1] === "#" ? 1 : -1) : 0,
 }));
 
 export function rootByName(name: string): Root {
-  return ROOTS.find((r) => r.name === name) ?? ROOTS[0];
+  return ROOTS.find((r) => r.name === name) ?? ROOTS[0]!;
 }
 
 /** Spell the note for a degree label above a root (proper enharmonic spelling). */
 export function spellDegree(root: Root, degree: Degree): string {
   const { number, alter } = parseDegree(degree);
   const letterIdx = (LETTERS.indexOf(root.letter) + (number - 1)) % 7;
-  const letter = LETTERS[letterIdx];
+  const letter = LETTERS[letterIdx]!;
   const octaves = Math.floor((LETTERS.indexOf(root.letter) + (number - 1)) / 7);
-  const natural = LETTER_SEMITONES[letter] + octaves * 12;
-  const target = LETTER_SEMITONES[root.letter] + root.alter + degreeToSemitones(degree);
+  const natural = (LETTER_SEMITONES[letter] ?? 0) + octaves * 12;
+  const target = (LETTER_SEMITONES[root.letter] ?? 0) + root.alter + degreeToSemitones(degree);
   return letter + accidentalString(target - natural);
 }
 
 /** Fallback chromatic name, used when a pitch class has no degree in the set. */
 export function chromaticName(pc: number, preferFlats: boolean): string {
   const i = ((pc % 12) + 12) % 12;
-  return preferFlats ? FLAT_NAMES[i] : SHARP_NAMES[i];
+  return (preferFlats ? FLAT_NAMES[i] : SHARP_NAMES[i])!;
 }
 
 export function preferFlatsFor(root: Root): boolean {
@@ -828,7 +828,7 @@ export const ARPEGGIO_VARIANTS: ArpeggioVariant[] = [
     id: "upper",
     name: "Upper structure (from the 3rd)",
     transform: (d) => {
-      const rotated = [...d.slice(1), d[0]];
+      const rotated = [...d.slice(1), d[0]!];
       return rotated;
     },
     theory: "Start from the 3rd so the arpeggio implies a superimposed chord.",
@@ -878,7 +878,7 @@ export function pcsToDegrees(pcs: number[]): Degree[] {
   const sharpish = ["1", "b2", "2", "b3", "3", "4", "b5", "5", "#5", "6", "b7", "7"];
   return [...new Set(pcs.map((p) => ((p % 12) + 12) % 12))]
     .sort((a, b) => a - b)
-    .map((p) => sharpish[p]);
+    .map((p) => sharpish[p]!);
 }
 
 /**
