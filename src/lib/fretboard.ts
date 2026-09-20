@@ -145,7 +145,7 @@ export function buildFretboard(opts: BuildOptions): FretNote[][] {
   const map = degreeMap(root, degrees);
   const rows: FretNote[][] = [];
   for (let si = 0; si < tuning.strings.length; si++) {
-    const open = tuning.strings[si];
+    const open = tuning.strings[si]!;
     const row: FretNote[] = [];
     for (let f = fretFrom; f <= fretTo; f++) {
       const pc = (open.pc + f) % 12;
@@ -155,7 +155,7 @@ export function buildFretboard(opts: BuildOptions): FretNote[][] {
         fret: f,
         pc,
         inSet: !!hit,
-        degree: hit?.degree,
+        ...(hit ? { degree: hit.degree } : {}),
         noteName: hit ? hit.note : chromaticName(pc, preferFlats),
         intervalSemitones: hit?.semis,
         isRoot: pc === root.pc,

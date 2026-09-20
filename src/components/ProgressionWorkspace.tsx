@@ -67,7 +67,10 @@ export function ProgressionWorkspace({ currentRootName, currentDegrees }: Props)
       const next = [...s];
       const j = i + dir;
       if (j < 0 || j >= next.length) return s;
-      [next[i], next[j]] = [next[j], next[i]];
+      const a = next[i]!;
+      const b = next[j]!;
+      next[i] = b;
+      next[j] = a;
       return next;
     });
   };
@@ -172,7 +175,7 @@ export function ProgressionWorkspace({ currentRootName, currentDegrees }: Props)
             min={40}
             max={220}
             step={1}
-            onValueChange={(v) => setBpm(v[0])}
+            onValueChange={(v) => setBpm(v[0] ?? 90)}
             className="min-w-0 flex-1"
           />
         </div>

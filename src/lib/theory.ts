@@ -1015,22 +1015,22 @@ export function harmonize(root: Root, scale: ScaleDef, seventh: boolean): Harmon
     const pick = seventh ? [0, 2, 4, 6] : [0, 2, 4];
     const idxs = pick.map((p) => (i + p) % 7);
     const abs = idxs.map((idx, n) => {
-      let v = semis[idx];
-      const wraps = Math.floor((i + pick[n]) / 7);
+      const v = semis[idx] ?? 0;
+      const wraps = Math.floor((i + (pick[n] ?? 0)) / 7);
       return v + wraps * 12;
     });
-    const iv = abs.map((v) => v - abs[0]);
+    const iv = abs.map((v) => v - (abs[0] ?? 0));
     const q = qualityFromIntervals(iv.map((v) => v % 12).sort((a, b) => a - b));
-    const chordRootDegree = degs[i];
+    const chordRootDegree = degs[i]!;
     const chordRootName = spellDegree(root, chordRootDegree);
     const chordRoot: Root = {
       name: chordRootName,
       pc: ((degreeToSemitones(chordRootDegree) + root.pc) % 12 + 12) % 12,
-      letter: chordRootName[0],
+      letter: chordRootName[0]!,
       alter: chordRootName.length > 1 ? (chordRootName[1] === "#" ? 1 : -1) : 0,
     };
     const { alter } = parseDegree(chordRootDegree);
-    let roman = ROMAN[i];
+    let roman = ROMAN[i]!;
     if (q.roman === "lower" || q.roman === "lowerdim") roman = roman.toLowerCase();
     if (q.roman === "lowerdim") roman += q.suffix.includes("b5") ? "ø" : "°";
     if (q.roman === "aug") roman += "+";
@@ -1038,16 +1038,16 @@ export function harmonize(root: Root, scale: ScaleDef, seventh: boolean): Harmon
     if (alter > 0) roman = "#".repeat(alter) + roman;
     if (seventh && q.roman !== "lowerdim") roman += "7";
 
-    const notes = idxs.map((idx) => spellDegree(root, degs[idx]));
+    const notes = idxs.map((idx) => spellDegree(root, degs[idx]!));
 
     out.push({
       roman,
       name: `${chordRoot.name}${q.suffix}`,
       quality: q.label,
-      degrees: idxs.map((idx) => degs[idx]),
+      degrees: idxs.map((idx) => degs[idx]!),
       notes,
-      function: FUNCTIONS[i],
-      substitutions: SUBS[i],
+      function: FUNCTIONS[i] ?? "",
+      substitutions: SUBS[i] ?? [],
     });
   }
   return out;
@@ -1070,11 +1070,11 @@ export function majorModeViews(parentRoot: Root): ModalView[] {
   const parentNotes = ionian.degrees.map((d) => spellDegree(parentRoot, d));
   return MAJOR_MODE_NAMES.map((modeName, i) => {
     const def = SCALES.find((s) => s.modeOf?.family === "major" && s.modeOf.index === i)!;
-    const modeRootName = parentNotes[i];
+    const modeRootName = parentNotes[i]!;
     const modeRoot: Root = {
       name: modeRootName,
-      pc: (parentRoot.pc + degreeToSemitones(ionian.degrees[i])) % 12,
-      letter: modeRootName[0],
+      pc: (parentRoot.pc + degreeToSemitones(ionian.degrees[i]!)) % 12,
+      letter: modeRootName[0]!,
       alter: modeRootName.length > 1 ? (modeRootName[1] === "#" ? 1 : -1) : 0,
     };
     return {
@@ -1106,7 +1106,7 @@ export function parallelModeViews(root: Root): ModalView[] {
 /** Which major key does this mode of this root belong to? */
 export function parentMajorOf(root: Root, modeIndex: number): string {
   const ionian = SCALES.find((s) => s.id === "ionian")!;
-  const offset = degreeToSemitones(ionian.degrees[modeIndex]);
+  const offset = degreeToSemitones(ionian.degrees[modeIndex] ?? "1");
   const pc = ((root.pc - offset) % 12 + 12) % 12;
   const preferFlats = preferFlatsFor(root);
   return chromaticName(pc, preferFlats);
