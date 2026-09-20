@@ -157,7 +157,7 @@ export function buildFretboard(opts: BuildOptions): FretNote[][] {
         inSet: !!hit,
         ...(hit ? { degree: hit.degree } : {}),
         noteName: hit ? hit.note : chromaticName(pc, preferFlats),
-        intervalSemitones: hit?.semis,
+        ...(hit ? { intervalSemitones: hit.semis } : {}),
         isRoot: pc === root.pc,
       });
     }
