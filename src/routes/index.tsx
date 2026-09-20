@@ -85,10 +85,10 @@ function Workstation() {
   useEffect(() => setFavorites(loadFavorites()), []);
 
   const root = rootByName(rootName);
-  const tuning = TUNINGS.find((t) => t.id === tuningId) ?? TUNINGS[0];
-  const chord = CHORDS.find((c) => c.id === chordId) ?? CHORDS[0];
-  const scale = SCALES.find((s) => s.id === scaleId) ?? SCALES[0];
-  const arp = ARPEGGIO_VARIANTS.find((a) => a.id === arpId) ?? ARPEGGIO_VARIANTS[0];
+  const tuning = TUNINGS.find((t) => t.id === tuningId) ?? TUNINGS[0]!;
+  const chord = CHORDS.find((c) => c.id === chordId) ?? CHORDS[0]!;
+  const scale = SCALES.find((s) => s.id === scaleId) ?? SCALES[0]!;
+  const arp = ARPEGGIO_VARIANTS.find((a) => a.id === arpId) ?? ARPEGGIO_VARIANTS[0]!;
 
   const baseDegrees: Degree[] = useMemo(() => {
     if (mode === "scale") return scale.degrees;
