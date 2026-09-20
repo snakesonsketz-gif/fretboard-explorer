@@ -16,8 +16,8 @@ export interface FretboardProps {
   labelMode: LabelMode;
   preferFlats: boolean;
   showAllNotes: boolean;
-  roles?: Record<string, "chord tone" | "tension" | "avoid">;
-  onNote?: (info: { midi: number; label: string }) => void;
+  roles?: Record<string, "chord tone" | "tension" | "avoid"> | undefined;
+  onNote?: ((info: { midi: number; label: string }) => void) | undefined;
 }
 
 /** Color role for a degree, using semantic tokens only. */
@@ -82,7 +82,7 @@ export function Fretboard(props: FretboardProps) {
         <div className="fret-wood overflow-hidden rounded-lg border border-border p-1">
           {stringRows.map((row, ri) => {
             const notes = leftHanded ? [...row].reverse() : row;
-            const openName = tuning.strings[tuning.strings.length - 1 - ri];
+            const openName = tuning.strings[tuning.strings.length - 1 - ri]!;
             return (
               <div
                 key={ri}
@@ -105,10 +105,9 @@ export function Fretboard(props: FretboardProps) {
                         : n.noteName;
                   const midi =
                     openName.pc + (openName.octave + 1) * 12 + (n.fret - 0) + 0;
+                  const openString = tuning.strings[n.string]!;
                   const realMidi =
-                    tuning.strings[n.string].pc +
-                    (tuning.strings[n.string].octave + 1) * 12 +
-                    n.fret;
+                    openString.pc + (openString.octave + 1) * 12 + n.fret;
                   void midi;
                   return (
                     <button
