@@ -19,7 +19,11 @@ import { Fretboard, type LabelMode } from "@/components/Fretboard";
 import { ChordLab } from "@/components/ChordLab";
 import { AdvancedTheory } from "@/components/TheoryPanels";
 import { ProgressionWorkspace } from "@/components/ProgressionWorkspace";
-import { TUNINGS } from "@/lib/fretboard";
+import { TUNINGS, degreeMap } from "@/lib/fretboard";
+import { NoteEditor } from "@/components/NoteEditor";
+import { moveDegreeInSet, pcOf, togglePc, sortDegrees, CANONICAL } from "@/lib/edit";
+import { pluck } from "@/lib/audio";
+import type { FretPos } from "@/components/Fretboard";
 import { playSequence, playChord } from "@/lib/audio";
 import { loadFavorites, saveFavorites, type Favorite } from "@/lib/favorites";
 import {
@@ -102,6 +106,59 @@ function Workstation() {
   const title = detection.known
     ? detection.known.name
     : `${root.name} custom (${detection.formula})`;
+
+  const [history, setHistory] = useState<{ rootName: string; custom: Degree[] | null }[]>([]);
+  const [sel, setSel] = useState<FretPos | null>(null);
+  const commit = (next: Degree[], nextRoot = rootName) => {
+    setHistory((h) => [...h.slice(-49), { rootName, custom }]);
+    setCustom(next);
+    if (nextRoot !== rootName) setRootName(nextRoot);
+  };
+  const undo = () => {
+    const last = history[history.length - 1];
+    if (!last) return;
+    setHistory((h) => h.slice(0, -1));
+    setCustom(last.custom);
+    setRootName(last.rootName);
+  };
+  const revert = () => {
+    const first = history[0];
+    if (first) setRootName(first.rootName);
+    setCustom(null);
+    setHistory([]);
+  };
+  const altered = useMemo(() => {
+    const base = new Set(baseDegrees);
+    return new Set(degrees.filter((d) => !base.has(d)));
+  }, [degrees, baseDegrees]);
+  const selInfo = useMemo(() => {
+    if (!sel) return null;
+    const os = tuning.strings[sel.string];
+    if (!os) return null;
+    const pc = (os.pc + sel.fret) % 12;
+    const hit = degreeMap(root, degrees).get(pc);
+    const semis = (pc - root.pc + 12) % 12;
+    return {
+      stringLabel: os.note,
+      fret: sel.fret,
+      midi: os.pc + (os.octave + 1) * 12 + sel.fret,
+      noteName: hit ? hit.note : spellDegree(root, CANONICAL[semis]!),
+      degree: hit?.degree,
+      semis,
+    };
+  }, [sel, tuning, root, degrees]);
+  const shiftSelected = (delta: number) => {
+    if (!sel || !selInfo?.degree) return;
+    if (selInfo.semis === 0) {
+      const npc = (root.pc + delta + 12) % 12;
+      const nr = ROOTS.find((r) => r.pc === npc);
+      if (nr) commit(degrees, nr.name);
+    } else {
+      commit(moveDegreeInSet(degrees, selInfo.degree, delta));
+    }
+    setSel({ string: sel.string, fret: Math.max(0, sel.fret + delta) });
+    pluck(selInfo.midi + delta);
+  };
 
   const roles = useMemo(() => {
     if (mode !== "scale") return undefined;
@@ -206,7 +263,7 @@ function Workstation() {
               size="sm"
               variant="ghost"
               className="mt-2"
-              onClick={() => setCustom(null)}
+              onClick={revert}
             >
               Back to the unmodified {mode}
             </Button>
@@ -226,6 +283,24 @@ function Workstation() {
             preferFlats={preferFlatsFor(root)}
             showAllNotes={showAllNotes}
             roles={roles}
+            altered={custom ? altered : undefined}
+            selected={sel}
+            onSelect={setSel}
+            onShift={shiftSelected}
+          />
+          <NoteEditor
+            root={root}
+            degrees={degrees}
+            selected={selInfo}
+            canUndo={history.length > 0}
+            modified={!!custom || history.length > 0}
+            onShift={shiftSelected}
+            onAddSelected={() => selInfo && commit(togglePc(degrees, selInfo.semis))}
+            onRemoveSelected={() => selInfo && commit(togglePc(degrees, selInfo.semis))}
+            onClearSelection={() => setSel(null)}
+            onTogglePc={(pc) => commit(togglePc(degrees, pc))}
+            onUndo={undo}
+            onReset={revert}
           />
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -468,13 +543,13 @@ function Workstation() {
         <div className="grid gap-4 lg:grid-cols-2">
           <section>
             <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-widest">
-              Chord modification lab
+              Interval lab (edits any chord, scale or arpeggio)
             </h3>
             <ChordLab
               root={root}
               degrees={degrees}
-              onChange={(d) => setCustom(d)}
-              onReset={() => setCustom(null)}
+              onChange={(d) => commit(d)}
+              onReset={revert}
             />
           </section>
 
@@ -491,7 +566,7 @@ function Workstation() {
                 seventh={seventh}
                 onToggleSeventh={() => setSeventh((s) => !s)}
                 onPickScale={pickScale}
-                onPickDegrees={(d) => setCustom(d)}
+                onPickDegrees={(d) => commit(d)}
               />
             </div>
           </section>
