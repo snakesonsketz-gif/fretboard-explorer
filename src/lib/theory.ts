@@ -65,7 +65,10 @@ export function accidentalString(alter: number): string {
 
 /** Pretty accidental glyphs for display. */
 export function pretty(text: string): string {
-  return text.replace(/b(?=\d|$|\)|\/|,| )/g, "♭").replace(/#/g, "♯");
+  return text
+    .replace(/bb(?=\d)/g, "𝄫")
+    .replace(/b(?=\d|$|\)|\/|,| )/g, "♭")
+    .replace(/#/g, "♯");
 }
 
 /* ------------------------------------------------------------------ roots */
