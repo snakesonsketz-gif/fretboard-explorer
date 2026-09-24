@@ -123,7 +123,7 @@ export function Fretboard(props: FretboardProps) {
             const notes = leftHanded ? [...row].reverse() : row;
             const open = tuning.strings[stringIndex]!;
             // lower strings drawn thicker
-            const thickness = 1 + Math.round((stringIndex === 0 ? 3 : (nStrings - 1 - stringIndex) / (nStrings - 1) * 2.5) * 10) / 10;
+            const thickness = 1 + ((nStrings - 1 - stringIndex) / Math.max(1, nStrings - 1)) * 2.5;
             return (
               <div
                 key={ri}
@@ -132,7 +132,6 @@ export function Fretboard(props: FretboardProps) {
               >
                 <div className="z-10 text-center font-mono text-xs font-semibold text-foreground">
                   {pretty(open.note)}
-                  <span className="ml-0.5 text-[9px] text-muted-foreground">{stringIndex + 1 === nStrings ? "" : ""}</span>
                 </div>
                 {/* the string itself */}
                 <span
@@ -195,7 +194,7 @@ export function Fretboard(props: FretboardProps) {
                           aria-hidden
                           className={cn(
                             "pointer-events-none absolute h-2 w-2 rounded-full bg-fret-wire/50",
-                            DOUBLE_INLAY.has(n.fret) && "shadow-[0_14px_0_var(--fret-wire)]",
+                            DOUBLE_INLAY.has(n.fret) && "bg-primary/60",
                           )}
                           style={{ top: "-0.25rem" }}
                         />
