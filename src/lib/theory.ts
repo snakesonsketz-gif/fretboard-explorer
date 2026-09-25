@@ -5,6 +5,7 @@
  * from which semitone values are derived. This keeps spelling (letter names +
  * accidentals) and interval math consistent across scales, chords and arpeggios.
  */
+import { EXTRA_ARPEGGIOS, EXTRA_CHORDS, EXTRA_SCALES } from "./theory-library";
 
 export const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 export const FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
@@ -171,7 +172,9 @@ export interface ScaleDef {
   name: string;
   aliases?: string[];
   degrees: Degree[];
-  family: "Major modes" | "Minor" | "Pentatonic / Blues" | "Symmetric" | "Exotic";
+  family:
+    | "Major modes" | "Minor" | "Melodic minor modes" | "Harmonic minor modes" | "Harmonic major modes"
+    | "Pentatonic / Blues" | "Bebop" | "Symmetric" | "Exotic" | "World";
   /** Notes that give the scale its identity against its parent. */
   characteristic?: string;
   theory: string;
@@ -434,10 +437,16 @@ export const SCALES: ScaleDef[] = [
 export const SCALE_FAMILIES: ScaleDef["family"][] = [
   "Major modes",
   "Minor",
+  "Melodic minor modes",
+  "Harmonic minor modes",
+  "Harmonic major modes",
   "Pentatonic / Blues",
+  "Bebop",
   "Symmetric",
   "Exotic",
+  "World",
 ];
+SCALES.push(...EXTRA_SCALES);
 
 /* ------------------------------------------------------------------ chords */
 
@@ -454,7 +463,11 @@ export interface ChordDef {
     | "Sus & add"
     | "Extensions"
     | "Altered dominants"
-    | "Diminished & augmented";
+    | "Diminished & augmented"
+    | "Suspended & quartal"
+    | "Shell & rootless"
+    | "Upper structures & slash"
+    | "Clusters";
   theory: string;
   /** Recommended scales (ids) */
   scales?: string[];
@@ -789,7 +802,12 @@ export const CHORD_FAMILIES: ChordDef["family"][] = [
   "Extensions",
   "Altered dominants",
   "Diminished & augmented",
+  "Suspended & quartal",
+  "Shell & rootless",
+  "Upper structures & slash",
+  "Clusters",
 ];
+CHORDS.push(...EXTRA_CHORDS);
 
 /* ------------------------------------------------------------------ arpeggios */
 
@@ -849,6 +867,8 @@ export const ARPEGGIO_VARIANTS: ArpeggioVariant[] = [
     theory: "The 13th sits a whole tone above the 5th and softens dominant sounds.",
   },
 ];
+
+ARPEGGIO_VARIANTS.push(...EXTRA_ARPEGGIOS);
 
 /* ------------------------------------------------------------------ naming / detection */
 

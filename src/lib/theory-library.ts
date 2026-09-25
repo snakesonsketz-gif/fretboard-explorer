@@ -190,8 +190,6 @@ export const EXTRA_CHORDS: C[] = [
 
 const is7 = (x: Degree) => x === "7" || x === "b7" || x === "bb7";
 const isThird = (x: Degree) => x === "3" || x === "b3";
-const has = (d: Degree[], pcs: number[]) => d; // placeholder for readability
-void has;
 
 export const EXTRA_ARPEGGIOS: ArpeggioVariant[] = [
   {
