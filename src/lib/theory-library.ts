@@ -230,7 +230,7 @@ export const EXTRA_CHORDS: C[] = [
   ch("guide-min", "Minor 7 guide tones", "m7 (b3 & b7 only)", ["b3", "b7"], "Shell & rootless", "Minor 3rd and minor 7th only."),
   ch("ust-bII", "UST bII (Db/C7)", "7(b9,11,b13) UST bII", ["1", "3", "b7", "b9", "11", "b13"], "Upper structures & slash", "Major triad a half step above over a dominant shell: b9-11-b13."),
   ch("ust-IIm", "UST IIm (Dm/C7)", "13 UST IIm", ["1", "3", "b7", "9", "11", "13"], "Upper structures & slash", "Minor triad on 2 over a dominant shell: 9-11-13.", ["mixolydian"]),
-  ch("ust-bIIIm", "UST bIIIm (Ebm/C7)", "7(#9,b13) UST bIIIm", ["1", "3", "b7", "#9", "b13"], "Upper structures & slash", "Minor triad on b3 over a dominant shell: #9-b13-b7 (Gb spelled b13... read as #11 when preferred).", ["altered"]),
+  ch("ust-bIIIm", "UST bIIIm (Ebm/C7)", "7(#9,#11) UST bIIIm", ["1", "3", "b7", "#9", "#11"], "Upper structures & slash", "Minor triad on b3 over a dominant shell: #9-#11-b7.", ["dim-half-whole", "altered"]),
   ch("slash-IIm", "IIm/I (Dm/C)", "IIm/I", ["1", "2", "4", "6"], "Upper structures & slash", "Minor triad a step above the bass: 9-11-13 with no 3rd.", ["dorian", "ionian"]),
   ch("slash-VII", "VII/I (B/C)", "VII/I", ["1", "7", "#9", "#11"], "Upper structures & slash", "Major triad a half step below the bass."),
   ch("slash-bVIIm", "bVIIm/I (Bbm/C)", "bVIIm/I", ["1", "b7", "b9", "11"], "Upper structures & slash", "Minor triad a step below the bass: a sus(b9) sound.", ["phrygian", "dorian-b2"]),
