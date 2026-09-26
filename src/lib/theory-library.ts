@@ -66,6 +66,12 @@ export const EXTRA_SCALES: S[] = [
   { id: "spanish-8", name: "Spanish 8-tone", degrees: ["1", "b2", "#2", "3", "4", "b5", "b6", "b7"], family: "World", characteristic: "Both b3 (as #2) and 3.", theory: "Phrygian dominant with added minor 3rd and b5, common in flamenco." },
   { id: "messiaen-3", name: "Messiaen mode 3", degrees: ["1", "2", "b3", "3", "#4", "5", "#5", "6", "7"], family: "Symmetric", characteristic: "Repeats every major 3rd.", theory: "Nine-note mode of limited transposition (only four transpositions)." },
   { id: "messiaen-4", name: "Messiaen mode 4", degrees: ["1", "b2", "2", "4", "#4", "5", "b6", "7"], family: "Symmetric", characteristic: "Repeats every tritone.", theory: "Eight-note mode of limited transposition." },
+  // Hexatonic / additional
+  { id: "major-hexatonic", name: "Major hexatonic", degrees: ["1", "2", "3", "4", "5", "6"], family: "Pentatonic / Blues", characteristic: "Major scale without the 7th.", theory: "Six-note subset shared by Ionian and Mixolydian." },
+  { id: "minor-hexatonic", name: "Minor hexatonic", degrees: ["1", "2", "b3", "4", "5", "b7"], family: "Pentatonic / Blues", characteristic: "Minor scale without the 6th.", theory: "Six-note subset shared by Dorian and Aeolian." },
+  { id: "oriental", name: "Oriental", degrees: ["1", "b2", "3", "4", "b5", "6", "b7"], family: "Exotic", characteristic: "b2 and b5 with a major 3rd and 6.", theory: "Two augmented 2nds; related to the double harmonic with b5 and b7." },
+  { id: "leading-whole-tone", name: "Leading whole tone", degrees: ["1", "2", "3", "#4", "#5", "#6", "7"], family: "Symmetric", characteristic: "Whole-tone scale plus a leading tone.", theory: "Six whole steps then a half step back to the root." },
+  { id: "six-tone-symmetric", name: "Six-tone symmetrical", degrees: ["1", "b2", "3", "4", "#5", "6"], family: "Symmetric", characteristic: "Alternating half and minor-3rd steps.", theory: "Union of two augmented triads a half step apart; repeats every major 3rd." },
 ];
 
 /* ------------------------------------------------------------------ chords */
@@ -78,7 +84,7 @@ const ch = (
   family: C["family"],
   theory: string,
   scales?: string[],
-): C => ({ id, name, suffix, degrees, family, theory, scales });
+): C => (scales ? { id, name, suffix, degrees, family, theory, scales } : { id, name, suffix, degrees, family, theory });
 
 export const EXTRA_CHORDS: C[] = [
   // Triads & power
@@ -142,7 +148,7 @@ export const EXTRA_CHORDS: C[] = [
   ch("13b9", "13 b9", "13(b9)", ["1", "3", "5", "b7", "b9", "13"], "Altered dominants", "Half-whole diminished dominant.", ["dim-half-whole", "mixolydian-b2"]),
   ch("13s9", "13 #9", "13(#9)", ["1", "3", "5", "b7", "#9", "13"], "Altered dominants", "Half-whole diminished dominant.", ["dim-half-whole"]),
   ch("13s11", "13 #11", "13(#11)", ["1", "3", "5", "b7", "9", "#11", "13"], "Altered dominants", "The full Lydian dominant stack.", ["lydian-dominant"]),
-  ch("7b13", "7 b13 (no 5)", "7(b13)(no5)", ["1", "3", "b7", "b13"], "Altered dominants", "Dominant with b13 and the 5 omitted.", ["mixolydian-b6"]),
+  ch("7b13no5", "7 b13 (no 5)", "7(b13)(no5)", ["1", "3", "b7", "b13"], "Altered dominants", "Dominant with b13 and the 5 omitted.", ["mixolydian-b6"]),
 
   // Diminished & augmented
   ch("augadd9", "Augmented add 9", "+(add9)", ["1", "3", "#5", "9"], "Diminished & augmented", "Augmented triad with 9.", ["whole-tone", "lydian-augmented"]),
@@ -184,6 +190,57 @@ export const EXTRA_CHORDS: C[] = [
   ch("cl-min", "Minor cluster", "(cluster 1-2-b3)", ["1", "2", "b3"], "Clusters", "Whole step plus half step."),
   ch("cl-mixed", "Mixed cluster", "(cluster 1-b2-b3)", ["1", "b2", "b3"], "Clusters", "Half step plus whole step."),
   ch("cl-4", "Four-note cluster", "(cluster 1-2-3-4)", ["1", "2", "3", "4"], "Clusters", "Four adjacent scale steps."),
+  // --- expansion 2 ---
+  ch("69s11", "6/9 #11", "6/9(#11)", ["1", "3", "5", "6", "9", "#11"], "Sixths", "6/9 with a Lydian #11.", ["lydian"]),
+  ch("m69maj7", "Minor 6/9 major 7", "m6/9(maj7)", ["1", "b3", "5", "6", "7", "9"], "Sixths", "Melodic-minor tonic with 6, 7 and 9.", ["melodic-minor"]),
+  ch("6sus2", "6 sus2", "6sus2", ["1", "2", "5", "6"], "Sixths", "Suspended 2nd with a major 6th.", ["major-pentatonic", "ionian"]),
+  ch("7add6", "7/6", "7/6", ["1", "3", "5", "6", "b7"], "Sixths", "Dominant with the 6 inside the octave; same pitch classes as 13(no9).", ["mixolydian"]),
+  ch("6add11", "6 add 11", "6(add11)", ["1", "3", "5", "6", "11"], "Sixths", "Major 6 with a natural 11.", ["ionian"]),
+  ch("m7b9", "Minor 7 b9", "m7(b9)", ["1", "b3", "5", "b7", "b9"], "Extensions", "Minor 7 with a minor 9th.", ["phrygian", "dorian-b2"]),
+  ch("m7b5b9", "Minor 7 b5 b9", "m7(b5,b9)", ["1", "b3", "b5", "b7", "b9"], "Extensions", "Half-diminished with b9.", ["locrian"]),
+  ch("m7b5add11", "Minor 7 b5 add 11", "m7(b5,add11)", ["1", "b3", "b5", "b7", "11"], "Extensions", "Half-diminished with 11 and no 9.", ["locrian", "locrian-nat2"]),
+  ch("mmaj13", "Minor-major 13", "m(maj13)", ["1", "b3", "5", "7", "9", "13"], "Extensions", "mMaj9 with a 13th.", ["melodic-minor"]),
+  ch("m13no11", "Minor 13 (no 11)", "m13(no11)", ["1", "b3", "5", "b7", "9", "13"], "Extensions", "Dorian 13 with the 11 omitted.", ["dorian"]),
+  ch("11no3", "11 (no 3)", "11(no3)", ["1", "5", "b7", "9", "11"], "Extensions", "Dominant 11 with the 3rd omitted; same pitch classes as 9sus4.", ["mixolydian"]),
+  ch("maj13no9", "Major 13 (no 9)", "maj7(13)", ["1", "3", "7", "13"], "Extensions", "maj7 shell plus 13.", ["ionian"]),
+  ch("addb9", "Major add b9", "(addb9)", ["1", "3", "5", "b9"], "Sus & add", "Major triad with a minor 9th.", ["phrygian-dominant"]),
+  ch("maddb6", "Minor add b6", "m(addb6)", ["1", "b3", "5", "b6"], "Sus & add", "Minor triad with b6.", ["aeolian", "harmonic-minor"]),
+  ch("sus4add9", "sus4 add 9", "sus4(add9)", ["1", "4", "5", "9"], "Sus & add", "Suspended 4th with a 9th.", ["mixolydian", "ionian"]),
+  ch("maj7sus2", "Major 7 sus2", "maj7sus2", ["1", "2", "5", "7"], "Suspended & quartal", "Suspended 2nd with a major 7th.", ["ionian", "lydian"]),
+  ch("madd9add11", "Minor add 9 add 11", "m(add9,add11)", ["1", "b3", "5", "9", "11"], "Sus & add", "Minor triad with 9 and 11, no 7.", ["aeolian", "dorian"]),
+  ch("13sus4b9", "13 sus4 b9", "13sus4(b9)", ["1", "4", "5", "b7", "b9", "13"], "Suspended & quartal", "Sus dominant with b9 and natural 13.", ["mixolydian-b2", "dorian-b2"]),
+  ch("9b13", "9 b13", "9(b13)", ["1", "3", "5", "b7", "9", "b13"], "Altered dominants", "Dominant with natural 9 and b13.", ["mixolydian-b6"]),
+  ch("13b9s11", "13 b9 #11", "13(b9,#11)", ["1", "3", "b7", "b9", "#11", "13"], "Altered dominants", "Half-whole diminished stack.", ["dim-half-whole"]),
+  ch("7b9s11b13", "7 b9 #11 b13", "7(b9,#11,b13)", ["1", "3", "b7", "b9", "#11", "b13"], "Altered dominants", "Altered-scale tensions except #9.", ["altered"]),
+  ch("7b9s9b13", "7 b9 #9 b13", "7(b9,#9,b13)", ["1", "3", "b7", "b9", "#9", "b13"], "Altered dominants", "Altered-scale tensions except #11.", ["altered"]),
+  ch("7alt-full", "7alt (all tensions)", "7(b9,#9,#11,b13)", ["1", "3", "b7", "b9", "#9", "#11", "b13"], "Altered dominants", "Every tone of the altered scale.", ["altered"]),
+  ch("7sus4s9", "7 sus4 #9", "7sus4(#9)", ["1", "4", "5", "b7", "#9"], "Altered dominants", "Suspended dominant with #9 (b3 above the octave).", ["dorian", "aeolian"]),
+  ch("dim7add9", "Diminished 7 add 9", "°7(add9)", ["1", "b3", "b5", "bb7", "9"], "Diminished & augmented", "dim7 with the natural 9 from the whole-half scale.", ["dim-whole-half"]),
+  ch("dim7addmaj7", "Diminished 7 add maj7", "°7(add maj7)", ["1", "b3", "b5", "bb7", "7"], "Diminished & augmented", "dim7 with a major 7th from the whole-half scale.", ["dim-whole-half"]),
+  ch("augmaj7s11", "Augmented major 7 #11", "maj7(#5,#11)", ["1", "3", "#5", "7", "#11"], "Diminished & augmented", "Lydian augmented stack.", ["lydian-augmented"]),
+  ch("dimadd9", "Diminished add 9", "°(add9)", ["1", "b3", "b5", "9"], "Diminished & augmented", "Diminished triad with 9.", ["locrian-nat2", "dim-whole-half"]),
+  ch("shell-m6", "Minor 6 shell", "m6(no5)", ["1", "b3", "6"], "Shell & rootless", "Shell voicing 1-b3-6.", ["dorian"]),
+  ch("shell-m7b5", "m7b5 shell", "m7(b5)(no3)", ["1", "b5", "b7"], "Shell & rootless", "Shell voicing 1-b5-b7.", ["locrian"]),
+  ch("rl-m11", "m11 rootless", "m11 (rootless)", ["b3", "b7", "9", "11"], "Shell & rootless", "b3-b7-9-11 with the root left to the bass.", ["dorian"]),
+  ch("rl-maj13", "maj13 rootless", "maj13 (rootless)", ["3", "7", "9", "13"], "Shell & rootless", "3-7-9-13 with the root left to the bass.", ["ionian"]),
+  ch("rl-7b9", "7b9 rootless", "7(b9) (rootless)", ["3", "5", "b7", "b9"], "Shell & rootless", "3-5-b7-b9; the same notes as a diminished 7th.", ["dim-half-whole"]),
+  ch("rl-13b9", "13b9 rootless", "13(b9) (rootless)", ["3", "13", "b7", "b9"], "Shell & rootless", "3-13-b7-b9.", ["dim-half-whole"]),
+  ch("rl-69", "6/9 rootless", "6/9 (rootless)", ["3", "6", "9"], "Shell & rootless", "3-6-9 with the root left to the bass.", ["major-pentatonic"]),
+  ch("guide-maj", "Major 7 guide tones", "maj7 (3 & 7 only)", ["3", "7"], "Shell & rootless", "3rd and major 7th only."),
+  ch("guide-min", "Minor 7 guide tones", "m7 (b3 & b7 only)", ["b3", "b7"], "Shell & rootless", "Minor 3rd and minor 7th only."),
+  ch("ust-bII", "UST bII (Db/C7)", "7(b9,11,b13) UST bII", ["1", "3", "b7", "b9", "11", "b13"], "Upper structures & slash", "Major triad a half step above over a dominant shell: b9-11-b13."),
+  ch("ust-IIm", "UST IIm (Dm/C7)", "13 UST IIm", ["1", "3", "b7", "9", "11", "13"], "Upper structures & slash", "Minor triad on 2 over a dominant shell: 9-11-13.", ["mixolydian"]),
+  ch("ust-bIIIm", "UST bIIIm (Ebm/C7)", "7(#9,#11) UST bIIIm", ["1", "3", "b7", "#9", "#11"], "Upper structures & slash", "Minor triad on b3 over a dominant shell: #9-#11-b7.", ["dim-half-whole", "altered"]),
+  ch("slash-IIm", "IIm/I (Dm/C)", "IIm/I", ["1", "2", "4", "6"], "Upper structures & slash", "Minor triad a step above the bass: 9-11-13 with no 3rd.", ["dorian", "ionian"]),
+  ch("slash-VII", "VII/I (B/C)", "VII/I", ["1", "7", "#9", "#11"], "Upper structures & slash", "Major triad a half step below the bass."),
+  ch("slash-bVIIm", "bVIIm/I (Bbm/C)", "bVIIm/I", ["1", "b7", "b9", "11"], "Upper structures & slash", "Minor triad a step below the bass: a sus(b9) sound.", ["phrygian", "dorian-b2"]),
+  ch("petrushka", "Petrushka chord", "(Petrushka)", ["1", "3", "5", "b9", "#11", "b7"], "Upper structures & slash", "Two major triads a tritone apart (C and F#).", ["tritone-scale"]),
+  ch("quartal-aug", "Quartal (perfect + augmented)", "(4th + aug4th)", ["1", "4", "7"], "Suspended & quartal", "Perfect 4th stacked with an augmented 4th."),
+  ch("quartal5", "Quartal 5-note", "(4ths ×5)", ["1", "4", "b7", "b10", "b13"], "Suspended & quartal", "Four stacked perfect 4ths.", ["aeolian"]),
+  ch("quintal5", "Quintal 5-note", "(5ths ×5)", ["1", "5", "9", "13", "3"], "Suspended & quartal", "Four stacked perfect 5ths: the major pentatonic as a chord.", ["major-pentatonic"]),
+  ch("viennese", "Viennese trichord", "(0-1-6)", ["1", "b2", "#4"], "Clusters", "Semitone plus tritone; set class 3-5."),
+  ch("cl-chrom4", "Chromatic 4-note cluster", "(cluster 1-b2-2-b3)", ["1", "b2", "2", "b3"], "Clusters", "Four adjacent semitones."),
+  ch("cl-wt4", "Whole-tone 4-note cluster", "(cluster 1-2-3-#4)", ["1", "2", "3", "#4"], "Clusters", "Four adjacent whole tones.", ["whole-tone", "lydian"]),
 ];
 
 /* ------------------------------------------------------------------ arpeggios */
@@ -283,4 +340,33 @@ export const EXTRA_ARPEGGIOS: ArpeggioVariant[] = [
     },
     theory: "Start from the 5th so the top of the chord reads as its own triad or seventh.",
   },
+
+  { id: "r37", name: "Root, 3rd & 7th", transform: (d) => d.filter((x) => x === "1" || isThird(x) || is7(x)), theory: "Root with the two quality-defining tones." },
+  { id: "rootless-no5", name: "Rootless, no 5th", transform: (d) => d.filter((x) => x !== "1" && x !== "5"), theory: "Root and perfect 5th removed; thirds, sevenths and tensions remain." },
+  { id: "from3", name: "Starting from the 3rd", transform: (d) => rotateTo(d, isThird), theory: "Same tones reordered from the 3rd." },
+  { id: "from7", name: "Starting from the 7th", transform: (d) => rotateTo(d, is7), theory: "Same tones reordered from the 7th." },
+  { id: "top3", name: "Upper triad (top three tones)", transform: (d) => (d.length > 3 ? d.slice(-3) : d), theory: "The highest three tones of the stack in isolation." },
+  { id: "sus4", name: "Suspend the 3rd (4)", transform: (d) => uniq(d.map((x) => (isThird(x) ? "4" : x))), theory: "3rd replaced by the perfect 4th." },
+  { id: "sus2", name: "Suspend the 3rd (2)", transform: (d) => uniq(d.map((x) => (isThird(x) ? "2" : x))), theory: "3rd replaced by the major 2nd." },
+  { id: "addmaj7", name: "Add major 7", transform: (d) => (d.some(is7) ? d : [...d, "7"]), theory: "Adds a major 7th when no 7th is present." },
+  { id: "addb7", name: "Add minor 7", transform: (d) => (d.some(is7) ? d : [...d, "b7"]), theory: "Adds a minor 7th when no 7th is present." },
+  { id: "b9", name: "With b9", transform: (d) => [...d.filter((x) => !/9$/.test(x)), "b9"], theory: "Any 9th replaced by the minor 9th." },
+  { id: "s9", name: "With #9", transform: (d) => [...d.filter((x) => !/9$/.test(x)), "#9"], theory: "Any 9th replaced by the augmented 9th." },
+  { id: "s11", name: "With #11", transform: (d) => [...d.filter((x) => !/11$/.test(x)), "#11"], theory: "Any 11th replaced by the augmented 11th." },
+  { id: "b13", name: "With b13", transform: (d) => [...d.filter((x) => !/13$/.test(x) && x !== "6"), "b13"], theory: "Any 13th/6th replaced by the minor 13th." },
+  { id: "half-dim", name: "Half-diminished form", transform: (d) => withCore(d, "b3", "b5", "b7"), theory: "3rd, 5th and 7th set to b3, b5, b7; tensions kept." },
+  { id: "full-dim", name: "Diminished 7 form", transform: (d) => withCore(d, "b3", "b5", "bb7"), theory: "3rd, 5th and 7th set to b3, b5, bb7; tensions kept." },
+  { id: "aug-form", name: "Augmented 5th form", transform: (d) => uniq(d.map((x) => (x === "5" || x === "b5" ? "#5" : x))), theory: "The 5th raised to #5." },
 ];
+
+function uniq(d: Degree[]): Degree[] {
+  return d.filter((x, i) => d.indexOf(x) === i);
+}
+function rotateTo(d: Degree[], pred: (x: Degree) => boolean): Degree[] {
+  const i = d.findIndex(pred);
+  return i < 0 ? d : [...d.slice(i), ...d.slice(0, i)];
+}
+function withCore(d: Degree[], third: Degree, fifth: Degree, seventh: Degree): Degree[] {
+  const rest = d.filter((x) => !isThird(x) && !["4", "2", "5", "b5", "#5"].includes(x) && !is7(x) && x !== "6");
+  return uniq(["1", third, fifth, seventh, ...rest.filter((x) => x !== "1")]);
+}
