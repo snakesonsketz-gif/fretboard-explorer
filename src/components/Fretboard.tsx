@@ -28,6 +28,8 @@ export interface FretboardProps {
   onSelect?: ((pos: FretPos) => void) | undefined;
   /** Drag / arrow-key edit of the selected note, in semitones. */
   onShift?: ((delta: number) => void) | undefined;
+  /** Highlight a single playable shape: fret per string, null = muted. */
+  shape?: (number | null)[] | undefined;
   onNote?: ((info: { midi: number; label: string }) => void) | undefined;
 }
 
@@ -62,6 +64,7 @@ export function Fretboard(props: FretboardProps) {
     onSelect,
     onShift,
     onNote,
+    shape,
   } = props;
 
   const rows = useMemo(
@@ -131,7 +134,7 @@ export function Fretboard(props: FretboardProps) {
                 style={{ gridTemplateColumns: cols }}
               >
                 <div className="z-10 text-center font-mono text-xs font-semibold text-foreground">
-                  {pretty(open.note)}
+                  {shape && shape[stringIndex] === null ? "×" : pretty(open.note)}
                 </div>
                 {/* the string itself */}
                 <span
@@ -153,6 +156,7 @@ export function Fretboard(props: FretboardProps) {
                   const midi = os.pc + (os.octave + 1) * 12 + n.fret;
                   const isNut = n.fret === 0;
                   const isAltered = !!n.degree && altered?.has(n.degree);
+                  const inShape = shape ? shape[n.string] === n.fret : undefined;
                   return (
                     <button
                       type="button"
@@ -207,6 +211,8 @@ export function Fretboard(props: FretboardProps) {
                             : "bg-neutral-note/70 text-muted-foreground",
                           !visible && !isSel && "opacity-0 hover:opacity-40",
                           isAltered && "outline-2 outline-dashed outline-offset-2 outline-foreground/70",
+                          inShape === false && !isSel && "opacity-20",
+                          inShape === true && "ring-2 ring-primary ring-offset-1 ring-offset-background",
                           isSel && "scale-125 ring-2 ring-foreground ring-offset-2 ring-offset-background",
                           isSel && !n.inSet && "opacity-80",
                         )}

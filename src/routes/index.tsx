@@ -18,7 +18,8 @@ import {
 import { Fretboard, type LabelMode } from "@/components/Fretboard";
 import { ChordLab } from "@/components/ChordLab";
 import { AdvancedTheory } from "@/components/TheoryPanels";
-import { ProgressionWorkspace } from "@/components/ProgressionWorkspace";
+import { SongWorkspace } from "@/components/SongWorkspace";
+import { findVoicings, shapeMidis, shapeToTab } from "@/lib/voicings";
 import { TUNINGS, degreeMap } from "@/lib/fretboard";
 import { NoteEditor } from "@/components/NoteEditor";
 import { moveDegreeInSet, pcOf, togglePc, sortDegrees, CANONICAL } from "@/lib/edit";
@@ -156,7 +157,7 @@ function Workstation() {
     } else {
       commit(moveDegreeInSet(degrees, selInfo.degree, delta));
     }
-    setSel({ string: sel.string, fret: Math.max(0, sel.fret + delta) });
+    setSel({ string: sel.string, fret: Math.min(fretTo, Math.max(fretFrom, sel.fret + delta)) });
     pluck(selInfo.midi + delta);
   };
 
@@ -184,6 +185,40 @@ function Workstation() {
     setCustom(null);
     if (newRoot) setRootName(newRoot);
   };
+
+  const loadChord = (r: string, d: Degree[]) => {
+    const key = [...d].sort().join(",");
+    const match = CHORDS.find((c) => [...c.degrees].sort().join(",") === key);
+    setMode("chord");
+    setRootName(r);
+    if (match) {
+      setChordId(match.id);
+      setCustom(null);
+    } else setCustom([...d]);
+    setHistory([]);
+    setSel(null);
+  };
+
+  const [bassMode, setBassMode] = useState<"root" | "any">("root");
+  const [shapeIdx, setShapeIdx] = useState<number | null>(null);
+  const voicings = useMemo(
+    () =>
+      degrees.length <= tuning.strings.length
+        ? findVoicings({
+            tuning,
+            rootPc: root.pc,
+            pcs: degreesToPitchClasses(degrees).map((p) => p + root.pc),
+            fretFrom,
+            fretTo,
+            bass: bassMode,
+            maxSpan: 3,
+            limit: 24,
+          })
+        : [],
+    [tuning, root.pc, degrees, fretFrom, fretTo, bassMode],
+  );
+  useEffect(() => setShapeIdx(null), [voicings]);
+  const shape = shapeIdx !== null ? voicings[shapeIdx]?.shape : undefined;
 
   const addFavorite = () => {
     const next: Favorite[] = [
@@ -271,8 +306,9 @@ function Workstation() {
         </section>
 
         {/* ------------------------------------------------ fretboard */}
-        <section className="panel space-y-3 p-3 sm:p-4">
+        <section id="fretboard" className="panel space-y-3 p-3 sm:p-4">
           <Fretboard
+            shape={shape}
             tuning={tuning}
             root={root}
             degrees={degrees}
@@ -288,6 +324,39 @@ function Workstation() {
             onSelect={setSel}
             onShift={shiftSelected}
           />
+          {mode !== "scale" ? (
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Playable shapes in frets {fretFrom}–{fretTo} ({voicings.length})
+                </p>
+                <Button size="sm" variant={bassMode === "root" ? "default" : "secondary"} onClick={() => setBassMode("root")}>Root in bass</Button>
+                <Button size="sm" variant={bassMode === "any" ? "default" : "secondary"} onClick={() => setBassMode("any")}>Inversions too</Button>
+                {shape ? <Button size="sm" variant="ghost" onClick={() => setShapeIdx(null)}>Show all notes</Button> : null}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {voicings.length === 0 ? (
+                  <span className="text-sm text-muted-foreground">No 4-finger shape found here — widen the fret range or allow inversions.</span>
+                ) : (
+                  voicings.map((v, i) => (
+                    <Button
+                      key={i}
+                      size="sm"
+                      variant={i === shapeIdx ? "default" : "secondary"}
+                      className="font-mono"
+                      onClick={() => {
+                        setShapeIdx(i);
+                        playSequence(shapeMidis(v.shape, tuning), 0.05);
+                      }}
+                    >
+                      {shapeToTab(v.shape)}
+                      {v.omitted.length ? " (no 5)" : ""}
+                    </Button>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : null}
           <NoteEditor
             root={root}
             degrees={degrees}
@@ -616,9 +685,18 @@ function Workstation() {
         {/* ------------------------------------------------ progression */}
         <section>
           <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-widest">
-            Progression workspace
+            Song / idea workspace
           </h3>
-          <ProgressionWorkspace currentRootName={root.name} currentDegrees={degrees} />
+          <SongWorkspace
+            currentRootName={root.name}
+            currentDegrees={degrees}
+            onLoadChord={loadChord}
+            onPickScale={(id, r) => {
+              pickScale(id, r);
+              setHistory([]);
+              document.getElementById("fretboard")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          />
         </section>
 
         <p className="pb-8 text-xs text-muted-foreground">
