@@ -1,4 +1,12 @@
 import type { Tuning } from "./fretboard";
+import {
+  ROOTS,
+  chromaticName,
+  degreeToSemitones,
+  identify,
+  preferFlatsFor,
+  type Degree,
+} from "./theory";
 
 /** One playable shape: fret per string (low string first), null = muted. */
 export type Shape = (number | null)[];
