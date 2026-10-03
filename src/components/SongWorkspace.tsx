@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { playChord } from "@/lib/audio";
+import { CopyPlus as Dup, ListOrdered, X } from "lucide-react";
 import { click } from "@/lib/metronome";
 import {
   ROOTS,
@@ -44,6 +45,7 @@ import {
   loadDraft,
   loadSongs,
   newId,
+  orderedSections,
   saveDraft,
   saveSongs,
   slotLabel,
@@ -143,11 +145,11 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
   // Flattened playback order honouring section repeats and bar lengths.
   const timeline = useMemo(() => {
     const out: SongSlot[] = [];
-    for (const sec of song.sections)
+    for (const sec of orderedSections(song))
       for (let r = 0; r < Math.max(1, sec.repeats); r++)
         for (const sl of sec.slots) for (let b = 0; b < Math.max(1, sl.bars); b++) out.push(sl);
     return out;
-  }, [song.sections]);
+  }, [song]);
 
   useEffect(() => {
     if (!running) return;
@@ -174,6 +176,34 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, song.bpm, song.beatsPerBar, timeline, playChords, follow]);
+
+  const auditionRef = useRef<number[]>([]);
+  const [auditioning, setAuditioning] = useState<string | null>(null);
+  const stopAudition = () => {
+    auditionRef.current.forEach((t) => window.clearTimeout(t));
+    auditionRef.current = [];
+    setAuditioning(null);
+    setPlayingId(null);
+  };
+  /** Plays a section's chords in order, one bar each at the song tempo. */
+  const auditionSection = (sec: SongSection) => {
+    stopAudition();
+    if (!sec.slots.length) return;
+    const barMs = (60 / song.bpm) * 1000 * song.beatsPerBar;
+    let t = 0;
+    setAuditioning(sec.id);
+    for (const sl of sec.slots) {
+      auditionRef.current.push(
+        window.setTimeout(() => {
+          setPlayingId(sl.id);
+          playChord(midisFor(sl));
+        }, t),
+      );
+      t += barMs * Math.max(1, sl.bars);
+    }
+    auditionRef.current.push(window.setTimeout(stopAudition, t));
+  };
+  useEffect(() => () => auditionRef.current.forEach((t) => window.clearTimeout(t)), []);
 
   const persist = () => {
     const next = [song, ...saved.filter((s) => s.id !== song.id)].slice(0, 50);
@@ -209,7 +239,7 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
 
       {/* ---------------------------------------------- song header */}
       <div className="panel space-y-3 p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_8rem_minmax(0,12rem)_auto]">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_8rem_minmax(0,12rem)_7rem_auto]">
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-widest">Song / idea</Label>
             <Input
@@ -250,6 +280,15 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-widest">Time sig.</Label>
+            <Input
+              value={song.timeSig ?? `${song.beatsPerBar}/4`}
+              onChange={(e) => update((s) => ({ ...s, timeSig: e.target.value }))}
+              aria-label="Time signature"
+              className="w-28"
+            />
           </div>
           <div className="flex items-end gap-2">
             <Button
@@ -351,6 +390,27 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                 <div className="ml-auto flex flex-wrap gap-1">
                   <Button
                     size="sm"
+                    variant="secondary"
+                    aria-label={`Play ${sec.label}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (auditioning === sec.id) stopAudition();
+                      else auditionSection(sec);
+                    }}
+                  >
+                    {auditioning === sec.id ? <Pause className="mr-1 h-3.5 w-3.5" /> : <Play className="mr-1 h-3.5 w-3.5" />}
+                    {auditioning === sec.id ? "Stop" : "Play section"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    aria-label={`Add ${sec.label} to arrangement`}
+                    onClick={() => update((s) => ({ ...s, arrangement: [...(s.arrangement ?? []), sec.id] }))}
+                  >
+                    <ListOrdered className="mr-1 h-3.5 w-3.5" /> To order
+                  </Button>
+                  <Button
+                    size="sm"
                     variant={isActive ? "default" : "secondary"}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -391,7 +451,11 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                     className="h-8 w-8"
                     aria-label="Delete section"
                     onClick={() =>
-                      update((s) => ({ ...s, sections: s.sections.filter((x) => x.id !== sec.id) }))
+                      update((s) => ({
+                        ...s,
+                        sections: s.sections.filter((x) => x.id !== sec.id),
+                        arrangement: (s.arrangement ?? []).filter((x) => x !== sec.id),
+                      }))
                     }
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -438,6 +502,16 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                             {a.tones.map(pretty).join(" ")}
                             {s.bars > 1 ? ` · ${s.bars} bars` : ""}
                           </span>
+                          <span className="block font-mono text-[10px] text-muted-foreground">
+                            {pretty(s.degrees.join(" "))}
+                          </span>
+                          <span className="block text-[10px] text-muted-foreground">
+                            {a.keyMode
+                              ? `${pretty(s.rootName)} ${a.keyMode.name}`
+                              : a.fits[0]
+                                ? `fits ${pretty(s.rootName)} ${a.fits[0].name}`
+                                : "no common parent scale"}
+                          </span>
                         </button>
                         <div className="mt-1 flex items-center gap-0.5">
                           <Button size="icon" variant="ghost" className="h-6 w-6" aria-label="Move left" onClick={() => moveSlot(sec.id, i, -1)}>
@@ -445,6 +519,21 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                           </Button>
                           <Button size="icon" variant="ghost" className="h-6 w-6" aria-label="Move right" onClick={() => moveSlot(sec.id, i, 1)}>
                             <ArrowRight className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6"
+                            aria-label="Duplicate chord"
+                            onClick={() =>
+                              updateSection(sec.id, (x) => {
+                                const next = [...x.slots];
+                                next.splice(i + 1, 0, { ...s, id: newId() });
+                                return { ...x, slots: next };
+                              })
+                            }
+                          >
+                            <Dup className="h-3 w-3" />
                           </Button>
                           <Button
                             size="icon"
@@ -475,6 +564,14 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                   })}
                 </div>
               )}
+              <Textarea
+                value={sec.notes ?? ""}
+                onChange={(e) => updateSection(sec.id, (x) => ({ ...x, notes: e.target.value }))}
+                placeholder="Section notes (feel, dynamics, voicing reminders…)"
+                rows={1}
+                aria-label={`${sec.label} notes`}
+                className="min-h-8 text-sm"
+              />
             </div>
           );
         })}
@@ -496,6 +593,44 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
         >
           <Plus className="mr-1 h-4 w-4" /> Add section
         </Button>
+      </div>
+
+      {/* ---------------------------------------------- arrangement */}
+      <div className="panel space-y-2 p-3">
+        <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+          Arrangement order {song.arrangement?.length ? "" : "— empty: sections play in listed order"}
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="arrangement">
+          {(song.arrangement ?? []).map((id, i) => {
+            const sec = song.sections.find((x) => x.id === id);
+            if (!sec) return null;
+            const move = (dir: -1 | 1) =>
+              update((s) => {
+                const next = [...(s.arrangement ?? [])];
+                const j = i + dir;
+                if (j < 0 || j >= next.length) return s;
+                [next[i], next[j]] = [next[j]!, next[i]!];
+                return { ...s, arrangement: next };
+              });
+            return (
+              <span key={`${id}-${i}`} className="flex items-center gap-0.5 rounded-md border border-border bg-secondary px-1.5 py-0.5 text-xs">
+                <button type="button" aria-label="Earlier" onClick={() => move(-1)}><ArrowLeft className="h-3 w-3" /></button>
+                <span className="px-1 font-semibold">{sec.label}</span>
+                <button type="button" aria-label="Later" onClick={() => move(1)}><ArrowRight className="h-3 w-3" /></button>
+                <button
+                  type="button"
+                  aria-label={`Remove ${sec.label} from order`}
+                  onClick={() => update((s) => ({ ...s, arrangement: (s.arrangement ?? []).filter((_, k) => k !== i) }))}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            );
+          })}
+          {song.arrangement?.length ? (
+            <Button size="sm" variant="ghost" onClick={() => update((s) => ({ ...s, arrangement: [] }))}>Clear order</Button>
+          ) : null}
+        </div>
       </div>
 
       {/* ---------------------------------------------- selected chord detail */}

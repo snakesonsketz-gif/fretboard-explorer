@@ -25,6 +25,7 @@ export interface SongSection {
   label: string;
   repeats: number;
   slots: SongSlot[];
+  notes?: string;
 }
 
 export interface Song {
@@ -35,7 +36,11 @@ export interface Song {
   bpm: number;
   beatsPerBar: number;
   notes: string;
+  /** Free text, e.g. "4/4", "6/8", "7/8 (2+2+3)". */
+  timeSig?: string;
   sections: SongSection[];
+  /** Playing order as section ids (repeats allowed). Empty = sections in listed order. */
+  arrangement?: string[];
   updatedAt: number;
 }
 
@@ -207,15 +212,25 @@ export function analyzeSlot(song: Song, slot: SongSlot): SlotAnalysis {
 }
 
 /** Plain-text chart of the user's own song, for copying elsewhere. */
+/** Sections in playing order: the arrangement if set, otherwise listed order. */
+export function orderedSections(song: Song): SongSection[] {
+  const arr = (song.arrangement ?? [])
+    .map((id) => song.sections.find((s) => s.id === id))
+    .filter((s): s is SongSection => !!s);
+  return arr.length ? arr : song.sections;
+}
+
 export function songToText(song: Song): string {
   const keyScale = KEY_SCALES.find((s) => s.id === song.keyScaleId);
   const lines = [
     song.name,
-    `Key: ${song.keyRoot} ${keyScale?.name ?? ""} · ${song.bpm} bpm · ${song.beatsPerBar}/4`,
+    `Key: ${song.keyRoot} ${keyScale?.name ?? ""} · ${song.bpm} bpm · ${song.timeSig || `${song.beatsPerBar}/4`}`,
+    ...(song.arrangement?.length ? [`Order: ${orderedSections(song).map((s) => s.label).join(" → ")}`] : []),
     "",
   ];
   for (const sec of song.sections) {
     lines.push(`[${sec.label}]${sec.repeats > 1 ? ` x${sec.repeats}` : ""}`);
+    if (sec.notes?.trim()) lines.push(`  (${sec.notes.trim()})`);
     lines.push(
       sec.slots
         .map((s) => {
