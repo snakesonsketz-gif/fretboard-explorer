@@ -137,3 +137,40 @@ export function shapeMidis(shape: Shape, tuning: Tuning): number[] {
   });
   return out;
 }
+
+/** Analyse a user-marked shape (fret per string, null = not played). Never suggests anything. */
+export function analyzeShape(shape: (number | null)[], tuning: Tuning) {
+  const played = shape
+    .map((f, si) => (f === null || f === undefined ? null : { si, f, midi: tuning.strings[si]!.pc + (tuning.strings[si]!.octave + 1) * 12 + f }))
+    .filter((x): x is { si: number; f: number; midi: number } => !!x)
+    .sort((a, b) => a.midi - b.midi);
+  if (!played.length) return null;
+  const pcsAbs = [...new Set(played.map((p) => p.midi % 12))];
+  const bassPc = played[0]!.midi % 12;
+  const NAMES: Degree[] = ["1", "b2", "2", "b3", "3", "4", "b5", "5", "#5", "6", "b7", "7"];
+  const readFor = (rootPc: number) => {
+    const root = ROOTS.find((r) => r.pc === rootPc)!;
+    const rel = pcsAbs.map((p) => (p - rootPc + 12) % 12);
+    const det = identify(root, rel);
+    const degrees: Degree[] =
+      det.known?.kind === "chord"
+        ? det.known.def.degrees.filter((d) => rel.includes(((degreeToSemitones(d) % 12) + 12) % 12))
+        : [...rel].sort((a, b) => a - b).map((p) => NAMES[p]!);
+    return { root, det, degrees };
+  };
+  // Bass note as root first; other marked notes give alternative (slash) readings.
+  const primary = readFor(bassPc);
+  const alternatives = pcsAbs
+    .filter((p) => p !== bassPc)
+    .map(readFor)
+    .filter((r) => r.det.known?.kind === "chord");
+  const bassName = primary.root.name;
+  return {
+    played,
+    bassName,
+    primary,
+    alternatives,
+    notes: played.map((p) => chromaticName(p.midi % 12, preferFlatsFor(primary.root))),
+    midis: played.map((p) => p.midi),
+  };
+}
