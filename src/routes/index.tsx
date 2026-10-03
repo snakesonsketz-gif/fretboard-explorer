@@ -19,7 +19,7 @@ import { Fretboard, type LabelMode } from "@/components/Fretboard";
 import { ChordLab } from "@/components/ChordLab";
 import { AdvancedTheory } from "@/components/TheoryPanels";
 import { SongWorkspace } from "@/components/SongWorkspace";
-import { findVoicings, shapeMidis, shapeToTab } from "@/lib/voicings";
+import { analyzeShape, findVoicings, shapeMidis, shapeToTab } from "@/lib/voicings";
 import { TUNINGS, degreeMap } from "@/lib/fretboard";
 import { NoteEditor } from "@/components/NoteEditor";
 import { moveDegreeInSet, pcOf, togglePc, sortDegrees, CANONICAL } from "@/lib/edit";
@@ -128,6 +128,24 @@ function Workstation() {
     setCustom(null);
     setHistory([]);
   };
+  /** Choosing a preset starts a fresh edit session; Revert returns to that preset. */
+  const resetEdits = () => {
+    setCustom(null);
+    setHistory([]);
+  };
+  const [soundOnPick, setSoundOnPick] = useState(true);
+  const [markMode, setMarkMode] = useState(false);
+  const [userShape, setUserShape] = useState<(number | null)[]>([]);
+  useEffect(() => setUserShape(Array(tuning.strings.length).fill(null)), [tuning]);
+  const shapeRead = useMemo(() => (markMode ? analyzeShape(userShape, tuning) : null), [markMode, userShape, tuning]);
+  const markFret = (pos: FretPos) => {
+    setSel(pos);
+    setUserShape((s) => {
+      const next = Array.from({ length: tuning.strings.length }, (_, i) => s[i] ?? null);
+      next[pos.string] = next[pos.string] === pos.fret ? null : pos.fret;
+      return next;
+    });
+  };
   const altered = useMemo(() => {
     const base = new Set(baseDegrees);
     return new Set(degrees.filter((d) => !base.has(d)));
@@ -182,7 +200,7 @@ function Workstation() {
   const pickScale = (id: string, newRoot?: string) => {
     setMode("scale");
     setScaleId(id);
-    setCustom(null);
+    resetEdits();
     if (newRoot) setRootName(newRoot);
   };
 
@@ -308,7 +326,7 @@ function Workstation() {
         {/* ------------------------------------------------ fretboard */}
         <section id="fretboard" className="panel space-y-3 p-3 sm:p-4">
           <Fretboard
-            shape={shape}
+            shape={markMode ? userShape : shape}
             tuning={tuning}
             root={root}
             degrees={degrees}
@@ -317,13 +335,46 @@ function Workstation() {
             leftHanded={leftHanded}
             labelMode={labelMode}
             preferFlats={preferFlatsFor(root)}
-            showAllNotes={showAllNotes}
+            showAllNotes={showAllNotes || markMode}
             roles={roles}
             altered={custom ? altered : undefined}
             selected={sel}
-            onSelect={setSel}
-            onShift={shiftSelected}
+            onSelect={markMode ? markFret : setSel}
+            onShift={markMode ? undefined : shiftSelected}
           />
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/70 p-2">
+            <div className="flex items-center gap-2">
+              <Switch id="markmode" checked={markMode} onCheckedChange={setMarkMode} aria-label="Mark a shape" />
+              <Label htmlFor="markmode" className="text-xs uppercase tracking-widest">Mark a shape</Label>
+            </div>
+            {markMode ? (
+              <>
+                <span className="text-xs text-muted-foreground">One fret per string · tap again to unmark</span>
+                <span className="font-mono text-sm">{shapeToTab(userShape.map((f) => f ?? null))}</span>
+                {shapeRead ? (
+                  <>
+                    <span className="font-display text-sm font-bold" data-testid="shape-name">
+                      {pretty(shapeRead.primary.det.known?.kind === "chord" ? shapeRead.primary.det.known.name : `${shapeRead.bassName} (${shapeRead.primary.det.formula})`)}
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {shapeRead.notes.map(pretty).join(" ")}
+                    </span>
+                    {shapeRead.alternatives.map((a) => (
+                      <span key={a.root.name} className="font-mono text-xs text-primary">
+                        also {pretty(`${a.det.known!.name}/${shapeRead.bassName}`)}
+                      </span>
+                    ))}
+                    <Button size="sm" variant="secondary" onClick={() => playSequence(shapeRead.midis, 0.05)}>Strum</Button>
+                    <Button size="sm" variant="secondary" onClick={() => playChord(shapeRead.midis)}>Together</Button>
+                    <Button size="sm" onClick={() => { loadChord(shapeRead.bassName, shapeRead.primary.degrees); setMarkMode(false); }}>
+                      Use as current structure
+                    </Button>
+                  </>
+                ) : null}
+                <Button size="sm" variant="ghost" onClick={() => setUserShape(Array(tuning.strings.length).fill(null))}>Clear</Button>
+              </>
+            ) : null}
+          </div>
           {mode !== "scale" ? (
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
@@ -466,6 +517,10 @@ function Workstation() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="maj7, dorian, altered, pentatonic…"
               />
+              <div className="flex items-center gap-2 pt-1">
+                <Switch id="soundpick" checked={soundOnPick} onCheckedChange={setSoundOnPick} />
+                <Label htmlFor="soundpick" className="text-xs text-muted-foreground">Sound on select</Label>
+              </div>
             </div>
           </div>
 
@@ -473,7 +528,7 @@ function Workstation() {
             value={mode}
             onValueChange={(v) => {
               setMode(v as Mode);
-              setCustom(null);
+              resetEdits();
             }}
             className="mt-4"
           >
@@ -506,7 +561,8 @@ function Workstation() {
                           variant={c.id === chordId && !custom ? "default" : "secondary"}
                           onClick={() => {
                             setChordId(c.id);
-                            setCustom(null);
+                            resetEdits();
+                            if (soundOnPick) playChord(c.degrees.map((d) => 48 + root.pc + degreeToSemitones(d)));
                           }}
                         >
                           {pretty(`${root.name}${c.suffix}`) || root.name}
@@ -536,7 +592,8 @@ function Workstation() {
                           variant={s.id === scaleId && !custom ? "default" : "secondary"}
                           onClick={() => {
                             setScaleId(s.id);
-                            setCustom(null);
+                            resetEdits();
+                            if (soundOnPick) playSequence(s.degrees.map((d) => 60 + root.pc + degreeToSemitones(d)), 0.16);
                           }}
                         >
                           {s.name}
@@ -568,7 +625,7 @@ function Workstation() {
                   value={chordId}
                   onValueChange={(v) => {
                     setChordId(v);
-                    setCustom(null);
+                    resetEdits();
                   }}
                 >
                   <SelectTrigger className="sm:max-w-sm">
@@ -595,7 +652,8 @@ function Workstation() {
                       variant={a.id === arpId && !custom ? "default" : "secondary"}
                       onClick={() => {
                         setArpId(a.id);
-                        setCustom(null);
+                        resetEdits();
+                        if (soundOnPick) playSequence(a.transform(chord.degrees).map((d) => 48 + root.pc + degreeToSemitones(d)), 0.16);
                       }}
                     >
                       {a.name}
@@ -664,6 +722,8 @@ function Workstation() {
                       setRootName(f.rootName);
                       setMode(f.mode);
                       setCustom(f.degrees as Degree[]);
+                      setHistory([]);
+                      setSel(null);
                     }}
                   >
                     <Star className="h-3 w-3 text-primary" />
