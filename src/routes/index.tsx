@@ -68,6 +68,10 @@ export const Route = createFileRoute("/")({
 });
 
 type Mode = "chord" | "scale" | "arpeggio";
+const PREFERRED_ROOTS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+const SHARP_ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const MAJOR_MODES = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
+const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
 
 function Workstation() {
   const [mode, setMode] = useState<Mode>("chord");
@@ -188,13 +192,15 @@ function Workstation() {
 
   const midis = degrees.map((d) => 48 + root.pc + degreeToSemitones(d));
 
+  // Search matches names, aliases, families and formulas (e.g. "b3 b7" or "1 3 #5").
+  const q = search.toLowerCase().trim();
   const filteredChords = CHORDS.filter((c) =>
-    `${c.name} ${c.suffix} ${c.family}`.toLowerCase().includes(search.toLowerCase()),
+    `${c.name} ${c.suffix} ${c.family} ${c.degrees.join(" ")}`.toLowerCase().includes(q),
   );
   const filteredScales = SCALES.filter((s) =>
-    `${s.name} ${(s.aliases ?? []).join(" ")} ${s.family}`
+    `${s.name} ${(s.aliases ?? []).join(" ")} ${s.family} ${s.degrees.join(" ")}`
       .toLowerCase()
-      .includes(search.toLowerCase()),
+      .includes(q),
   );
 
   const pickScale = (id: string, newRoot?: string) => {
@@ -310,6 +316,72 @@ function Workstation() {
                 <Heart className="mr-1 h-4 w-4" /> Save
               </Button>
             </div>
+          </div>
+          {/* quick controls: everything needed while writing, without scrolling */}
+          <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="w-14 text-[11px] uppercase tracking-widest text-muted-foreground">Root</span>
+              {PREFERRED_ROOTS.map((n) => (
+                <Button
+                  key={n}
+                  size="sm"
+                  variant={rootByName(n).pc === root.pc ? "default" : "secondary"}
+                  className="h-7 min-w-9 px-2 font-mono text-xs"
+                  onClick={() => {
+                    setRootName(n);
+                    if (soundOnPick) pluck(48 + rootByName(n).pc);
+                  }}
+                >
+                  {pretty(n)}
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="w-14 text-[11px] uppercase tracking-widest text-muted-foreground">View</span>
+              {(["chord", "scale", "arpeggio"] as Mode[]).map((m) => (
+                <Button key={m} size="sm" variant={mode === m ? "default" : "secondary"} className="h-7 px-2 text-xs capitalize"
+                  onClick={() => { setMode(m); resetEdits(); }}>
+                  {m}
+                </Button>
+              ))}
+              <span className="mx-1 h-5 w-px bg-border" />
+              {([["note", "Notes"], ["degree", "Degrees"], ["interval", "Intervals"]] as [LabelMode, string][]).map(([v, l]) => (
+                <Button key={v} size="sm" variant={labelMode === v ? "default" : "secondary"} className="h-7 px-2 text-xs"
+                  onClick={() => setLabelMode(v)}>
+                  {l}
+                </Button>
+              ))}
+            </div>
+            {mode === "scale" && MAJOR_MODES.includes(scaleId) ? (
+              <>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="w-14 text-[11px] uppercase tracking-widest text-muted-foreground" title="Same root, different notes">Parallel</span>
+                  {MAJOR_MODES.map((id) => (
+                    <Button key={id} size="sm" variant={scaleId === id ? "default" : "secondary"} className="h-7 px-2 text-xs capitalize"
+                      onClick={() => pickScale(id)}>
+                      {pretty(root.name)} {id}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="w-14 text-[11px] uppercase tracking-widest text-muted-foreground" title="Same notes, different root">Relative</span>
+                  {MAJOR_MODES.map((id, j) => {
+                    const parentPc = (root.pc - MAJOR_STEPS[MAJOR_MODES.indexOf(scaleId)]! + 12) % 12;
+                    const names = [7, 2, 9, 4, 11, 6].includes(parentPc) ? SHARP_ROOTS : PREFERRED_ROOTS;
+                    const n = names[(parentPc + MAJOR_STEPS[j]!) % 12]!;
+                    return (
+                      <Button key={id} size="sm" variant={scaleId === id ? "default" : "secondary"} className="h-7 px-2 text-xs capitalize"
+                        onClick={() => pickScale(id, n)}>
+                        {pretty(n)} {id}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Parallel keeps the root and changes the notes; relative keeps the notes and moves the root.
+                </p>
+              </>
+            ) : null}
           </div>
           {custom ? (
             <Button
