@@ -69,6 +69,7 @@ export const Route = createFileRoute("/")({
 
 type Mode = "chord" | "scale" | "arpeggio";
 const PREFERRED_ROOTS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+const SHARP_ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const MAJOR_MODES = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
 const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
 
@@ -366,7 +367,8 @@ function Workstation() {
                   <span className="w-14 text-[11px] uppercase tracking-widest text-muted-foreground" title="Same notes, different root">Relative</span>
                   {MAJOR_MODES.map((id, j) => {
                     const parentPc = (root.pc - MAJOR_STEPS[MAJOR_MODES.indexOf(scaleId)]! + 12) % 12;
-                    const n = PREFERRED_ROOTS[(parentPc + MAJOR_STEPS[j]!) % 12]!;
+                    const names = [7, 2, 9, 4, 11, 6].includes(parentPc) ? SHARP_ROOTS : PREFERRED_ROOTS;
+                    const n = names[(parentPc + MAJOR_STEPS[j]!) % 12]!;
                     return (
                       <Button key={id} size="sm" variant={scaleId === id ? "default" : "secondary"} className="h-7 px-2 text-xs capitalize"
                         onClick={() => pickScale(id, n)}>
