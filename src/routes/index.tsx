@@ -99,11 +99,13 @@ function Workstation() {
   const scale = SCALES.find((s) => s.id === scaleId) ?? SCALES[0]!;
   const arp = ARPEGGIO_VARIANTS.find((a) => a.id === arpId) ?? ARPEGGIO_VARIANTS[0]!;
 
+  const [arpSrc, setArpSrc] = useState<Degree[] | null>(null);
+  const arpSource = arpSrc ?? chord.degrees;
   const baseDegrees: Degree[] = useMemo(() => {
     if (mode === "scale") return scale.degrees;
-    if (mode === "arpeggio") return arp.transform(chord.degrees);
+    if (mode === "arpeggio") return arp.transform(arpSource);
     return chord.degrees;
-  }, [mode, scale, arp, chord]);
+  }, [mode, scale, arp, chord, arpSource]);
 
   const degrees = custom ?? baseDegrees;
   const detection = identify(root, degreesToPitchClasses(degrees));
@@ -382,6 +384,30 @@ function Workstation() {
                 </p>
               </>
             ) : null}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="w-14 text-[11px] uppercase tracking-widest text-muted-foreground">Links</span>
+              {mode !== "arpeggio" ? (
+                <Button size="sm" variant="secondary" className="h-7 px-2 text-xs"
+                  onClick={() => { setArpSrc([...degrees]); setArpId("full"); setMode("arpeggio"); resetEdits(); }}>
+                  Arpeggiate these notes
+                </Button>
+              ) : (
+                <Button size="sm" variant="secondary" className="h-7 px-2 text-xs"
+                  onClick={() => loadChord(root.name, arpSource)}>
+                  Open source chord
+                </Button>
+              )}
+              {mode === "chord" && !custom
+                ? (chord.scales ?? []).map((id) => {
+                    const s = SCALES.find((x) => x.id === id);
+                    return s ? (
+                      <Button key={id} size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => pickScale(id)}>
+                        {pretty(root.name)} {s.name}
+                      </Button>
+                    ) : null;
+                  })
+                : null}
+            </div>
           </div>
           {custom ? (
             <Button
@@ -697,6 +723,7 @@ function Workstation() {
                   value={chordId}
                   onValueChange={(v) => {
                     setChordId(v);
+                    setArpSrc(null);
                     resetEdits();
                   }}
                 >
@@ -711,26 +738,59 @@ function Workstation() {
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Source set:</span>
+                  <span className="font-mono">{arpSource.map(pretty).join(" ")}</span>
+                  <span className="text-muted-foreground">
+                    ({arpSrc ? identify(root, degreesToPitchClasses(arpSrc)).known?.name ?? "custom set" : `${pretty(root.name)}${pretty(chord.suffix)}`})
+                  </span>
+                  {custom ? (
+                    <Button size="sm" variant="secondary" className="h-7 px-2 text-xs"
+                      onClick={() => { setArpSrc([...degrees]); setArpId("full"); resetEdits(); }}>
+                      Use current edited notes as source
+                    </Button>
+                  ) : null}
+                  {arpSrc ? (
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setArpSrc(null); resetEdits(); }}>
+                      Back to preset source
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <div>
                 <p className="mb-1.5 text-[11px] uppercase tracking-widest text-muted-foreground">
-                  Variant
+                  Variants — result formula and change from the source
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {ARPEGGIO_VARIANTS.map((a) => (
-                    <Button
-                      key={a.id}
-                      size="sm"
-                      variant={a.id === arpId && !custom ? "default" : "secondary"}
-                      onClick={() => {
-                        setArpId(a.id);
-                        resetEdits();
-                        if (soundOnPick) playSequence(a.transform(chord.degrees).map((d) => 48 + root.pc + degreeToSemitones(d)), 0.16);
-                      }}
-                    >
-                      {a.name}
-                    </Button>
-                  ))}
+                <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {ARPEGGIO_VARIANTS.map((a) => {
+                    const out = a.transform(arpSource);
+                    const removed = arpSource.filter((d) => !out.includes(d));
+                    const added = out.filter((d) => !arpSource.includes(d));
+                    const midis = out.map((d) => 48 + root.pc + degreeToSemitones(d));
+                    const active = a.id === arpId && !custom;
+                    return (
+                      <div key={a.id} className={`rounded-md border px-2 py-1.5 text-xs ${active ? "border-primary bg-primary/10" : "border-border bg-secondary"}`}>
+                        <button type="button" className="block w-full text-left"
+                          onClick={() => {
+                            setArpId(a.id);
+                            resetEdits();
+                            if (soundOnPick) playSequence(midis, 0.16);
+                          }}>
+                          <span className="font-semibold">{a.name}</span>
+                          <span className="block font-mono">{out.map(pretty).join(" ")}</span>
+                          <span className="block font-mono text-[10px] text-muted-foreground">
+                            {removed.length ? `− ${removed.map(pretty).join(" ")} ` : ""}
+                            {added.length ? `+ ${added.map(pretty).join(" ")}` : ""}
+                            {!removed.length && !added.length ? "unchanged" : ""}
+                          </span>
+                        </button>
+                        <div className="mt-1 flex gap-2 text-[10px]">
+                          <button type="button" className="text-primary" onClick={() => playSequence(midis, 0.16)}>Ascending</button>
+                          <button type="button" className="text-primary" onClick={() => playChord(midis)}>Together</button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">{arp.theory}</p>
