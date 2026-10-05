@@ -168,3 +168,61 @@ export function buildFretboard(opts: BuildOptions): FretNote[][] {
 
 export const INLAY_FRETS = new Set([3, 5, 7, 9, 12, 15, 17, 19, 21, 24]);
 export const DOUBLE_INLAY = new Set([12, 24]);
+
+export type Pathway = "none" | "vertical" | "horizontal" | "diagonal";
+
+/**
+ * Visual pathway through the notes already on the board (the set itself never changes).
+ * vertical = every set note inside a fret window; horizontal = two adjacent strings
+ * along the neck; diagonal = N notes per string climbing from the root on the lowest string.
+ */
+export function pathwayKeys(opts: {
+  kind: Pathway;
+  tuning: Tuning;
+  root: Root;
+  degrees: Degree[];
+  fretFrom: number;
+  fretTo: number;
+  window?: { from: number; to: number } | null;
+  stringPair?: number;
+  perString?: number;
+}): Set<string> | undefined {
+  const { kind, tuning, root, degrees, fretFrom, fretTo } = opts;
+  if (kind === "none") return undefined;
+  const pcs = new Set([...degreeMap(root, degrees).keys()]);
+  const keys = new Set<string>();
+  const n = tuning.strings.length;
+  if (kind === "vertical") {
+    const from = opts.window?.from ?? fretFrom;
+    const to = opts.window?.to ?? Math.min(fretTo, from + 4);
+    for (let si = 0; si < n; si++)
+      for (let f = from; f <= to; f++) if (pcs.has((tuning.strings[si]!.pc + f) % 12)) keys.add(`${si}-${f}`);
+    return keys;
+  }
+  if (kind === "horizontal") {
+    const a = Math.min(Math.max(0, opts.stringPair ?? 0), n - 2);
+    for (const si of [a, a + 1])
+      for (let f = fretFrom; f <= fretTo; f++) if (pcs.has((tuning.strings[si]!.pc + f) % 12)) keys.add(`${si}-${f}`);
+    return keys;
+  }
+  // diagonal
+  const per = opts.perString ?? 3;
+  const midiOf = (si: number) => tuning.strings[si]!.pc + (tuning.strings[si]!.octave + 1) * 12;
+  let start = (root.pc - tuning.strings[0]!.pc + 12) % 12;
+  while (start < fretFrom) start += 12;
+  if (start > fretTo) return keys;
+  let pitch = midiOf(0) + start;
+  for (let si = 0; si < n; si++) {
+    let placed = 0;
+    let p = pitch;
+    while (placed < per && p - midiOf(si) <= 24) {
+      if (pcs.has(((p % 12) + 12) % 12) && p - midiOf(si) >= 0) {
+        keys.add(`${si}-${p - midiOf(si)}`);
+        placed++;
+      }
+      p++;
+    }
+    pitch = p;
+  }
+  return keys;
+}

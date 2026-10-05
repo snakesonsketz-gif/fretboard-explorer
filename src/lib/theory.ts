@@ -68,6 +68,7 @@ export function accidentalString(alter: number): string {
 export function pretty(text: string): string {
   return text
     .replace(/bb(?=\d)/g, "𝄫")
+    .replace(/##|x(?=\d)/g, "𝄪")
     .replace(/b(?=\d|$|\)|\/|,| )/g, "♭")
     .replace(/#/g, "♯");
 }

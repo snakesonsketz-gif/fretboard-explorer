@@ -4,7 +4,7 @@ import { pluck } from "@/lib/audio";
 import { DOUBLE_INLAY, INLAY_FRETS, buildFretboard, type Tuning } from "@/lib/fretboard";
 import { INTERVAL_SHORT, parseDegree, pretty, type Degree, type Root } from "@/lib/theory";
 
-export type LabelMode = "note" | "degree" | "interval";
+export type LabelMode = "note" | "degree" | "interval" | "both";
 
 export interface FretPos {
   string: number;
@@ -31,6 +31,14 @@ export interface FretboardProps {
   /** Highlight a single playable shape: fret per string, null = muted. */
   shape?: (number | null)[] | undefined;
   onNote?: ((info: { midi: number; label: string }) => void) | undefined;
+  /** Focused fret window (CAGED position or 4/5-fret position); notes outside are dimmed. */
+  focus?: { from: number; to: number; label?: string } | null | undefined;
+  /** Neighbouring windows drawn with a faint band and label. */
+  neighbors?: { from: number; to: number; label: string }[] | undefined;
+  /** Pitch classes treated as chord tones; other set notes render as smaller scale tones. */
+  chordTonePcs?: Set<number> | undefined;
+  /** "string-fret" keys of a visual pathway; set notes off the path are dimmed. */
+  pathKeys?: Set<string> | undefined;
 }
 
 /** Color role for a degree, using semantic tokens only. */
@@ -65,7 +73,17 @@ export function Fretboard(props: FretboardProps) {
     onShift,
     onNote,
     shape,
+    focus,
+    neighbors,
+    chordTonePcs,
+    pathKeys,
   } = props;
+  const inWin = (f: number, w?: { from: number; to: number } | null) => !!w && f >= w.from && f <= w.to;
+  const bandLabel = (f: number) => {
+    if (focus && f === (leftHanded ? focus.to : focus.from) && focus.label) return focus.label;
+    const nb = neighbors?.find((w) => f === (leftHanded ? w.to : w.from));
+    return nb?.label ?? "";
+  };
 
   const rows = useMemo(
     () => buildFretboard({ tuning, fretFrom, fretTo, root, degrees, preferFlats }),
@@ -108,6 +126,22 @@ export function Fretboard(props: FretboardProps) {
   return (
     <div className="scrollbar-thin-x w-full overflow-x-auto">
       <div className="min-w-[720px] select-none">
+        {focus || neighbors?.length ? (
+          <div className="grid gap-1 font-mono text-[10px]" style={{ gridTemplateColumns: cols }} data-testid="window-bands">
+            <div />
+            {shown.map((f) => (
+              <div
+                key={f}
+                className={cn(
+                  "h-4 whitespace-nowrap text-left",
+                  inWin(f, focus) ? "bg-primary/30 font-bold text-foreground" : neighbors?.some((w) => inWin(f, w)) ? "bg-muted/60 text-muted-foreground" : "",
+                )}
+              >
+                {bandLabel(f)}
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div
           className="grid gap-1 pb-1 font-mono text-[10px] text-muted-foreground"
           style={{ gridTemplateColumns: cols }}
@@ -146,8 +180,10 @@ export function Fretboard(props: FretboardProps) {
                   const role = n.degree ? roles?.[n.degree] : undefined;
                   const visible = n.inSet || showAllNotes;
                   const isSel = selected?.string === n.string && selected?.fret === n.fret;
+                  const outOfFocus = (!!focus && !inWin(n.fret, focus)) || (!!pathKeys && !pathKeys.has(`${n.string}-${n.fret}`));
+                  const scaleTone = !!chordTonePcs && n.inSet && !chordTonePcs.has(n.pc);
                   const label =
-                    labelMode === "degree"
+                    labelMode === "degree" || labelMode === "both"
                       ? (n.degree ?? "")
                       : labelMode === "interval"
                         ? (INTERVAL_SHORT[n.intervalSemitones ?? -1] ?? "")
@@ -189,6 +225,7 @@ export function Fretboard(props: FretboardProps) {
                             ? "border-l-2 border-fret-wire/70"
                             : "border-r-2 border-fret-wire/70",
                         isSel && "touch-none",
+                        inWin(n.fret, focus) && "bg-primary/10",
                       )}
                       aria-pressed={isSel}
                       aria-label={`${n.noteName} on ${pretty(open.note)} string, fret ${n.fret}${n.degree ? `, degree ${n.degree}` : ""}`}
@@ -212,12 +249,21 @@ export function Fretboard(props: FretboardProps) {
                           !visible && !isSel && "opacity-0 hover:opacity-40",
                           isAltered && "outline-2 outline-dashed outline-offset-2 outline-foreground/70",
                           inShape === false && !isSel && "opacity-20",
+                          scaleTone && "h-5 w-5 bg-secondary text-foreground ring-1 ring-border",
+                          outOfFocus && n.inSet && !isSel && "opacity-20",
                           inShape === true && "ring-2 ring-primary ring-offset-1 ring-offset-background",
                           isSel && "scale-125 ring-2 ring-foreground ring-offset-2 ring-offset-background",
                           isSel && !n.inSet && "opacity-80",
                         )}
                       >
-                        {pretty(label || (isSel ? n.noteName : ""))}
+                        {labelMode === "both" && n.inSet ? (
+                          <span className="flex flex-col items-center leading-[9px]">
+                            <span>{pretty(n.noteName)}</span>
+                            <span className="text-[8px] font-normal opacity-80">{pretty(n.degree ?? "")}</span>
+                          </span>
+                        ) : (
+                          pretty(label || (isSel ? n.noteName : ""))
+                        )}
                       </span>
                     </button>
                   );
