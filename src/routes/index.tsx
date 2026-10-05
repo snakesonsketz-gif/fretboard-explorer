@@ -22,6 +22,13 @@ import { SongWorkspace } from "@/components/SongWorkspace";
 import { analyzeShape, findVoicings, shapeMidis, shapeToTab } from "@/lib/voicings";
 import { TUNINGS, degreeMap } from "@/lib/fretboard";
 import { NoteEditor } from "@/components/NoteEditor";
+import { DegreeAlter } from "@/components/DegreeAlter";
+import { ModeFamily } from "@/components/ModeFamily";
+import { IdentifierPanel } from "@/components/IdentifierPanel";
+import { CircleOfFifths } from "@/components/CircleOfFifths";
+import { cagedPositions, visiblePositions } from "@/lib/caged";
+import { pathwayKeys, type Pathway } from "@/lib/fretboard";
+import type { ModeRotation } from "@/lib/modes";
 import { moveDegreeInSet, pcOf, togglePc, sortDegrees, CANONICAL } from "@/lib/edit";
 import { pluck } from "@/lib/audio";
 import type { FretPos } from "@/components/Fretboard";
@@ -191,6 +198,52 @@ function Workstation() {
     for (const r of classifyAgainstChord(degrees, chord.degrees)) map[r.degree] = r.role;
     return map;
   }, [mode, degrees, chord]);
+
+  // ---- CAGED / position window / pathways (visual layers over the shared state)
+  const [cagedOn, setCagedOn] = useState(false);
+  const [cagedLayer, setCagedLayer] = useState<"chord" | "scale" | "arpeggio">("chord");
+  const [cagedIdx, setCagedIdx] = useState(0);
+  const [posWin, setPosWin] = useState<{ start: number; size: number } | null>(null);
+  const [pathway, setPathway] = useState<Pathway>("none");
+  const [pathPair, setPathPair] = useState(0);
+  const cagedChord = mode === "chord" ? degrees : mode === "arpeggio" ? arpSource : chord.degrees;
+  const cagedScale = mode === "scale" ? degrees : scale.degrees;
+  const cagedArp = mode === "arpeggio" ? degrees : arp.transform(cagedChord);
+  const cagedAll = useMemo(() => visiblePositions(cagedPositions(tuning, root.pc), fretFrom, fretTo), [tuning, root.pc, fretFrom, fretTo]);
+  const cagedPos = cagedOn ? cagedAll[Math.min(cagedIdx, cagedAll.length - 1)] : undefined;
+  const chordPcSet = new Set(degreesToPitchClasses(cagedChord).map((p) => (p + root.pc) % 12));
+  const fbDegrees = !cagedOn
+    ? degrees
+    : cagedLayer === "chord"
+      ? cagedChord
+      : cagedLayer === "scale"
+        ? sortDegrees([...cagedScale, ...cagedChord.filter((d) => !degreesToPitchClasses(cagedScale).includes(pcOf(d)))])
+        : cagedArp;
+  const editable = !cagedOn || cagedLayer === mode;
+  const focus = cagedPos
+    ? { from: cagedPos.from, to: cagedPos.to, label: `${cagedPos.form} shape` }
+    : posWin
+      ? { from: posWin.start, to: posWin.start + posWin.size - 1, label: `pos ${posWin.start}` }
+      : null;
+  const neighbors = cagedPos
+    ? [cagedAll[cagedIdx - 1], cagedAll[cagedIdx + 1]].filter((x): x is NonNullable<typeof x> => !!x).map((w) => ({ from: w.from, to: w.to, label: `${w.form}` }))
+    : undefined;
+  const pathKeys = useMemo(
+    () => pathwayKeys({ kind: pathway, tuning, root, degrees: fbDegrees, fretFrom, fretTo, window: focus, stringPair: pathPair }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pathway, tuning, root, fbDegrees.join(), fretFrom, fretTo, focus?.from, focus?.to, pathPair],
+  );
+  const pickMode = (m: ModeRotation) => {
+    setMode("scale");
+    if (m.preset && !custom) {
+      setScaleId(m.preset.id);
+      setRootName(m.root.name);
+      resetEdits();
+    } else {
+      commit(m.degrees, m.root.name);
+    }
+    if (soundOnPick) playSequence(m.degrees.map((d) => 60 + m.root.pc + degreeToSemitones(d)), 0.16);
+  };
 
   const midis = degrees.map((d) => 48 + root.pc + degreeToSemitones(d));
 
@@ -427,7 +480,11 @@ function Workstation() {
             shape={markMode ? userShape : shape}
             tuning={tuning}
             root={root}
-            degrees={degrees}
+            degrees={fbDegrees}
+            focus={focus}
+            neighbors={neighbors}
+            chordTonePcs={cagedOn && cagedLayer !== "chord" ? chordPcSet : undefined}
+            pathKeys={pathKeys}
             fretFrom={fretFrom}
             fretTo={fretTo}
             leftHanded={leftHanded}
@@ -438,8 +495,79 @@ function Workstation() {
             altered={custom ? altered : undefined}
             selected={sel}
             onSelect={markMode ? markFret : setSel}
-            onShift={markMode ? undefined : shiftSelected}
+            onShift={markMode || !editable ? undefined : shiftSelected}
           />
+          <div className="space-y-2 rounded-md border border-border/70 p-2" data-testid="caged-panel">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Switch id="caged" checked={cagedOn} onCheckedChange={(v) => { setCagedOn(v); setCagedIdx(0); if (v) setPosWin(null); }} aria-label="CAGED" />
+              <Label htmlFor="caged" className="text-xs uppercase tracking-widest">CAGED</Label>
+              {cagedOn ? (
+                cagedAll.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">Needs a 6+ string tuning and a fret range that contains a form.</span>
+                ) : (
+                  <>
+                    <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Previous CAGED position" onClick={() => setCagedIdx((i) => (i - 1 + cagedAll.length) % cagedAll.length)}>←</Button>
+                    {cagedAll.map((p, i) => (
+                      <Button key={`${p.form}-${p.from}`} size="sm" variant={i === cagedIdx ? "default" : "secondary"} className="h-7 px-2 font-mono text-xs"
+                        onClick={() => setCagedIdx(i)}>
+                        {p.form} {p.from}–{p.to}
+                      </Button>
+                    ))}
+                    <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Next CAGED position" onClick={() => setCagedIdx((i) => (i + 1) % cagedAll.length)}>→</Button>
+                  </>
+                )
+              ) : null}
+            </div>
+            {cagedOn && cagedPos ? (
+              <>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Layer</span>
+                  {(["chord", "scale", "arpeggio"] as const).map((l) => (
+                    <Button key={l} size="sm" variant={cagedLayer === l ? "default" : "secondary"} className="h-7 px-2 text-xs capitalize" onClick={() => setCagedLayer(l)}>
+                      {l === "chord" ? "Chord tones" : l === "scale" ? `+ ${scale.name}` : `+ ${arp.name}`}
+                    </Button>
+                  ))}
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setFretFrom(cagedPos.from); setFretTo(Math.max(cagedPos.from + 3, cagedPos.to)); }}>
+                    Set fret range to this position
+                  </Button>
+                </div>
+                <p className="font-mono text-xs" data-testid="caged-info">
+                  {cagedPos.form} shape · root on {pretty(tuning.strings[cagedPos.rootString]!.note)} string fret {cagedPos.rootFret} · chord tones{" "}
+                  {cagedChord.map((d) => `${pretty(d)}=${pretty(spellDegree(root, d))}`).join("  ")}
+                  {cagedLayer !== "chord" ? " · small grey dots = other scale/arpeggio tones" : ""}
+                </p>
+                {!editable ? <p className="text-[11px] text-muted-foreground">Drag editing is off while the overlay layer differs from the current {mode}.</p> : null}
+              </>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Position</span>
+              {[null, 4, 5].map((n) => (
+                <Button key={String(n)} size="sm" variant={(posWin?.size ?? null) === n && !cagedOn ? "default" : "secondary"} className="h-7 px-2 text-xs"
+                  onClick={() => { setCagedOn(false); setPosWin(n ? { start: posWin?.start ?? fretFrom, size: n } : null); }}>
+                  {n ? `${n}-fret` : "Full neck"}
+                </Button>
+              ))}
+              {posWin && !cagedOn ? (
+                <>
+                  <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Previous position" onClick={() => setPosWin((w) => w && { ...w, start: Math.max(fretFrom, w.start - 1) })}>←</Button>
+                  <span className="font-mono text-xs" data-testid="pos-label">frets {posWin.start}–{posWin.start + posWin.size - 1}</span>
+                  <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Next position" onClick={() => setPosWin((w) => w && { ...w, start: Math.min(fretTo - w.size + 1, w.start + 1) })}>→</Button>
+                </>
+              ) : null}
+              <span className="mx-1 h-5 w-px bg-border" />
+              <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Pathway</span>
+              {(["none", "vertical", "horizontal", "diagonal"] as Pathway[]).map((k) => (
+                <Button key={k} size="sm" variant={pathway === k ? "default" : "secondary"} className="h-7 px-2 text-xs capitalize" onClick={() => setPathway(k)}>
+                  {k === "diagonal" ? "diagonal (3/string)" : k}
+                </Button>
+              ))}
+              {pathway === "horizontal" ? (
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setPathPair((p) => (p + 1) % (tuning.strings.length - 1))}>
+                  Strings {pretty(tuning.strings[pathPair]!.note)}+{pretty(tuning.strings[pathPair + 1]?.note ?? "")} ↻
+                </Button>
+              ) : null}
+            </div>
+          </div>
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/70 p-2">
             <div className="flex items-center gap-2">
               <Switch id="markmode" checked={markMode} onCheckedChange={setMarkMode} aria-label="Mark a shape" />
@@ -504,6 +632,13 @@ function Workstation() {
                   ))
                 )}
               </div>
+            </div>
+          ) : null}
+          <DegreeAlter root={root} degrees={degrees} original={baseDegrees} onChange={(d) => commit(d)} />
+          {mode === "scale" ? (
+            <div className="rounded-md border border-border/70 p-2">
+              <p className="mb-1 text-[11px] uppercase tracking-widest text-muted-foreground">Modal family</p>
+              <ModeFamily root={root} degrees={degrees} onPick={pickMode} />
             </div>
           ) : null}
           <NoteEditor
@@ -830,6 +965,22 @@ function Workstation() {
             </div>
           </section>
         </div>
+
+        <section>
+          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-widest">Identify notes</h3>
+          <IdentifierPanel
+            currentPcs={degreesToPitchClasses(degrees).map((p) => (p + root.pc) % 12)}
+            shapePcs={userShape.flatMap((f, i) => (f === null ? [] : [(tuning.strings[i]!.pc + f) % 12]))}
+            onLoad={(r) => (r.kind === "chord" ? loadChord(r.root.name, r.degrees) : pickScale(r.def.id, r.root.name))}
+            onLoadScale={(r, id) => pickScale(id, r.name)}
+            onLoadMode={pickMode}
+          />
+        </section>
+
+        <section>
+          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-widest">Circle of fifths / fourths</h3>
+          <CircleOfFifths rootPc={root.pc} onPickKey={(r, id) => pickScale(id, r)} onLoadChord={loadChord} />
+        </section>
 
         {/* ------------------------------------------------ favorites */}
         <section className="panel p-4">
