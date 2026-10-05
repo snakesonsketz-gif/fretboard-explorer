@@ -2,7 +2,6 @@ import {
   CHORDS,
   SCALES,
   degreesToPitchClasses,
-  identify,
   rootByName,
   spellDegree,
   type ChordDef,
@@ -35,9 +34,6 @@ export function readings(pcs: number[], bassPc?: number): Reading[] {
   const out: Reading[] = [];
   for (const rpc of set) {
     const root = rootForPc(rpc);
-    const det = identify(root, set.map((p) => p - rpc));
-    const rel = degreesToPitchClasses(set.map(String)).length; // noop guard
-    void rel;
     const key = set.map((p) => pc12(p - rpc)).sort((a, b) => a - b).join(",");
     const chords = CHORDS.filter((c) => degreesToPitchClasses(c.degrees).join(",") === key).slice(0, 2);
     const scales = set.length >= 5 ? SCALES.filter((s) => degreesToPitchClasses(s.degrees).join(",") === key).slice(0, 2) : [];
@@ -68,7 +64,6 @@ export function readings(pcs: number[], bassPc?: number): Reading[] {
         def: s,
       });
     }
-    void det;
   }
   // root-position readings first, then by root order of the bass
   return out.sort((a, b) => Number(!!a.slash) - Number(!!b.slash));
