@@ -29,7 +29,7 @@ export function ModeFamily({ root, degrees, onPick }: Props) {
             <span className="font-semibold">{pretty(m.name)}</span>
             <span className="block font-mono text-[10px] text-primary">{pretty(m.degrees.join(" "))}</span>
             <span className="block font-mono text-[10px] text-muted-foreground">
-              {m.degrees.map((d) => pretty(spellDegree(m.root, d))).join(" ")}
+              {m.notes.map(pretty).join(" ")}
             </span>
           </button>
         ))}

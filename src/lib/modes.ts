@@ -38,6 +38,8 @@ export interface ModeRotation {
   degrees: Degree[];
   name: string;
   preset?: ScaleDef;
+  /** Note names in the parent collection's spelling, starting from this mode's tonic. */
+  notes: string[];
 }
 
 /** All seven rotations of a heptatonic collection, keeping letter-based degree spelling. */
@@ -64,7 +66,8 @@ export function modeRotations(root: Root, degrees: Degree[]): ModeRotation[] {
     const name = preset
       ? `${label} ${preset.name}`
       : det.known ? det.known.name.replace(r.name, label) : `${label} custom (${degs.join(" ")})`;
-    return { index: k, root: r, degrees: degs, name, ...(preset ? { preset } : {}) };
+    const notes = [...sorted.slice(k), ...sorted.slice(0, k)].map((x) => spellDegree(root, x.d));
+    return { index: k, root: r, degrees: degs, name, notes, ...(preset ? { preset } : {}) };
   });
 }
 
