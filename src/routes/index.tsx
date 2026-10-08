@@ -22,6 +22,7 @@ import { SongWorkspace } from "@/components/SongWorkspace";
 import { analyzeShape, findVoicings, shapeMidis, shapeToTab } from "@/lib/voicings";
 import { TUNINGS, degreeMap } from "@/lib/fretboard";
 import { NoteEditor } from "@/components/NoteEditor";
+import { parseDegree } from "@/lib/theory";
 import { DegreeAlter } from "@/components/DegreeAlter";
 import { ModeFamily } from "@/components/ModeFamily";
 import { IdentifierPanel } from "@/components/IdentifierPanel";
@@ -206,7 +207,9 @@ function Workstation() {
   const [posWin, setPosWin] = useState<{ start: number; size: number } | null>(null);
   const [pathway, setPathway] = useState<Pathway>("none");
   const [pathPair, setPathPair] = useState(0);
-  const cagedChord = mode === "chord" ? degrees : mode === "arpeggio" ? arpSource : chord.degrees;
+  // In scale mode the CAGED chord is the scale's own 1-3-5-7, so chord tones always belong to the active collection.
+  const scaleSeventh = mode === "scale" ? degrees.filter((d) => [1, 3, 5, 7].includes(parseDegree(d).number)) : [];
+  const cagedChord = mode === "chord" ? degrees : mode === "arpeggio" ? arpSource : scaleSeventh.length >= 3 ? scaleSeventh : chord.degrees;
   const cagedScale = mode === "scale" ? degrees : scale.degrees;
   const cagedArp = mode === "arpeggio" ? degrees : arp.transform(cagedChord);
   const cagedAll = useMemo(() => visiblePositions(cagedPositions(tuning, root.pc), fretFrom, fretTo), [tuning, root.pc, fretFrom, fretTo]);

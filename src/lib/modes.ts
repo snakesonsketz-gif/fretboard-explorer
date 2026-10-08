@@ -38,6 +38,8 @@ export interface ModeRotation {
   degrees: Degree[];
   name: string;
   preset?: ScaleDef;
+  /** Note names in the parent collection's spelling, starting from this mode's tonic. */
+  notes: string[];
 }
 
 /** All seven rotations of a heptatonic collection, keeping letter-based degree spelling. */
@@ -47,8 +49,12 @@ export function modeRotations(root: Root, degrees: Degree[]): ModeRotation[] {
     .map((d) => ({ d, n: simple(parseDegree(d).number), s: pc12(degreeToSemitones(d)) }))
     .sort((a, b) => a.n - b.n);
   return sorted.map((tonic, k) => {
-    const r = rootFor(spellDegree(root, tonic.d), root.pc + tonic.s);
-    const degs = sorted.map((x) => {
+    const spelled = spellDegree(root, tonic.d);
+    const r = rootFor(spelled, root.pc + tonic.s);
+    // When the letter-correct tonic (e.g. E#) is not a selectable root, say so instead of silently renaming it.
+    const label = r.name === spelled ? r.name : `${spelled} (= ${r.name})`;
+    const rotated = [...sorted.slice(k), ...sorted.slice(0, k)];
+    const degs = rotated.map((x) => {
       const n = ((x.n - tonic.n + 7) % 7) + 1;
       let alter = pc12(x.s - tonic.s) - MAJOR[n - 1]!;
       if (alter > 6) alter -= 12;
@@ -59,9 +65,10 @@ export function modeRotations(root: Root, degrees: Degree[]): ModeRotation[] {
     const preset = SCALES.find((s) => degreesToPitchClasses(s.degrees).join(",") === key);
     const det = identify(r, degreesToPitchClasses(degs));
     const name = preset
-      ? `${r.name} ${preset.name}`
-      : det.known?.name ?? `${r.name} custom (${degs.join(" ")})`;
-    return { index: k, root: r, degrees: degs, name, ...(preset ? { preset } : {}) };
+      ? `${label} ${preset.name}`
+      : det.known ? det.known.name.replace(r.name, label) : `${label} custom (${degs.join(" ")})`;
+    const notes = rotated.map((x) => spellDegree(root, x.d));
+    return { index: k, root: r, degrees: degs, name, notes, ...(preset ? { preset } : {}) };
   });
 }
 
