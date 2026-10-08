@@ -210,7 +210,8 @@ function Workstation() {
   const cagedScale = mode === "scale" ? degrees : scale.degrees;
   const cagedArp = mode === "arpeggio" ? degrees : arp.transform(cagedChord);
   const cagedAll = useMemo(() => visiblePositions(cagedPositions(tuning, root.pc), fretFrom, fretTo), [tuning, root.pc, fretFrom, fretTo]);
-  const cagedPos = cagedOn ? cagedAll[Math.min(cagedIdx, cagedAll.length - 1)] : undefined;
+  const cagedOverview = cagedOn && cagedIdx < 0;
+  const cagedPos = cagedOn && !cagedOverview ? cagedAll[Math.min(cagedIdx, cagedAll.length - 1)] : undefined;
   const chordPcSet = new Set(degreesToPitchClasses(cagedChord).map((p) => (p + root.pc) % 12));
   const fbDegrees = !cagedOn
     ? degrees
@@ -225,9 +226,11 @@ function Workstation() {
     : posWin
       ? { from: posWin.start, to: posWin.start + posWin.size - 1, label: `pos ${posWin.start}` }
       : null;
-  const neighbors = cagedPos
-    ? [cagedAll[cagedIdx - 1], cagedAll[cagedIdx + 1]].filter((x): x is NonNullable<typeof x> => !!x).map((w) => ({ from: w.from, to: w.to, label: `${w.form}` }))
-    : undefined;
+  const neighbors = cagedOverview
+    ? cagedAll.map((w) => ({ from: w.from, to: w.to, label: `${w.form}` }))
+    : cagedPos
+      ? [cagedAll[cagedIdx - 1], cagedAll[cagedIdx + 1]].filter((x): x is NonNullable<typeof x> => !!x).map((w) => ({ from: w.from, to: w.to, label: `${w.form}` }))
+      : undefined;
   const pathKeys = useMemo(
     () => pathwayKeys({ kind: pathway, tuning, root, degrees: fbDegrees, fretFrom, fretTo, window: focus, stringPair: pathPair }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -506,7 +509,8 @@ function Workstation() {
                   <span className="text-xs text-muted-foreground">Needs a 6+ string tuning and a fret range that contains a form.</span>
                 ) : (
                   <>
-                    <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Previous CAGED position" onClick={() => setCagedIdx((i) => (i - 1 + cagedAll.length) % cagedAll.length)}>←</Button>
+                    <Button size="sm" variant={cagedOverview ? "default" : "secondary"} className="h-7 px-2 text-xs" onClick={() => setCagedIdx(-1)}>Full neck</Button>
+                    <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Previous CAGED position" onClick={() => setCagedIdx((i) => (i <= 0 ? cagedAll.length - 1 : i - 1))}>←</Button>
                     {cagedAll.map((p, i) => (
                       <Button key={`${p.form}-${p.from}`} size="sm" variant={i === cagedIdx ? "default" : "secondary"} className="h-7 px-2 font-mono text-xs"
                         onClick={() => setCagedIdx(i)}>
@@ -514,6 +518,7 @@ function Workstation() {
                       </Button>
                     ))}
                     <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Next CAGED position" onClick={() => setCagedIdx((i) => (i + 1) % cagedAll.length)}>→</Button>
+                    {cagedOverview ? <span className="text-[11px] text-muted-foreground">All {cagedAll.length} positions banded; pick one to focus.</span> : null}
                   </>
                 )
               ) : null}
