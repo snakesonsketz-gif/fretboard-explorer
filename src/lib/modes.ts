@@ -53,7 +53,8 @@ export function modeRotations(root: Root, degrees: Degree[]): ModeRotation[] {
     const r = rootFor(spelled, root.pc + tonic.s);
     // When the letter-correct tonic (e.g. E#) is not a selectable root, say so instead of silently renaming it.
     const label = r.name === spelled ? r.name : `${spelled} (= ${r.name})`;
-    const degs = sorted.map((x) => {
+    const rotated = [...sorted.slice(k), ...sorted.slice(0, k)];
+    const degs = rotated.map((x) => {
       const n = ((x.n - tonic.n + 7) % 7) + 1;
       let alter = pc12(x.s - tonic.s) - MAJOR[n - 1]!;
       if (alter > 6) alter -= 12;
@@ -66,7 +67,7 @@ export function modeRotations(root: Root, degrees: Degree[]): ModeRotation[] {
     const name = preset
       ? `${label} ${preset.name}`
       : det.known ? det.known.name.replace(r.name, label) : `${label} custom (${degs.join(" ")})`;
-    const notes = [...sorted.slice(k), ...sorted.slice(0, k)].map((x) => spellDegree(root, x.d));
+    const notes = rotated.map((x) => spellDegree(root, x.d));
     return { index: k, root: r, degrees: degs, name, notes, ...(preset ? { preset } : {}) };
   });
 }
