@@ -47,7 +47,10 @@ export function modeRotations(root: Root, degrees: Degree[]): ModeRotation[] {
     .map((d) => ({ d, n: simple(parseDegree(d).number), s: pc12(degreeToSemitones(d)) }))
     .sort((a, b) => a.n - b.n);
   return sorted.map((tonic, k) => {
-    const r = rootFor(spellDegree(root, tonic.d), root.pc + tonic.s);
+    const spelled = spellDegree(root, tonic.d);
+    const r = rootFor(spelled, root.pc + tonic.s);
+    // When the letter-correct tonic (e.g. E#) is not a selectable root, say so instead of silently renaming it.
+    const label = r.name === spelled ? r.name : `${spelled} (= ${r.name})`;
     const degs = sorted.map((x) => {
       const n = ((x.n - tonic.n + 7) % 7) + 1;
       let alter = pc12(x.s - tonic.s) - MAJOR[n - 1]!;
@@ -59,8 +62,8 @@ export function modeRotations(root: Root, degrees: Degree[]): ModeRotation[] {
     const preset = SCALES.find((s) => degreesToPitchClasses(s.degrees).join(",") === key);
     const det = identify(r, degreesToPitchClasses(degs));
     const name = preset
-      ? `${r.name} ${preset.name}`
-      : det.known?.name ?? `${r.name} custom (${degs.join(" ")})`;
+      ? `${label} ${preset.name}`
+      : det.known ? det.known.name.replace(r.name, label) : `${label} custom (${degs.join(" ")})`;
     return { index: k, root: r, degrees: degs, name, ...(preset ? { preset } : {}) };
   });
 }
