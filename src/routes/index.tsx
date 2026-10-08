@@ -509,7 +509,7 @@ function Workstation() {
                   <span className="text-xs text-muted-foreground">Needs a 6+ string tuning and a fret range that contains a form.</span>
                 ) : (
                   <>
-                    <Button size="sm" variant={cagedOverview ? "default" : "secondary"} className="h-7 px-2 text-xs" onClick={() => setCagedIdx(-1)}>Full neck</Button>
+                    <Button size="sm" variant={cagedOverview ? "default" : "secondary"} className="h-7 px-2 text-xs" onClick={() => setCagedIdx(-1)}>All CAGED</Button>
                     <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Previous CAGED position" onClick={() => setCagedIdx((i) => (i <= 0 ? cagedAll.length - 1 : i - 1))}>←</Button>
                     {cagedAll.map((p, i) => (
                       <Button key={`${p.form}-${p.from}`} size="sm" variant={i === cagedIdx ? "default" : "secondary"} className="h-7 px-2 font-mono text-xs"
