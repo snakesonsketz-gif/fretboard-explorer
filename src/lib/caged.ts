@@ -51,3 +51,30 @@ export function cagedPositions(tuning: Tuning, rootPc: number, maxFret = 24): Ca
 export function visiblePositions(all: CagedPosition[], fretFrom: number, fretTo: number) {
   return all.filter((p) => p.to >= fretFrom && p.from <= fretTo);
 }
+
+/**
+ * Scale span for a CAGED form: the chord window widened by one fret each side,
+ * which is where the full scale "box" for that form lives.
+ */
+export function scaleWindow(p: CagedPosition, fretFrom: number, fretTo: number) {
+  return { from: Math.max(fretFrom, p.from - 1), to: Math.min(fretTo, p.to + 1) };
+}
+
+export interface MappedNote {
+  string: number;
+  fret: number;
+  pc: number;
+  midi: number;
+}
+
+/** Every note of a pitch-class set inside a fret window, per string (low string first). */
+export function mapSetInWindow(tuning: Tuning, pcs: Set<number>, from: number, to: number): MappedNote[][] {
+  return tuning.strings.map((s, si) => {
+    const row: MappedNote[] = [];
+    for (let f = from; f <= to; f++) {
+      const pc = (s.pc + f) % 12;
+      if (pcs.has(pc)) row.push({ string: si, fret: f, pc, midi: s.pc + (s.octave + 1) * 12 + f });
+    }
+    return row;
+  });
+}

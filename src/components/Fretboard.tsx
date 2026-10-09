@@ -39,6 +39,8 @@ export interface FretboardProps {
   chordTonePcs?: Set<number> | undefined;
   /** "string-fret" keys of a visual pathway; set notes off the path are dimmed. */
   pathKeys?: Set<string> | undefined;
+  /** "string-fret" -> 1-based step number of an ordered pathway. */
+  pathOrder?: Map<string, number> | undefined;
 }
 
 /** Color role for a degree, using semantic tokens only. */
@@ -77,6 +79,7 @@ export function Fretboard(props: FretboardProps) {
     neighbors,
     chordTonePcs,
     pathKeys,
+    pathOrder,
   } = props;
   const inWin = (f: number, w?: { from: number; to: number } | null) => !!w && f >= w.from && f <= w.to;
   const bandLabel = (f: number) => {
@@ -239,6 +242,11 @@ export function Fretboard(props: FretboardProps) {
                           )}
                           style={{ top: "-0.25rem" }}
                         />
+                      ) : null}
+                      {pathOrder?.has(`${n.string}-${n.fret}`) ? (
+                        <span aria-hidden data-testid="path-step" className="pointer-events-none absolute -right-0.5 -top-0.5 z-20 rounded bg-primary px-0.5 font-mono text-[8px] font-bold leading-tight text-primary-foreground">
+                          {pathOrder.get(`${n.string}-${n.fret}`)}
+                        </span>
                       ) : null}
                       <span
                         className={cn(
