@@ -243,7 +243,7 @@ function Workstation() {
     if (pathway === "none") return [];
     const pcs = new Set(degreesToPitchClasses(fbDegrees).map((p) => (p + root.pc) % 12));
     const from = focus?.from ?? fretFrom;
-    const to = focus?.to ?? (pathway === "vertical" ? Math.min(fretTo, fretFrom + 4) : fretTo);
+    const to = pathway === "diagonal" ? fretTo : (focus?.to ?? (pathway === "vertical" ? Math.min(fretTo, fretFrom + 4) : fretTo));
     return orderedPathway({ kind: pathway, tuning, pcs, startPc: (root.pc + pcOf(startDeg)) % 12, from, to, stringPair: pathPair });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathway, tuning, root.pc, fbDegrees.join(), startDeg, fretFrom, fretTo, focus?.from, focus?.to, pathPair]);
@@ -657,7 +657,7 @@ function Workstation() {
                   {pathSteps.length
                     ? pathSteps.map((p) => pretty(degOfPc(p.pc))).join("–")
                     : `No ${pretty(startDeg)} inside this window.`}
-                  {pathSteps.length ? <span className="text-muted-foreground"> · {pathSteps.length} notes · frets {focus?.from ?? fretFrom}–{focus?.to ?? (pathway === "vertical" ? Math.min(fretTo, fretFrom + 4) : fretTo)}</span> : null}
+                  {pathSteps.length ? <span className="text-muted-foreground"> · {pathSteps.length} notes · frets {pathSteps[0]!.fret === Math.min(...pathSteps.map((x) => x.fret)) ? pathSteps[0]!.fret : Math.min(...pathSteps.map((x) => x.fret))}–{Math.max(...pathSteps.map((x) => x.fret))}{pathway === "diagonal" ? " (diagonal climbs from the window start)" : ""}</span> : null}
                 </p>
               </div>
             ) : null}

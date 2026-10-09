@@ -259,6 +259,26 @@ export function orderedPathway(opts: {
     const a = Math.min(Math.max(0, opts.stringPair ?? 0), Math.max(0, n - 3));
     strings = [a, a + 1, a + 2].filter((x) => x < n);
   } else strings = tuning.strings.map((_, i) => i);
+  if (kind === "diagonal") {
+    // 3 notes per string, climbing across adjacent strings from the start degree.
+    const out: PathStep[] = [];
+    let last = -1;
+    for (const si of strings) {
+      const s = tuning.strings[si]!;
+      const base = s.pc + (s.octave + 1) * 12;
+      let placed = 0;
+      for (let f = from; f <= to && placed < 3; f++) {
+        const pc = (s.pc + f) % 12;
+        const midi = base + f;
+        if (!pcs.has(pc) || midi <= last) continue;
+        if (!out.length && pc !== startPc) continue;
+        out.push({ string: si, fret: f, pc, midi });
+        last = midi;
+        placed++;
+      }
+    }
+    return out;
+  }
   const byMidi = new Map<number, PathStep>();
   for (const si of strings) {
     const s = tuning.strings[si]!;
