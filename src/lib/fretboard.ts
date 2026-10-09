@@ -257,13 +257,15 @@ export function orderedPathway(opts: {
     strings = [a, a + 1];
   } else if (kind === "diagonal") {
     const a = Math.min(Math.max(0, opts.stringPair ?? 0), Math.max(0, n - 3));
-    strings = [a, a + 1, a + 2].filter((x) => x < n);
+    strings = tuning.strings.map((_, i) => i).filter((x) => x >= a);
   } else strings = tuning.strings.map((_, i) => i);
   if (kind === "diagonal") {
     // 3 notes per string, climbing across adjacent strings from the start degree.
     const out: PathStep[] = [];
     let last = -1;
+    let used = 0;
     for (const si of strings) {
+      if (used >= 3) break;
       const s = tuning.strings[si]!;
       const base = s.pc + (s.octave + 1) * 12;
       let placed = 0;
@@ -276,6 +278,7 @@ export function orderedPathway(opts: {
         last = midi;
         placed++;
       }
+      if (placed) used++;
     }
     return out;
   }
