@@ -226,3 +226,50 @@ export function pathwayKeys(opts: {
   }
   return keys;
 }
+
+export interface PathStep {
+  string: number;
+  fret: number;
+  pc: number;
+  midi: number;
+}
+
+/**
+ * Ordered traversal of the set in true scale-degree (pitch) order, starting at the
+ * lowest occurrence of `startPc` and continuing upward, so the degree order wraps
+ * cyclically (e.g. 4-5-6-7-1-2-3-4...). Each pitch is played once, on the lowest
+ * string that holds it within the allowed strings and fret window.
+ */
+export function orderedPathway(opts: {
+  kind: Exclude<Pathway, "none">;
+  tuning: Tuning;
+  pcs: Set<number>;
+  startPc: number;
+  from: number;
+  to: number;
+  stringPair?: number;
+}): PathStep[] {
+  const { kind, tuning, pcs, startPc, from, to } = opts;
+  const n = tuning.strings.length;
+  let strings: number[];
+  if (kind === "horizontal") {
+    const a = Math.min(Math.max(0, opts.stringPair ?? 0), n - 2);
+    strings = [a, a + 1];
+  } else if (kind === "diagonal") {
+    const a = Math.min(Math.max(0, opts.stringPair ?? 0), Math.max(0, n - 3));
+    strings = [a, a + 1, a + 2].filter((x) => x < n);
+  } else strings = tuning.strings.map((_, i) => i);
+  const byMidi = new Map<number, PathStep>();
+  for (const si of strings) {
+    const s = tuning.strings[si]!;
+    for (let f = from; f <= to; f++) {
+      const pc = (s.pc + f) % 12;
+      if (!pcs.has(pc)) continue;
+      const midi = s.pc + (s.octave + 1) * 12 + f;
+      if (!byMidi.has(midi)) byMidi.set(midi, { string: si, fret: f, pc, midi });
+    }
+  }
+  const sorted = [...byMidi.values()].sort((x, y) => x.midi - y.midi);
+  const i = sorted.findIndex((p) => p.pc === startPc);
+  return i < 0 ? [] : sorted.slice(i);
+}
