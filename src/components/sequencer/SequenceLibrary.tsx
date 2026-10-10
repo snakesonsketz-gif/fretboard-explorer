@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { FilePlus2, FolderOpen, Save, Trash2 } from "lucide-react";
+import { Download, FilePlus2, FolderOpen, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { downloadMidi } from "@/lib/midi";
 import { loadSequences, saveSequences, songToArrangement, type SavedSequence } from "@/lib/sequences";
 import { loadSongs, type Song } from "@/lib/song";
 import { emptyArrangement, newId, type Arrangement } from "@/lib/timeline";
@@ -30,6 +31,8 @@ export function SequenceLibrary({ arr, update, onLoaded }: Props) {
     setList(next);
     saveSequences(next);
   };
+  const hasChords = arr.chords.length > 0;
+  const hasDrums = arr.drums.lanes.some((l) => l.hits.length);
   const say = (m: string) => {
     setFlash(m);
     window.setTimeout(() => setFlash(""), 1800);
@@ -116,6 +119,16 @@ export function SequenceLibrary({ arr, update, onLoaded }: Props) {
       ) : (
         <p className="text-xs text-muted-foreground">Nothing saved yet. Your work is kept as a draft on this device either way.</p>
       )}
+
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-3" data-testid="midi-export">
+        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Export MIDI</span>
+        <Button size="sm" variant="secondary" className="h-8 gap-1" disabled={!hasChords && !hasDrums} onClick={() => downloadMidi(arr, "full", name)}>
+          <Download className="h-3.5 w-3.5" /> Chords + drums
+        </Button>
+        <Button size="sm" variant="ghost" className="h-8" disabled={!hasChords} onClick={() => downloadMidi(arr, "chords", name)}>Chords only</Button>
+        <Button size="sm" variant="ghost" className="h-8" disabled={!hasDrums} onClick={() => downloadMidi(arr, "drums", name)}>Drums only</Button>
+        <span className="text-[11px] text-muted-foreground">For GarageBand, Logic, Ableton and others. MIDI carries the notes and timing; your app picks the sounds.</span>
+      </div>
 
       {songs.length ? (
         <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-3">
