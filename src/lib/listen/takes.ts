@@ -7,6 +7,7 @@
  * the scorecard shows straight away whether clean strums come out clean and mistakes get caught.
  * Takes stay on this device (IndexedDB) until exported.
  */
+import { bandFloor, detectOnsets, rms, spectrumOf } from "./dsp";
 import { judgeStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
 import { ListenSession, type AudioSource } from "./session";
 
@@ -34,6 +35,14 @@ export interface Take {
   /** Where it was recorded (browser/phone), to compare devices. */
   device: string;
   fileName?: string;
+  /** Room noise measured on the quiet lead-in before silence was trimmed (see trimSilence). */
+  roomFloor?: number;
+  /** Length before trimming (seconds). */
+  originalSeconds?: number;
+  /** Guided recording: which plan step, the tab played, and how many strums were asked for. */
+  step?: string;
+  tab?: string;
+  expected?: number;
 }
 
 export interface TakeStrum {
@@ -77,6 +86,81 @@ export function encodeWav(pcm: Int16Array, sampleRate: number): Uint8Array {
   return new Uint8Array(buf);
 }
 
+// ---------------------------------------------------------------- silence trimming
+
+const PRE_ROLL = 0.15; // s kept before each strum (onset detection needs a little quiet before it)
+const TAIL = 0.25; // s kept after a strum has rung out
+const QUIET_HOLD = 0.3; // s the level must stay down for a strum to count as rung out
+
+/**
+ * Keep only the sound: each strum from just before it starts until it has fully rung out (back
+ * down near the room's noise), joined end to end. The room-noise reading the buzz measure needs
+ * is taken from the quiet lead-in *before* that silence is cut, and returned with the audio.
+ * Returns null if no strum was found.
+ */
+export function trimSilence(x: Float32Array, sr: number): { audio: Float32Array; roomFloor?: number; strums: number } | null {
+  const onsets = detectOnsets(x, sr);
+  if (!onsets.length) return null;
+  const hop = Math.round(0.01 * sr);
+  const env: number[] = [];
+  for (let i = 0; i + hop <= x.length; i += hop) env.push(rms(x, i, i + hop));
+  // Room level: the lead-in before the first strum (or, without one, the quietest tenth).
+  const leadFrames = Math.floor((onsets[0]! - 0.05 * sr) / hop);
+  const ref = (leadFrames >= 20 ? env.slice(0, leadFrames) : [...env]).sort((a, b) => a - b);
+  const room = Math.max(1e-5, ref[Math.floor(ref.length * (leadFrames >= 20 ? 0.5 : 0.1))] ?? 1e-5);
+  const quietLevel = room * 2; // ~6 dB above the room: "rung out"
+  // Spectral room reference for the buzz measure: quietest 16384-sample stretch of the lead-in.
+  let roomFloor: number | undefined;
+  const leadEnd = onsets[0]! - Math.round(0.05 * sr);
+  if (leadEnd >= 16384) {
+    let best = -1, bestRms = Infinity;
+    for (let from = 0; from + 16384 <= leadEnd; from += 4096) {
+      const r = rms(x, from, from + 16384);
+      if (r < bestRms) {
+        bestRms = r;
+        best = from;
+      }
+    }
+    const w = new Float32Array(16384);
+    w.set(x.subarray(best, best + 16384));
+    roomFloor = bandFloor(spectrumOf(w, sr));
+  }
+  // One stretch per strum: pre-roll .. rung out (level held near the room) + tail.
+  const hold = Math.round(QUIET_HOLD / 0.01);
+  const spans = onsets.map((o) => {
+    let k = Math.floor((o + 0.3 * sr) / hop);
+    let run = 0;
+    for (; k < env.length; k++) {
+      run = env[k]! < quietLevel ? run + 1 : 0;
+      if (run >= hold) break;
+    }
+    const end = k >= env.length ? x.length : (k - hold + 1) * hop + Math.round(TAIL * sr);
+    return [Math.max(0, o - Math.round(PRE_ROLL * sr)), Math.min(x.length, end)] as [number, number];
+  });
+  // Merge stretches that touch (a strum played before the last one rang out keeps its overlap).
+  const merged: [number, number][] = [];
+  for (const sp of spans) {
+    const last = merged[merged.length - 1];
+    if (last && sp[0] <= last[1] + Math.round(0.05 * sr)) last[1] = Math.max(last[1], sp[1]);
+    else merged.push([...sp]);
+  }
+  // Join with a 5 ms crossfade so the seams are silent.
+  const fade = Math.round(0.005 * sr);
+  const total = merged.reduce((a, [s, e]) => a + (e - s), 0) - fade * (merged.length - 1);
+  const out = new Float32Array(Math.max(0, total));
+  let pos = 0;
+  merged.forEach(([s, e], i) => {
+    for (let j = 0; j < e - s; j++) {
+      const v = x[s + j]!;
+      if (i > 0 && j < fade) out[pos + j]! += v * (j / fade);
+      else if (i < merged.length - 1 && j >= e - s - fade) out[pos + j] = v * ((e - s - j) / fade);
+      else out[pos + j] = v;
+    }
+    pos += e - s - fade;
+  });
+  return { audio: out, ...(roomFloor !== undefined ? { roomFloor } : {}), strums: onsets.length };
+}
+
 // ---------------------------------------------------------------- analysis
 
 /**
@@ -84,7 +168,7 @@ export function encodeWav(pcm: Int16Array, sampleRate: number): Uint8Array {
  * fed in 2048-sample blocks through a ListenSession (onsets, room reference, ring-out until the
  * next strum). Thresholds don't affect the measurements, so this runs once per take.
  */
-export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target">): TakeStrum[] {
+export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomFloor">): TakeStrum[] {
   const audio = toFloat(take.pcm);
   let n = 0;
   const src: AudioSource = {
@@ -96,6 +180,10 @@ export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target">): 
     read: (a, b) => (a < 0 || b > n || b <= a ? null : audio.slice(a, b)),
   };
   const session = new ListenSession(src, () => ({ target: take.target }));
+  if (take.roomFloor !== undefined) {
+    session.roomFloor = take.roomFloor; // measured before the silence was trimmed
+    session.lockRoom = true;
+  }
   for (n = 2048; n <= audio.length; n += 2048) if ((n / 2048) % 2 === 0) session.tick();
   n = audio.length;
   session.tick(true); // recording over: finish the last strum's ring-out with the audio there is
@@ -154,6 +242,14 @@ export function verdictFor(label: TakeLabel, r: StrumReport): { result: "good" |
     default:
       return { result: "unsure" };
   }
+}
+
+/** Strum detection on guided steps: strums found vs strums the step asked for. */
+export function strumDetection(takes: Take[], measured: Map<string, TakeStrum[]>) {
+  const asked = takes.filter((t) => t.expected && measured.has(t.id));
+  const found = asked.reduce((a, t) => a + measured.get(t.id)!.length, 0);
+  const expected = asked.reduce((a, t) => a + t.expected!, 0);
+  return { steps: asked.length, exact: asked.filter((t) => measured.get(t.id)!.length === t.expected).length, found, expected };
 }
 
 export function scorecard(takes: { label: TakeLabel; reports: StrumReport[] }[]): ScoreLine[] {
@@ -259,6 +355,10 @@ export function exportTakes(takes: Take[], measured: Map<string, TakeStrum[]>, t
       source: t.source,
       device: t.device,
       ...(t.fileName ? { fileName: t.fileName } : {}),
+      ...(t.step ? { step: t.step, tab: t.tab, strumsAsked: t.expected } : {}),
+      strumsFound: (measured.get(t.id) ?? []).length,
+      ...(t.originalSeconds !== undefined ? { secondsBeforeTrim: t.originalSeconds } : {}),
+      roomFloorFromLeadIn: t.roomFloor ?? null,
       strums: (measured.get(t.id) ?? []).map((s) => ({
         time: +s.time.toFixed(3),
         peakDb: +s.measure.peakDb.toFixed(1),

@@ -43,6 +43,11 @@ const MAX_RING = 4;
 export class ListenSession {
   strums: Strum[] = [];
   roomFloor: number | undefined;
+  /**
+   * Room noise is already known (a trimmed Develop take carries the reading from its quiet
+   * lead-in): use roomFloor as given and don't re-estimate it.
+   */
+  lockRoom = false;
   /** Thresholds used to judge strums (Develop tab can supply tuned ones). */
   thresholds: Thresholds = THRESHOLDS;
   private scanned = 0;
@@ -127,6 +132,7 @@ export class ListenSession {
     // 3) Room noise. First reference: the opening moment after Start (if the player is already
     // strumming it reads high, which only makes buzz *less* likely to be reported). Then refine
     // with any quiet moment: 0.6 s below -45 dBFS with no strum in the last 1.5 s.
+    if (this.lockRoom) return [...changed];
     const opening = Math.max(this.startFrame, first);
     if (this.roomFloor === undefined && end - opening >= 16384) {
       const w = this.src.read(opening, opening + 16384);

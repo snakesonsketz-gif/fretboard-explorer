@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, FileAudio, Mic, Square, Trash2 } from "lucide-react";
+import { ChevronDown, Download, FileAudio, Mic, Square, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChordPicker } from "@/components/listen/ChordPicker";
 import { MIC_HELP } from "@/components/listen/micHelp";
+import { GuidedSession } from "@/components/develop/GuidedSession";
 import { Scorecard } from "@/components/develop/Scorecard";
 import { TakeCard } from "@/components/develop/TakeCard";
 import { ThresholdPanel } from "@/components/develop/ThresholdPanel";
@@ -25,8 +26,10 @@ import {
   newTakeId,
   saveTake,
   scorecard,
+  strumDetection,
   toFloat,
   toPcm,
+  trimSilence,
   type Take,
   type TakeLabel,
   type TakeStrum,
@@ -53,6 +56,7 @@ function DevelopPage() {
   const [note, setNote] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
   const rec = useRecorder();
   const fileInput = useRef<HTMLInputElement>(null);
   const player = useRef<AudioBufferSourceNode | null>(null);
@@ -103,17 +107,29 @@ function DevelopPage() {
     saveTuning(T, on);
   };
 
-  const add = async (t: Take) => {
+  const add = async (t: Take, strums?: TakeStrum[]) => {
+    // A guided step recorded again replaces its earlier take.
+    const old = t.step ? takes.filter((x) => x.step === t.step) : [];
+    for (const o of old) void deleteTake(o.id);
+    if (strums) setMeasured((m) => new Map(m).set(t.id, strums));
+    setTakes((ts) => [t, ...ts.filter((x) => !old.includes(x))]);
     const ok = await saveTake(t);
-    setTakes((ts) => [t, ...ts]);
     if (!ok) setMsg("Couldn't save the take on this device (storage blocked or full) — it's here until you leave the page.");
+  };
+
+  /** Keep only the sound (each strum until it has rung out); room noise measured first. */
+  const trimmed = (audio: Float32Array, sampleRate: number) => {
+    const t = trimSilence(audio, sampleRate);
+    return t ? { pcm: toPcm(t.audio), sampleRate, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}), originalSeconds: +(audio.length / sampleRate).toFixed(2) } : null;
   };
 
   const record = () => {
     setMsg(null);
     rec.start((r) => {
       if (!r) return setMsg("That take was too short to keep.");
-      void add({ id: newTakeId(), at: Date.now(), target, label, note: note.trim(), sampleRate: r.sampleRate, pcm: toPcm(r.audio), source: "mic", device: deviceLabel() });
+      const a = trimmed(r.audio, r.sampleRate);
+      if (!a) return setMsg("No strums heard in that take — strum firmly, with the phone close to the guitar.");
+      void add({ id: newTakeId(), at: Date.now(), target, label, note: note.trim(), ...a, source: "mic", device: deviceLabel() });
     });
   };
 
@@ -132,7 +148,12 @@ function DevelopPage() {
           const ch = buf.getChannelData(c);
           for (let i = 0; i < n; i++) mono[i]! += ch[i]! / buf.numberOfChannels;
         }
-        await add({ id: newTakeId(), at: Date.now(), target, label, note: note.trim(), sampleRate: buf.sampleRate, pcm: toPcm(mono), source: "file", device: deviceLabel(), fileName: f.name });
+        const a = trimmed(mono, buf.sampleRate);
+        if (!a) {
+          setMsg(`No strums found in "${f.name}".`);
+          continue;
+        }
+        await add({ id: newTakeId(), at: Date.now(), target, label, note: note.trim(), ...a, source: "file", device: deviceLabel(), fileName: f.name });
       } catch {
         setMsg(`Couldn't read "${f.name}" — try WAV, M4A or MP3.`);
       }
@@ -195,16 +216,15 @@ function DevelopPage() {
   return (
     <AppShell>
       <main className="mx-auto max-w-5xl space-y-4 px-3 py-4 sm:px-4">
-        <section className="panel space-y-2 p-3 sm:p-4" aria-label="About Develop">
-          <h2 className="font-display text-lg font-black">Tune Listen mode</h2>
-          <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-            <li><b className="text-foreground">Record takes</b>: pick the chord, say what you'll really play (clean, a wrong note, a muted string, buzz), stay quiet for a second, then strum it 3–5 times, letting each ring.</li>
-            <li><b className="text-foreground">Check the scorecard</b>: clean takes should come out clean; mistakes should get caught. Tap any strum to see the numbers behind its verdict.</li>
-            <li><b className="text-foreground">Move the thresholds</b> until it agrees with you, then <b className="text-foreground">export the takes</b> and send them over so the defaults can be fixed for everyone.</li>
-          </ol>
-        </section>
+        <GuidedSession rec={rec} takes={takes} measured={measured} onSave={(t, st) => void add(t, st)} onExport={() => void exportAll()} />
 
-        <section className="panel space-y-4 p-3 sm:p-4" aria-label="Record a take">
+        <section className="panel space-y-4 p-3 sm:p-4" aria-label="Record your own take">
+          <button type="button" onClick={() => setOwnOpen(!ownOpen)} aria-expanded={ownOpen} className="flex w-full items-center gap-2 text-left">
+            <ChevronDown className={cn("h-4 w-4 transition-transform", ownOpen && "rotate-180")} />
+            <span className="font-display text-sm font-semibold uppercase tracking-widest">Record your own take</span>
+            <span className="text-xs text-muted-foreground">— anything not in the guided steps</span>
+          </button>
+          {ownOpen ? (<>
           <ChordPicker target={target} onPick={setTarget} disabled={recording} testId="develop-target" />
           <div className="space-y-2">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">What will you play?</p>
@@ -240,10 +260,11 @@ function DevelopPage() {
             <input ref={fileInput} type="file" accept="audio/*,.wav,.m4a,.mp3,.aac,.ogg,.flac" multiple className="hidden" onChange={(e) => void addFiles(e.target.files)} />
           </div>
           {rec.error ? <p className="text-sm text-destructive-foreground" role="alert">{MIC_HELP[rec.error]}</p> : null}
+          </>) : null}
           {msg ? <p className="text-sm text-muted-foreground" role="status">{msg}</p> : null}
         </section>
 
-        <Scorecard lines={card} />
+        <Scorecard lines={card} detection={strumDetection(takes, measured)} />
 
         <section className="panel space-y-3 p-3 sm:p-4" aria-label="Takes">
           <div className="flex flex-wrap items-center gap-2">

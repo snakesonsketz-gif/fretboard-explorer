@@ -3,9 +3,10 @@ import { setRecording } from "@/lib/audioSession";
 import { engine } from "@/lib/engine";
 import { startCapture, type Capture, type MicError } from "@/lib/listen/capture";
 import { dbfs } from "@/lib/listen/dsp";
+import { ListenSession } from "@/lib/listen/session";
 
-/** Longest take (the capture ring buffer holds 40 s). */
-export const MAX_SECONDS = 30;
+/** Longest take (the capture ring buffer holds 40 s); a 4-strum step takes about 15 s. */
+export const MAX_SECONDS = 36;
 /** Quiet lead-in so the take carries a room-noise reference, as in Listen. */
 export const QUIET_SECONDS = 1;
 
@@ -15,6 +16,9 @@ export function useRecorder() {
   const [error, setError] = useState<MicError | null>(null);
   const [level, setLevel] = useState(-100);
   const [seconds, setSeconds] = useState(0);
+  /** Strums heard so far (live count, same detector as Listen). */
+  const [heard, setHeard] = useState(0);
+  const counter = useRef<ListenSession | null>(null);
   const cap = useRef<Capture | null>(null);
   const timer = useRef<number | null>(null);
   const done = useRef<((r: { audio: Float32Array; sampleRate: number } | null) => void) | null>(null);
@@ -24,6 +28,7 @@ export function useRecorder() {
     timer.current = null;
     cap.current?.stop();
     cap.current = null;
+    counter.current = null;
     setRecording(false);
     setLevel(-100);
     setState("idle");
@@ -45,6 +50,8 @@ export function useRecorder() {
     engine.unlock(); // inside the tap (iPhone)
     setRecording(true);
     setError(null);
+    setHeard(0);
+    setSeconds(0);
     setState("starting");
     done.current = onDone;
     void (async () => {
@@ -60,6 +67,8 @@ export function useRecorder() {
         return cleanup();
       }
       cap.current = c;
+      // Count strums as they come, without judging them (no target).
+      counter.current = new ListenSession(c, () => null);
       setState("quiet");
       timer.current = window.setInterval(() => {
         const k = cap.current;
@@ -67,11 +76,16 @@ export function useRecorder() {
         const secs = (k.endFrame - k.firstFrame) / k.sampleRate;
         setSeconds(secs);
         setLevel(dbfs(k.level));
+        const n = counter.current;
+        if (n) {
+          n.tick();
+          setHeard(n.strums.length);
+        }
         if (secs >= QUIET_SECONDS) setState((s) => (s === "quiet" ? "recording" : s));
         if (secs >= MAX_SECONDS) stop();
       }, 100);
     })();
   };
 
-  return { state, error, level, seconds, start, stop };
+  return { state, error, level, seconds, heard, start, stop };
 }
