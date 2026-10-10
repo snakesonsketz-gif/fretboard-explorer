@@ -1,6 +1,6 @@
 /**
  * Developer mode: shows the Develop tab (Listen-mode tuning lab). Off for testers; switched on
- * by tapping the Fretlab logo 5 times, or by opening /develop. Stored on this device only.
+ * with the Dev mode button in the header (or 5 taps on the logo, or opening /develop). Stored on this device only.
  */
 import { useEffect, useState } from "react";
 

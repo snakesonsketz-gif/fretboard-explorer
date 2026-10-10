@@ -341,7 +341,7 @@ function DevelopPage() {
         <ThresholdPanel values={T} onChange={changeT} useInListen={useInListen} onUseInListen={changeUse} />
 
         <p className="pb-4 text-center text-xs text-muted-foreground">
-          Develop is hidden from testers. Tap the Fretlab logo 5 times to show or hide it ·{" "}
+          Develop is hidden from testers. Use the <b className="text-foreground">Dev mode</b> button at the top to show or hide it ·{" "}
           <button type="button" className="text-primary hover:underline" onClick={() => setDevMode(false)}>Hide it now</button>
         </p>
       </main>

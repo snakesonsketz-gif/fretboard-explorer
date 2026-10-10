@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Ear, FlaskConical, Music2, Search, SlidersHorizontal } from "lucide-react";
 import { setDevMode, useDevMode } from "@/lib/devMode";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,15 @@ export function AppShell({ children, headerRight }: { children: ReactNode; heade
     setDevNote(dev ? "Develop tab hidden" : "Develop tab on");
     window.setTimeout(() => setDevNote(null), 2500);
   };
+  const navigate = useNavigate();
+  const path = useRouterState({ select: (st) => st.location.pathname });
+  /** The Dev mode button: on = show the Develop tab and go there; off = hide it (leave it if open). */
+  const toggleDev = () => {
+    const on = !dev;
+    setDevMode(on);
+    if (on) void navigate({ to: "/develop" });
+    else if (path === "/develop") void navigate({ to: "/" });
+  };
   const tabs = dev ? [...TABS, DEV_TAB] : TABS;
   return (
     <div className="dark min-h-screen bg-background text-foreground">
@@ -34,13 +43,27 @@ export function AppShell({ children, headerRight }: { children: ReactNode; heade
       <header className="border-b border-border/70 bg-card/40">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:py-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 select-none place-items-center rounded-xl bg-primary text-primary-foreground" onClick={onLogoTap} data-testid="logo">
+            <div className="grid h-10 w-10 shrink-0 touch-manipulation select-none place-items-center rounded-xl bg-primary text-primary-foreground" onClick={onLogoTap} data-testid="logo">
               <Music2 className="h-5 w-5" />
             </div>
             <div className="min-w-0">
               <h1 className="truncate font-display text-lg font-black tracking-tight sm:text-xl">Fretlab</h1>
               <p className="truncate text-xs text-muted-foreground" aria-live="polite">{devNote ?? "You create · it analyses · you decide"}</p>
             </div>
+            <button
+              type="button"
+              onClick={toggleDev}
+              aria-pressed={dev}
+              data-testid="dev-mode"
+              title={dev ? "Developer mode is on — tap to hide the Develop tab" : "Developer mode: show the Develop tab (Listen tuning lab)"}
+              className={cn(
+                "ml-auto flex shrink-0 touch-manipulation items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors",
+                dev ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <FlaskConical className="h-3.5 w-3.5" aria-hidden />
+              Dev mode{dev ? " on" : ""}
+            </button>
           </div>
           {headerRight ? <div className="shrink-0 sm:order-last">{headerRight}</div> : null}
           <nav aria-label="Sections" className="flex w-full gap-1 rounded-lg bg-secondary/60 p-1 sm:w-auto">
