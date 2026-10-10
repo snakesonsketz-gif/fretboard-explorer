@@ -1,17 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Headphones, Mic, Plus, Square } from "lucide-react";
+import { Headphones, Mic, Square } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { ChordPicker } from "@/components/listen/ChordPicker";
+import { MIC_HELP } from "@/components/listen/micHelp";
 import { StrumResult } from "@/components/listen/StrumResult";
 import { verdictClass } from "@/components/listen/verdicts";
 import { useListen, type ListenMode } from "@/components/listen/useListen";
-import { rootHue } from "@/components/sequencer/shared";
 import type { StrumReport, TargetChord, Verdict } from "@/lib/listen/score";
-import { loadPalette, loadSeqDraft, type PaletteChord } from "@/lib/sequences";
-import { CHORDS, ROOTS, degreeToSemitones, pretty, rootByName, spellDegree } from "@/lib/theory";
+import { loadSeqDraft } from "@/lib/sequences";
+import { degreeToSemitones, pretty, rootByName, spellDegree } from "@/lib/theory";
 import type { Arrangement } from "@/lib/timeline";
 import { cn } from "@/lib/utils";
 
@@ -20,13 +20,6 @@ export const Route = createFileRoute("/listen")({
   component: ListenPage,
 });
 
-const MIC_HELP: Record<string, string> = {
-  denied: "Microphone access is blocked. Allow it in your browser's site settings (the icon next to the address), then press Start again.",
-  "no-device": "No microphone found. Plug one in or check your device's sound settings.",
-  insecure: "The microphone only works on a secure (https) page.",
-  unsupported: "This browser can't record audio here. Try a current Chrome, Edge, Safari or Firefox.",
-  other: "Couldn't start the microphone. Check that no other app is using it, then try again.",
-};
 
 const DOT: Record<Verdict, string> = { good: "bg-extension", fix: "bg-root", unsure: "bg-muted-foreground/40" };
 
@@ -34,10 +27,7 @@ function ListenPage() {
   const L = useListen();
   const [mounted, setMounted] = useState(false);
   const [mode, setMode] = useState<ListenMode>("check");
-  const [palette, setPalette] = useState<PaletteChord[]>([]);
   const [target, setTarget] = useState<TargetChord>({ rootName: "G", degrees: ["1", "3", "5"], label: "G" });
-  const [qRoot, setQRoot] = useState("C");
-  const [qChord, setQChord] = useState("maj");
   const [bpm, setBpm] = useState(80);
   const [every, setEvery] = useState<1 | 2 | 4>(1);
   const [clickSound, setClickSound] = useState(true);
@@ -47,7 +37,6 @@ function ListenPage() {
   const [shown, setShown] = useState<number | null>(null);
 
   useEffect(() => {
-    setPalette(loadPalette());
     setDraft(loadSeqDraft());
     setMounted(true);
   }, []);
@@ -79,7 +68,6 @@ function ListenPage() {
 
   const start = () =>
     L.start({ mode, target, bpm, every, clickSound, ...(mode === "along" && draft ? { arrangement: draft, backingChords: backing, drums } : {}) });
-  const pick = (c: PaletteChord | TargetChord) => setTarget({ rootName: c.rootName, degrees: [...c.degrees], label: c.label });
   const targetPcs = target.degrees.map((d) => (rootByName(target.rootName).pc + degreeToSemitones(d)) % 12);
   const canStart = mode !== "along" || !!draft?.chords.length;
 
@@ -97,34 +85,7 @@ function ListenPage() {
           </div>
 
           {mode !== "along" ? (
-            <div className="space-y-2">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Chord to play</p>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded-md px-2.5 py-1.5 font-mono text-base font-black" style={{ background: `oklch(0.45 0.1 ${rootHue(target.rootName)})` }} data-testid="listen-target">
-                  {pretty(target.label)}
-                </span>
-                {palette.map((c) => (
-                  <button key={c.key} type="button" disabled={listening} onClick={() => pick(c)} className={cn("rounded-md border px-2 py-1 font-mono text-sm", c.label === target.label && c.rootName === target.rootName ? "border-primary" : "border-border hover:border-foreground/40")}>
-                    {pretty(c.label)}
-                  </button>
-                ))}
-                <span className="mx-1 h-5 w-px bg-border" />
-                <Select value={qRoot} onValueChange={setQRoot} disabled={listening}>
-                  <SelectTrigger className="h-8 w-20" aria-label="Root"><SelectValue /></SelectTrigger>
-                  <SelectContent>{ROOTS.map((r) => <SelectItem key={r.name} value={r.name}>{pretty(r.name)}</SelectItem>)}</SelectContent>
-                </Select>
-                <Select value={qChord} onValueChange={setQChord} disabled={listening}>
-                  <SelectTrigger className="h-8 w-44" aria-label="Chord type"><SelectValue /></SelectTrigger>
-                  <SelectContent>{CHORDS.map((c) => <SelectItem key={c.id} value={c.id}>{pretty(`${qRoot}${c.suffix}`)} — {c.name}</SelectItem>)}</SelectContent>
-                </Select>
-                <Button size="sm" variant="secondary" className="h-8 gap-1" disabled={listening} onClick={() => {
-                  const c = CHORDS.find((x) => x.id === qChord) ?? CHORDS[0]!;
-                  pick({ rootName: qRoot, degrees: c.degrees, label: `${qRoot}${c.suffix}` });
-                }}>
-                  <Plus className="h-3.5 w-3.5" /> Use
-                </Button>
-              </div>
-            </div>
+            <ChordPicker target={target} onPick={setTarget} disabled={listening} />
           ) : (
             <div className="space-y-2 text-sm">
               {draft?.chords.length ? (
@@ -173,6 +134,11 @@ function ListenPage() {
               ) : (
                 <>Phones and computers add a small delay between sound and microphone. <button type="button" className="font-semibold text-primary hover:underline" onClick={L.calibrate} disabled={listening}>Calibrate timing</button> once (strum along with 8 clicks) so “late” really means late.</>
               )}
+            </p>
+          ) : null}
+          {L.tuned ? (
+            <p className="text-xs text-muted-foreground" data-testid="tuned-note">
+              Using thresholds tuned in <Link to="/develop" className="text-primary hover:underline">Develop</Link> on this device.
             </p>
           ) : null}
         </section>

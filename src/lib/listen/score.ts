@@ -18,6 +18,7 @@ import {
   rms,
   spectrumOf,
   type ChordCheck,
+  type RingProfile,
 } from "./dsp";
 
 export const THRESHOLDS = {
@@ -34,6 +35,8 @@ export const THRESHOLDS = {
   timingGoodMs: 25,
   timingOkMs: 60,
 };
+
+export type Thresholds = typeof THRESHOLDS;
 
 export type Verdict = "good" | "fix" | "unsure";
 
@@ -99,7 +102,7 @@ function onlyOvertones(octaves: number[], chord: ChordCheck, tuning: number): nu
 
 const midiName = (m: number) => ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"][m % 12]!;
 
-export function analyseStrum(input: {
+export interface StrumInput {
   audio: Float32Array;
   sr: number;
   onset: number;
@@ -113,18 +116,75 @@ export function analyseStrum(input: {
   expectedSeconds?: number;
   /** False while the strum may still be ringing (no next strum yet): ring-out is "so far". */
   complete?: boolean;
-}): StrumReport {
+}
+
+/**
+ * Everything the sound analysis found for one strum — no thresholds applied yet. Measuring is
+ * the slow part (spectra, per-note ring tracking); judging a measurement is instant, so the
+ * Develop tab re-scores stored strums live while thresholds are adjusted.
+ */
+export interface StrumMeasure {
+  /** Level of the first 250 ms (dBFS). */
+  peakDb: number;
+  /** Target pitch classes, in the chord's degree order. */
+  pcs: number[];
+  chord: ChordCheck;
+  ring: RingProfile;
+  /** Noise floor of the 1.5–6 kHz band in the analysis window (compare with roomFloor). */
+  bandFloor: number;
+  /** Noise floor relative to the spectrum's peaks (dB), used when there is no room reference. */
+  noiseRelDb: number;
+  roomFloor?: number;
+  offsetMs: number | null;
+  expectedSeconds?: number;
+  complete: boolean;
+}
+
+export function measureStrum(input: StrumInput): StrumMeasure {
   const { audio, sr, onset, end, target } = input;
-  const T = THRESHOLDS;
   const N = 16384;
   const win = new Float32Array(N);
   win.set(audio.subarray(onset + Math.round(0.08 * sr), onset + Math.round(0.08 * sr) + N));
   const spec = spectrumOf(win, sr);
-  const peakDb = dbfs(rms(audio, onset, Math.min(end, onset + Math.round(0.25 * sr))));
-  const tooQuiet = peakDb < T.tooQuietDb;
   const root = rootByName(target.rootName);
   const pcs = target.degrees.map((d) => (((root.pc + degreeToSemitones(d)) % 12) + 12) % 12);
   const chord = checkChord(spec, pcs);
+  // Follow every octave of every chord note (the check may have heard D4 where the string was D3).
+  const candidates: number[] = [];
+  for (let m = LOWEST_MIDI; m <= HIGHEST_MIDI; m++) if (pcs.includes(m % 12)) candidates.push(m);
+  return {
+    peakDb: dbfs(rms(audio, onset, Math.min(end, onset + Math.round(0.25 * sr)))),
+    pcs,
+    chord,
+    ring: ringProfile(audio, sr, onset, end, candidates, chord.tuningCents),
+    bandFloor: bandFloor(spec),
+    noiseRelDb: noiseFloorDb(spec),
+    ...(input.roomFloor !== undefined ? { roomFloor: input.roomFloor } : {}),
+    offsetMs: input.offsetMs ?? null,
+    ...(input.expectedSeconds !== undefined ? { expectedSeconds: input.expectedSeconds } : {}),
+    complete: input.complete ?? true,
+  };
+}
+
+/** Buzz measure: sustain noise above the room (dB), or null without a room reference. */
+export const buzzRiseDb = (m: StrumMeasure): number | null =>
+  m.roomFloor !== undefined && m.roomFloor > 1e-18 ? 10 * Math.log10(m.bandFloor / m.roomFloor) : null;
+
+/** Notes that sounded at the start and can be followed on their own (for per-note ring-out). */
+export function soundingNotes(m: StrumMeasure) {
+  const loudest = Math.max(1e-9, ...m.ring.notes.filter((n) => n.separable).map((n) => n.early));
+  return m.ring.notes.filter((n) => n.separable && n.early >= 0.12 * loudest);
+}
+
+export function analyseStrum(input: StrumInput, T: Thresholds = THRESHOLDS): StrumReport {
+  return judgeStrum(measureStrum(input), input.target, T);
+}
+
+/** Apply thresholds to a measured strum. */
+export function judgeStrum(m: StrumMeasure, target: TargetChord, T: Thresholds = THRESHOLDS): StrumReport {
+  const { peakDb, pcs, chord, ring } = m;
+  const tooQuiet = peakDb < T.tooQuietDb;
+  const root = rootByName(target.rootName);
   const tuning = chord.tuningCents;
   const optional = new Set(target.optional ?? (target.degrees.length >= 4 ? target.degrees.filter((d) => d === "5") : []));
 
@@ -165,23 +225,18 @@ export function analyseStrum(input: {
         ].filter(Boolean).join(" ");
 
   // ---------------- ring-out (overall and per note)
-  // Follow every octave of every chord note (the check may have heard D4 where the string was
-  // D3), keep the ones that actually sounded at the start, and judge per note name: a note
+  // Keep the octaves that actually sounded at the start, and judge per note name: a note
   // "died early" only if every separable octave of it did.
-  const candidates: number[] = [];
-  for (let m = LOWEST_MIDI; m <= HIGHEST_MIDI; m++) if (pcs.includes(m % 12)) candidates.push(m);
-  const ring = ringProfile(audio, sr, onset, end, candidates, tuning);
   const untilNext = ring.stillRinging;
-  const loudest = Math.max(1e-9, ...ring.notes.filter((n) => n.separable).map((n) => n.early));
-  const sounding = ring.notes.filter((n) => n.separable && n.early >= 0.12 * loudest);
+  const sounding = soundingNotes(m);
   const shortNotes = [...new Set(sounding.map((n) => n.midi % 12))]
     .map((pc) => sounding.filter((n) => n.midi % 12 === pc))
     // Judge "died early" only with enough to look at: the chord kept ringing well past the cutoff.
     .filter((ns) => ns.every((n) => !n.stillRinging && n.seconds < T.deadNoteSeconds) && ring.seconds >= T.deadNoteSeconds + 0.3)
     .map((ns) => ({ name: pcName(target.rootName, ns[0]!.midi % 12), seconds: Math.max(...ns.map((n) => n.seconds)) }));
-  const wanted = input.expectedSeconds;
+  const wanted = m.expectedSeconds;
   const ringVerdict: Verdict = tooQuiet ? "unsure" : untilNext || (wanted ? ring.seconds >= 0.85 * wanted : ring.seconds >= 1) ? (shortNotes.length ? "fix" : "good") : "fix";
-  const complete = input.complete ?? true;
+  const complete = m.complete;
   const ringSummary = tooQuiet
     ? "Too quiet to judge."
     : `${untilNext ? (complete ? `Rang until the next strum (${ring.seconds.toFixed(1)} s)` : `Still ringing (${ring.seconds.toFixed(1)} s so far)`) : `Rang for ${ring.seconds.toFixed(1)} s`}${wanted ? ` of ${wanted.toFixed(1)} s` : ""}.${shortNotes.length ? ` ${shortNotes.map((n) => n.name).join(", ")} died early (${shortNotes.map((n) => `${n.seconds.toFixed(2)} s`).join(", ")}) — a finger may be touching ${shortNotes.length > 1 ? "those strings" : "that string"}.` : ""}`;
@@ -189,13 +244,13 @@ export function analyseStrum(input: {
   // ---------------- clarity (buzz/noise + dead notes)
   let buzz: StrumReport["clarity"]["buzz"] = "unknown";
   if (!tooQuiet) {
-    if (input.roomFloor !== undefined && input.roomFloor > 1e-18) {
-      const rise = 10 * Math.log10(bandFloor(spec) / input.roomFloor);
+    const rise = buzzRiseDb(m);
+    if (rise !== null) {
       buzz = rise >= T.buzzRiseStrong ? "strong" : rise >= T.buzzRiseSome ? "some" : "none";
     } else {
-      const rel = noiseFloorDb(spec);
+      const rel = m.noiseRelDb;
       buzz = rel >= T.buzzRelStrong ? "strong" : rel >= T.buzzRelSome ? "some" : "none";
-      if (input.roomFloor === undefined && rel >= T.buzzRelSome) buzz = "unknown"; // could be the room
+      if (m.roomFloor === undefined && rel >= T.buzzRelSome) buzz = "unknown"; // could be the room
     }
   }
   const dead = shortNotes.map((n) => n.name);
@@ -208,7 +263,7 @@ export function analyseStrum(input: {
       : [buzz === "strong" ? "Strong buzz or rattle." : buzz === "some" ? "Some buzz — press closer to the fret." : buzz === "none" ? "No buzz." : "Background noise — buzz not judged.", dead.length ? `${dead.join(", ")} sounded dead.` : "Every note you can tell apart rang."].join(" ");
 
   // ---------------- timing
-  const off = input.offsetMs ?? null;
+  const off = m.offsetMs;
   const timingVerdict: Verdict = off === null || tooQuiet ? "unsure" : Math.abs(off) <= T.timingOkMs ? "good" : "fix";
   const timingSummary =
     off === null

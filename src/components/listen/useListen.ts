@@ -5,6 +5,7 @@ import { startCapture, type Capture, type MicError } from "@/lib/listen/capture"
 import { dbfs, detectNotes, spectrumOf } from "@/lib/listen/dsp";
 import type { TargetChord } from "@/lib/listen/score";
 import { ListenSession, type Expectation, type Strum } from "@/lib/listen/session";
+import { activeThresholds, changedKeys, loadTuning } from "@/lib/listen/tuning";
 import { beatTicks, emptyArrangement, ticksToSeconds, type Arrangement, type ScheduledEvent } from "@/lib/timeline";
 
 export type ListenMode = "check" | "click" | "along";
@@ -65,6 +66,8 @@ export function useListen() {
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [history, setHistory] = useState<SessionSummary[]>([]);
   const [calib, setCalib] = useState<{ found: number; need: number } | null>(null);
+  /** Thresholds tuned in the Develop tab are in use on this device. */
+  const [tuned, setTuned] = useState(false);
 
   const cap = useRef<Capture | null>(null);
   const session = useRef<ListenSession | null>(null);
@@ -76,6 +79,8 @@ export function useListen() {
   useEffect(() => {
     setLatencyMs(read<number | null>(LAT_KEY, null));
     setHistory(read<SessionSummary[]>(HIST_KEY, []));
+    const t = loadTuning();
+    setTuned(t.useInListen && changedKeys(t.values).length > 0);
     return () => stopAll();
   }, []);
 
@@ -172,6 +177,7 @@ export function useListen() {
       const onClick = clicks().some((k) => Math.abs(s.time - k.time) < 0.03 + latency);
       return onClick && r.ringOut.seconds < 0.15;
     });
+    session.current.thresholds = activeThresholds();
     setStrums([]);
     // Dev-only handle for automated browser tests (never in production builds).
     if (import.meta.env.DEV) (window as unknown as { __listen?: unknown }).__listen = { session: session.current, cap: c };
@@ -195,6 +201,7 @@ export function useListen() {
   const stop = () => {
     const s = session.current;
     const o = opts.current;
+    s?.tick(true); // finish the last strum before the microphone closes
     stopAll();
     setState("idle");
     setLevel(-100);
@@ -253,5 +260,5 @@ export function useListen() {
     setHistory([]);
   };
 
-  return { state, error, strums, level, live, latencyMs, history, calib, start: (o: StartOptions) => void begin(o), stop, calibrate: () => void calibrate(), clearHistory, resetLatency: () => (write(LAT_KEY, null), setLatencyMs(null)) };
+  return { state, error, strums, level, live, latencyMs, history, calib, tuned, start: (o: StartOptions) => void begin(o), stop, calibrate: () => void calibrate(), clearHistory, resetLatency: () => (write(LAT_KEY, null), setLatencyMs(null)) };
 }

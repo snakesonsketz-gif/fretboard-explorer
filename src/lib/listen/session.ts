@@ -5,7 +5,7 @@
  * Pure logic over a read() source, so it is tested by streaming synthetic guitar through it.
  */
 import { bandFloor, dbfs, detectOnsets, rms, spectrumOf } from "./dsp";
-import { analyseStrum, type StrumReport, type TargetChord } from "./score";
+import { THRESHOLDS, judgeStrum, measureStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
 
 export interface AudioSource {
   sampleRate: number;
@@ -30,6 +30,8 @@ export interface Strum {
   target: TargetChord | null;
   expectedTime?: number;
   report?: StrumReport;
+  /** The raw measurements behind the report (re-judge with other thresholds: judgeStrum). */
+  measure?: StrumMeasure;
   /** Ring-out is final (next strum arrived or MAX_RING passed). */
   final: boolean;
 }
@@ -41,6 +43,8 @@ const MAX_RING = 4;
 export class ListenSession {
   strums: Strum[] = [];
   roomFloor: number | undefined;
+  /** Thresholds used to judge strums (Develop tab can supply tuned ones). */
+  thresholds: Thresholds = THRESHOLDS;
   private scanned = 0;
   private nextId = 1;
   private quietSince = 0;
@@ -60,8 +64,11 @@ export class ListenSession {
     this.startFrame = src.endFrame;
   }
 
-  /** Process whatever audio has arrived. Returns strums that are new or changed. */
-  tick(): Strum[] {
+  /**
+   * Process whatever audio has arrived. Returns strums that are new or changed.
+   * `final`: the recording has stopped — finish every strum's ring-out with the audio there is.
+   */
+  tick(final = false): Strum[] {
     const sr = this.src.sampleRate;
     const end = this.src.endFrame;
     const first = this.src.firstFrame ?? 0;
@@ -93,14 +100,14 @@ export class ListenSession {
       const next = this.strums[i + 1];
       const ringEnd = Math.min(next ? next.frame : Infinity, s.frame + Math.round(MAX_RING * sr));
       const ready = end >= s.frame + Math.round(analysisSeconds(sr) * sr);
-      const done = end >= ringEnd;
+      const done = final || end >= ringEnd;
       if (!ready || (s.report && !done)) return;
       const stop = Math.min(end, ringEnd);
       const audio = this.src.read(s.frame - Math.round(0.05 * sr), stop);
       if (!audio) return void (s.final = true);
       const exp = this.expect(s.time - this.latency);
       const first = !s.report;
-      s.report = analyseStrum({
+      s.measure = measureStrum({
         audio,
         sr,
         onset: Math.round(0.05 * sr),
@@ -111,6 +118,7 @@ export class ListenSession {
         ...(exp?.expectedSeconds ? { expectedSeconds: exp.expectedSeconds } : {}),
         complete: done,
       });
+      s.report = judgeStrum(s.measure, s.target, this.thresholds);
       s.final = done;
       if (first && this.ignore?.(s, s.report)) s.target = null;
       changed.add(s);

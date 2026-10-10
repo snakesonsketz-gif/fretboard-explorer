@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DevelopRouteImport } from './routes/develop'
 import { Route as ListenRouteImport } from './routes/listen'
 import { Route as SequencerRouteImport } from './routes/sequencer'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevelopRoute = DevelopRouteImport.update({
+  id: '/develop',
+  path: '/develop',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ListenRoute = ListenRouteImport.update({
@@ -31,30 +37,34 @@ const SequencerRoute = SequencerRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/develop': typeof DevelopRoute
   '/listen': typeof ListenRoute
   '/sequencer': typeof SequencerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/develop': typeof DevelopRoute
   '/listen': typeof ListenRoute
   '/sequencer': typeof SequencerRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/develop': typeof DevelopRoute
   '/listen': typeof ListenRoute
   '/sequencer': typeof SequencerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/listen' | '/sequencer'
+  fullPaths: '/' | '/develop' | '/listen' | '/sequencer'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/listen' | '/sequencer'
-  id: '__root__' | '/' | '/listen' | '/sequencer'
+  to: '/' | '/develop' | '/listen' | '/sequencer'
+  id: '__root__' | '/' | '/develop' | '/listen' | '/sequencer'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DevelopRoute: typeof DevelopRoute
   ListenRoute: typeof ListenRoute
   SequencerRoute: typeof SequencerRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/develop': {
+      id: '/develop'
+      path: '/develop'
+      fullPath: '/develop'
+      preLoaderRoute: typeof DevelopRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/listen': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DevelopRoute: DevelopRoute,
   ListenRoute: ListenRoute,
   SequencerRoute: SequencerRoute,
 }
