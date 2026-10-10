@@ -4,7 +4,7 @@
  * (or after a few seconds), and keeps a room-noise reference from quiet moments.
  * Pure logic over a read() source, so it is tested by streaming synthetic guitar through it.
  */
-import { bandFloor, dbfs, detectOnsets, rms, spectrumOf } from "./dsp";
+import { ONSET_LOOKAHEAD, bandFloor, dbfs, detectOnsets, rms, spectrumOf } from "./dsp";
 import { THRESHOLDS, judgeStrum, measureStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
 
 export interface AudioSource {
@@ -48,6 +48,19 @@ export class ListenSession {
    * lead-in): use roomFloor as given and don't re-estimate it.
    */
   lockRoom = false;
+  /**
+   * Count only sounds that ring like a strum (taps, clicks and knocks are ignored). Off for timing
+   * calibration, where the player is asked to tap the guitar or strum muted strings.
+   */
+  strumsOnly = true;
+  /** Ignore anything before this frame (e.g. the "stay quiet" lead-in of a Develop recording). */
+  ignoreBefore = 0;
+  /**
+   * Seconds after a strum in which a new one must be clearly louder to count (see detectOnsets).
+   * Listen keeps it short so quick strums count; Develop recordings never ask for more than two
+   * strums a second, so they use a longer window that also keeps very slow strums from splitting.
+   */
+  mergeWindow: number | undefined = undefined;
   /** Thresholds used to judge strums (Develop tab can supply tuned ones). */
   thresholds: Thresholds = THRESHOLDS;
   private scanned = 0;
@@ -78,16 +91,19 @@ export class ListenSession {
     const end = this.src.endFrame;
     const first = this.src.firstFrame ?? 0;
     const changed = new Set<Strum>();
-    // 1) New strums: scan with 0.15 s of context, leave 30 ms at the edge for the next pass.
+    // 1) New strums: scan with 0.15 s of context. Leave the last quarter second for the next pass
+    // (unless the recording is over), so every candidate can be checked for ringing like a strum.
     // Never before the first captured frame (the clock may predate the microphone).
     const from = Math.max(first, this.scanned - Math.round(0.15 * sr), end - Math.round(MAX_RING * sr));
-    const to = end - Math.round(0.03 * sr);
+    const to = final ? end : end - Math.round((this.strumsOnly ? ONSET_LOOKAHEAD + 0.03 : 0.03) * sr);
     if (to - from > Math.round(0.1 * sr)) {
       const chunk = this.src.read(from, to);
       if (chunk) {
         const last = this.strums[this.strums.length - 1];
-        for (const o of detectOnsets(chunk, sr)) {
+        const prev = this.strums.length ? this.strums[this.strums.length - 1]!.frame - from : undefined;
+        for (const o of detectOnsets(chunk, sr, { strumsOnly: this.strumsOnly, ...(prev !== undefined ? { prev } : {}), ...(this.mergeWindow !== undefined ? { mergeWindow: this.mergeWindow } : {}) })) {
           const frame = from + o;
+          if (frame < this.ignoreBefore) continue;
           if (frame < this.scanned - Math.round(0.02 * sr) || (last && frame - last.frame < Math.round(0.1 * sr))) continue;
           if (this.strums.length && frame - this.strums[this.strums.length - 1]!.frame < Math.round(0.1 * sr)) continue;
           const time = frame / sr;
@@ -106,7 +122,9 @@ export class ListenSession {
       const ringEnd = Math.min(next ? next.frame : Infinity, s.frame + Math.round(MAX_RING * sr));
       const ready = end >= s.frame + Math.round(analysisSeconds(sr) * sr);
       const done = final || end >= ringEnd;
-      if (!ready || (s.report && !done)) return;
+      // When the recording is over, a strum played just before the end still counts: it is judged
+      // on the audio there is (the analysis windows are zero-padded).
+      if ((!ready && !final) || (s.report && !done)) return;
       const stop = Math.min(end, ringEnd);
       const audio = this.src.read(s.frame - Math.round(0.05 * sr), stop);
       if (!audio) return void (s.final = true);

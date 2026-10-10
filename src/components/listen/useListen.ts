@@ -178,6 +178,8 @@ export function useListen() {
       return onClick && r.ringOut.seconds < 0.15;
     });
     session.current.thresholds = activeThresholds();
+    // Calibration asks for taps or muted strums, which don't ring on like a strum.
+    session.current.strumsOnly = !calibrating;
     setStrums([]);
     // Dev-only handle for automated browser tests (never in production builds).
     if (import.meta.env.DEV) (window as unknown as { __listen?: unknown }).__listen = { session: session.current, cap: c };

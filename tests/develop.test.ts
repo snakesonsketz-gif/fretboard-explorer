@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { SR, take } from "./helpers/guitar";
+import { SR, rng, take } from "./helpers/guitar";
 import { THRESHOLDS, type TargetChord } from "../src/lib/listen/score";
 import { analyseTake, crc32, encodeWav, judgeTake, makeZip, scorecard, toFloat, toPcm, verdictFor, type TakeLabel } from "../src/lib/listen/takes";
 import { sanitize, changedKeys } from "../src/lib/listen/tuning";
@@ -230,5 +230,61 @@ describe("Develop: importing Bradley's export on another device", () => {
     const other = makeZip([{ name: "photo.txt", data: new TextEncoder().encode("hi") }]);
     await expect(importTakes(other, "x.zip", [])).rejects.toThrow("takes.json");
     await expect(importTakes(new Uint8Array([1, 2, 3]), "x.zip", [])).rejects.toThrow("not a zip");
+  });
+});
+
+import { detectOnsets } from "../src/lib/listen/dsp";
+
+describe("Develop: strum counting on a real phone (taps, slow strums, the Done tap)", () => {
+  const quiet = (n = 6) => {
+    const r = rng(5);
+    return new Float32Array(SR * n).map(() => 0.002 * r());
+  };
+  const addAt = (a: Float32Array, at: number, len: number, f: (i: number) => number) => {
+    const s = Math.round(at * SR);
+    for (let i = 0; i < len && s + i < a.length; i++) a[s + i]! += f(i);
+    return a;
+  };
+  // A tap: a low thump plus the sharp click of the impact, gone within ~40 ms.
+  const crack = (i: number) => (((i * 7919) % 13) / 6.5 - 1);
+  const thump = (i: number) => 0.25 * Math.exp(-i / (0.008 * SR)) * (Math.sin((2 * Math.PI * 140 * i) / SR) + 0.6 * crack(i));
+  const click = (i: number) => (i < 0.002 * SR ? 0.3 * (i % 2 ? 1 : -1) : 0);
+  const count = (a: Float32Array) => {
+    const t = trimSilence(a, SR, { ignoreBefore: 0.8 });
+    return t ? analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length : 0;
+  };
+
+  test("taps on the phone, button clicks and the mic switching on are not strums", () => {
+    expect(detectOnsets(addAt(quiet(), 2, 0.04 * SR, thump), SR)).toEqual([]);
+    expect(detectOnsets(addAt(quiet(), 2, 0.002 * SR, click), SR)).toEqual([]);
+    expect(detectOnsets(addAt(quiet(), 0.05, 0.3 * SR, (i) => 0.2 * Math.exp(-i / (0.05 * SR))), SR)).toEqual([]);
+    // …but calibration (tap the guitar / strum muted strings) still hears taps.
+    expect(detectOnsets(addAt(quiet(), 2, 0.04 * SR, thump), SR, { strumsOnly: false }).length).toBe(1);
+  });
+  test("4 strums then the tap on Done: 4", () => {
+    const { audio } = take([1.5, 4.5, 7.5, 10.5].map((at) => ({ tab: "320003", at, opts: { spread: 0.012 } })), 13.5, 0.002);
+    expect(count(addAt(audio, 13.2, 0.04 * SR, thump))).toBe(4);
+  });
+  test("slow strums (up to 0.3 s across the strings) count once each", () => {
+    for (const spread of [0.012, 0.03, 0.05, 0.06]) {
+      const { audio } = take([1.5, 4.5, 7.5, 10.5].map((at) => ({ tab: "320003", at, opts: { spread } })), 13.5, 0.002);
+      expect(count(audio)).toBe(4);
+    }
+  });
+  test("a sound in the 'stay quiet' second doesn't count", () => {
+    const { audio } = take([0.4, 2.5, 5.5].map((at) => ({ tab: "320003", at, opts: { spread: 0.012 } })), 8, 0.002);
+    expect(count(audio)).toBe(2); // the strum at 0.4 s came before "Play now"
+  });
+  test("two sounds close together no longer crash the ring-out analysis", () => {
+    const { audio } = take([1.0, 1.12].map((at) => ({ tab: "320003", at, opts: { spread: 0.012, letRing: true } })), 3, 0.002);
+    expect(() => analyseTake({ pcm: toPcm(audio), sampleRate: SR, target: G })).not.toThrow();
+  });
+});
+
+describe("Develop: the live count and the saved count agree", () => {
+  test("a strum played right before Done is counted in the saved take too", () => {
+    const { audio } = take([1.2, 3.2, 5.2, 7.0].map((at) => ({ tab: "320003", at, opts: { spread: 0.012 } })), 7.3, 0.002);
+    const t = trimSilence(audio, SR, { ignoreBefore: 0.8 })!;
+    expect(analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length).toBe(4);
   });
 });

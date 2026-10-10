@@ -10,13 +10,12 @@ import { GuidedSession } from "@/components/develop/GuidedSession";
 import { Scorecard } from "@/components/develop/Scorecard";
 import { TakeCard } from "@/components/develop/TakeCard";
 import { ThresholdPanel } from "@/components/develop/ThresholdPanel";
-import { MAX_SECONDS, QUIET_SECONDS, useRecorder } from "@/components/develop/useRecorder";
+import { DONE_TAP, LEAD_IGNORE, MAX_SECONDS, QUIET_SECONDS, useRecorder } from "@/components/develop/useRecorder";
 import { setDevMode } from "@/lib/devMode";
 import { engine } from "@/lib/engine";
 import type { TargetChord, Thresholds } from "@/lib/listen/score";
 import {
   TAKE_LABELS,
-  analyseTake,
   clearTakes,
   deleteTake,
   deviceLabel,
@@ -26,6 +25,7 @@ import {
   judgeTake,
   listTakes,
   newTakeId,
+  safeAnalyse,
   saveTake,
   scorecard,
   strumDetection,
@@ -80,7 +80,7 @@ function DevelopPage() {
   useEffect(() => {
     const todo = takes.find((t) => !measured.has(t.id));
     if (!todo) return;
-    const id = window.setTimeout(() => setMeasured((m) => new Map(m).set(todo.id, analyseTake(todo))), 30);
+    const id = window.setTimeout(() => setMeasured((m) => new Map(m).set(todo.id, safeAnalyse(todo).strums)), 30);
     return () => window.clearTimeout(id);
   }, [takes, measured]);
 
@@ -113,19 +113,29 @@ function DevelopPage() {
     saveTuning(T, on);
   };
 
-  const add = async (t: Take, strums?: TakeStrum[]) => {
-    // A guided step recorded again replaces its earlier take.
-    const old = t.step ? takes.filter((x) => x.step === t.step) : [];
-    for (const o of old) void deleteTake(o.id);
+  /** Store a take (shown straight away). Resolves true once it is saved on this device. */
+  const add = async (t: Take, strums?: TakeStrum[]): Promise<boolean> => {
     if (strums) setMeasured((m) => new Map(m).set(t.id, strums));
-    setTakes((ts) => [t, ...ts.filter((x) => !old.includes(x))]);
+    setTakes((ts) => [t, ...ts]);
     const ok = await saveTake(t);
-    if (!ok) setMsg("Couldn't save the take on this device (storage blocked or full) — it's here until you leave the page.");
+    if (!ok) {
+      setMsg("Couldn't save the take on this device (storage blocked or full) — it's here until you leave the page.");
+      return false;
+    }
+    // A guided step recorded again replaces its earlier take — only once the new one is safe.
+    if (t.step && !t.imported) {
+      const old = takes.filter((x) => x.step === t.step && !x.imported && x.id !== t.id);
+      for (const o of old) await deleteTake(o.id);
+      setTakes((ts) => ts.filter((x) => !old.some((o) => o.id === x.id)));
+    }
+    return true;
   };
 
   /** Keep only the sound (each strum until it has rung out); room noise measured first. */
-  const trimmed = (audio: Float32Array, sampleRate: number) => {
-    const t = trimSilence(audio, sampleRate);
+  const trimmed = (audio: Float32Array, sampleRate: number, fromMic = false) => {
+    // From the mic: leave out the tap on Stop, and the mic switching on in the lead-in.
+    const a = fromMic ? audio.subarray(0, Math.max(0, audio.length - Math.round(DONE_TAP * sampleRate))) : audio;
+    const t = trimSilence(a, sampleRate, fromMic ? { ignoreBefore: LEAD_IGNORE } : {});
     return t ? { pcm: toPcm(t.audio), sampleRate, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}), originalSeconds: +(audio.length / sampleRate).toFixed(2) } : null;
   };
 
@@ -133,7 +143,7 @@ function DevelopPage() {
     setMsg(null);
     rec.start((r) => {
       if (!r) return setMsg("That take was too short to keep.");
-      const a = trimmed(r.audio, r.sampleRate);
+      const a = trimmed(r.audio, r.sampleRate, true);
       if (!a) return setMsg("No strums heard in that take — strum firmly, with the phone close to the guitar.");
       void add({ id: newTakeId(), at: Date.now(), target, label, note: note.trim(), ...a, source: "mic", device: deviceLabel() });
     });
@@ -252,7 +262,7 @@ function DevelopPage() {
   return (
     <AppShell>
       <main className="mx-auto max-w-5xl space-y-4 px-3 py-4 sm:px-4">
-        <GuidedSession rec={rec} takes={takes} measured={measured} onSave={(t, st) => void add(t, st)} onExport={() => void exportAll()} />
+        <GuidedSession rec={rec} takes={takes} measured={measured} onSave={(t, st) => add(t, st)} onExport={() => void exportAll()} />
 
         <section className="panel space-y-4 p-3 sm:p-4" aria-label="Record your own take">
           <button type="button" onClick={() => setOwnOpen(!ownOpen)} aria-expanded={ownOpen} className="flex w-full items-center gap-2 text-left">

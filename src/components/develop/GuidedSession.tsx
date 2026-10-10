@@ -3,11 +3,11 @@ import { Check, ChevronDown, CircleAlert, Download, Mic, RotateCcw, Square } fro
 import { Button } from "@/components/ui/button";
 import { MIC_HELP } from "@/components/listen/micHelp";
 import { PLAN, SETUP_TIPS, type PlanStep } from "@/lib/listen/collectPlan";
-import { analyseTake, deviceLabel, newTakeId, toPcm, trimSilence, type Take, type TakeStrum } from "@/lib/listen/takes";
+import { deviceLabel, encodeWav, newTakeId, safeAnalyse, toPcm, trimSilence, type Take, type TakeStrum } from "@/lib/listen/takes";
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
 import { ChordBox } from "./ChordBox";
-import { MAX_SECONDS, QUIET_SECONDS, type useRecorder } from "./useRecorder";
+import { DONE_TAP, LEAD_IGNORE, MAX_SECONDS, QUIET_SECONDS, type useRecorder } from "./useRecorder";
 
 const SETUP_KEY = "fretlab.dev.setupok.v1";
 
@@ -19,7 +19,7 @@ const KIND: Record<PlanStep["label"], { name: string; cls: string }> = {
   other: { name: "Other", cls: "bg-secondary" },
 };
 
-type Result = { stepId: string; found?: number; expected?: number; error?: string };
+type Result = { stepId: string; found?: number; expected?: number; error?: string; saved?: boolean; problem?: string };
 
 /**
  * Guided recording: walks through the plan one step at a time — what to play and how — records
@@ -30,13 +30,16 @@ export function GuidedSession({ rec, takes, measured, onSave, onExport }: {
   rec: ReturnType<typeof useRecorder>;
   takes: Take[];
   measured: Map<string, TakeStrum[]>;
-  onSave: (take: Take, strums: TakeStrum[]) => void;
+  /** Resolves true once the take is stored on this device. */
+  onSave: (take: Take, strums: TakeStrum[]) => Promise<boolean>;
   onExport: () => void;
 }) {
   const [ready, setReady] = useState(true);
   const [pick, setPick] = useState<number | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  /** The last recording exactly as captured, so it can always be downloaded and sent to Vix. */
+  const [lastRaw, setLastRaw] = useState<{ wav: Uint8Array; name: string } | null>(null);
   useEffect(() => {
     try {
       setReady(window.localStorage.getItem(SETUP_KEY) === "1");
@@ -58,29 +61,54 @@ export function GuidedSession({ rec, takes, measured, onSave, onExport }: {
     setResult(null);
     rec.start((r) => {
       if (!r) return setResult({ stepId: s.id, error: "That was too short to keep — tap Start and try again." });
-      const t = trimSilence(r.audio, r.sampleRate);
-      if (!t) return setResult({ stepId: s.id, error: "No strums heard. Put the phone closer to the guitar and strum firmly, then try again." });
+      const sr = r.sampleRate;
+      setLastRaw({ wav: encodeWav(toPcm(r.audio), sr), name: `fretlab-raw-${s.id}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.wav` });
+      // Leave out the tap on "Done" itself; ignore the mic switching on during the quiet lead-in.
+      const raw = r.audio.subarray(0, Math.max(0, r.audio.length - Math.round(DONE_TAP * sr)));
+      let audio: Float32Array = raw, roomFloor: number | undefined, problem: string | undefined;
+      try {
+        const t = trimSilence(raw, sr, { ignoreBefore: LEAD_IGNORE });
+        if (t) {
+          audio = t.audio;
+          roomFloor = t.roomFloor;
+        } else problem = "No strums were heard — it's saved anyway, but redo it if you did play.";
+      } catch (e) {
+        problem = `Couldn't trim the silence (${e instanceof Error ? e.message : e}) — saved untrimmed.`;
+      }
       const take: Take = {
         id: newTakeId(),
         at: Date.now(),
         target: s.target,
         label: s.label,
         note: s.title,
-        sampleRate: r.sampleRate,
-        pcm: toPcm(t.audio),
-        ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}),
-        originalSeconds: +(r.audio.length / r.sampleRate).toFixed(2),
+        sampleRate: sr,
+        pcm: toPcm(audio),
+        ...(roomFloor !== undefined ? { roomFloor } : {}),
+        originalSeconds: +(r.audio.length / sr).toFixed(2),
         source: "mic",
         device: deviceLabel(),
         step: s.id,
         tab: s.tab,
         expected: s.strums,
       };
-      const strums = analyseTake(take);
-      onSave(take, strums);
-      setResult({ stepId: s.id, found: strums.length, expected: s.strums });
-      setPick(null); // on to the next step not yet recorded
+      const a = safeAnalyse(take);
+      if (a.error) problem = `Saved, but the analysis failed (${a.error}). Please download this recording and send it to Vix.`;
+      setResult({ stepId: s.id, found: a.strums.length, expected: s.strums, ...(problem ? { problem } : {}) });
+      void onSave(take, a.strums).then((saved) => {
+        setResult((cur) => (cur && cur.stepId === s.id ? { ...cur, saved } : cur));
+        if (saved) setPick(null); // on to the next step not yet recorded
+      });
     });
+  };
+
+  const downloadRaw = () => {
+    if (!lastRaw) return;
+    const url = URL.createObjectURL(new Blob([lastRaw.wav as BlobPart], { type: "audio/wav" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = lastRaw.name;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   const last = result ? PLAN.find((p) => p.id === result.stepId) : null;
@@ -109,22 +137,36 @@ export function GuidedSession({ rec, takes, measured, onSave, onExport }: {
       ) : null}
 
       {ready && last && result ? (
-        <div role="status" data-testid="guided-result" className={cn("flex flex-wrap items-center gap-2 rounded-md border p-2.5 text-sm", result.error || result.found !== result.expected ? "border-root/60 bg-root/10" : "border-extension/50 bg-extension/10")}>
-          {result.error ? <CircleAlert className="h-4 w-4 shrink-0" /> : result.found === result.expected ? <Check className="h-4 w-4 shrink-0" /> : <CircleAlert className="h-4 w-4 shrink-0" />}
-          <span className="min-w-0 flex-1">
-            <b>{last.title}</b>{" "}
-            {result.error
-              ? result.error
-              : result.found === result.expected
-                ? `saved — heard all ${result.found} strums.`
-                : result.found! > result.expected!
-                  ? `saved — heard ${result.found} strums, but ${result.expected} were asked for. If you played ${result.expected}, keep it (that's useful data); if you played more, redo it.`
-                  : `saved — heard ${result.found} of the ${result.expected} strums asked for. If you played ${result.expected}, keep it (that's useful data); if you played fewer, redo it.`}
-          </span>
+        <div role="status" data-testid="guided-result" data-saved={String(result.saved)} className={cn("space-y-2 rounded-md border p-2.5 text-sm", result.error || result.saved === false || result.problem || result.found !== result.expected ? "border-root/60 bg-root/10" : "border-extension/50 bg-extension/10")}>
+          <div className="flex items-start gap-2">
+            {!result.error && result.saved !== false && !result.problem && result.found === result.expected ? <Check className="mt-0.5 h-4 w-4 shrink-0" /> : <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />}
+            <p className="min-w-0 flex-1">
+              <b>{last.title}</b>{" "}
+              {result.error
+                ? result.error
+                : result.saved === false
+                  ? "couldn't be saved on this phone (storage full or blocked). Tap Download recording and send the file to Vix."
+                  : `${result.saved ? "saved" : "saving…"} — ${
+                      result.found === result.expected
+                        ? `heard all ${result.found} strums.`
+                        : result.found! > result.expected!
+                          ? `heard ${result.found} strums, but ${result.expected} were asked for. If you played ${result.expected}, keep it (that's useful data); if you played more, redo it.`
+                          : `heard ${result.found} of the ${result.expected} strums asked for. If you played ${result.expected}, keep it (that's useful data); if you played fewer, redo it.`
+                    }`}
+              {result.problem && !result.error ? <span className="block text-xs">{result.problem}</span> : null}
+            </p>
+          </div>
           {!result.error ? (
-            <Button size="sm" variant="secondary" className="h-8 gap-1" disabled={recording} onClick={() => setPick(PLAN.findIndex((p) => p.id === last.id))}>
-              <RotateCcw className="h-3.5 w-3.5" /> Redo
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" className="h-8 gap-1" disabled={recording} onClick={() => setPick(PLAN.findIndex((p) => p.id === last.id))}>
+                <RotateCcw className="h-3.5 w-3.5" /> Redo
+              </Button>
+              {lastRaw ? (
+                <Button size="sm" variant="ghost" className="h-8 gap-1" onClick={downloadRaw} data-testid="guided-download-raw">
+                  <Download className="h-3.5 w-3.5" /> Download recording
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}

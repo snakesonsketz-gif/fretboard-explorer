@@ -4,11 +4,16 @@ import { engine } from "@/lib/engine";
 import { startCapture, type Capture, type MicError } from "@/lib/listen/capture";
 import { dbfs } from "@/lib/listen/dsp";
 import { ListenSession } from "@/lib/listen/session";
+import { TAKE_MERGE_WINDOW } from "@/lib/listen/takes";
 
 /** Longest take (the capture ring buffer holds 40 s); a 4-strum step takes about 15 s. */
 export const MAX_SECONDS = 36;
 /** Quiet lead-in so the take carries a room-noise reference, as in Listen. */
 export const QUIET_SECONDS = 1;
+/** Sounds in this much of the lead-in are ignored (the mic switching on, the Start tap). */
+export const LEAD_IGNORE = 0.8;
+/** Cut from the end before analysis: the tap on "Done" itself. */
+export const DONE_TAP = 0.25;
 
 /** Records one take from the microphone (same capture path as Listen mode). */
 export function useRecorder() {
@@ -69,6 +74,8 @@ export function useRecorder() {
       cap.current = c;
       // Count strums as they come, without judging them (no target).
       counter.current = new ListenSession(c, () => null);
+      counter.current.mergeWindow = TAKE_MERGE_WINDOW;
+      let leadSet = false;
       setState("quiet");
       timer.current = window.setInterval(() => {
         const k = cap.current;
@@ -78,6 +85,13 @@ export function useRecorder() {
         setLevel(dbfs(k.level));
         const n = counter.current;
         if (n) {
+          // Same rules as the saved take: nothing during the "stay quiet" lead-in counts. The lead-in
+          // is measured from the first sample that actually arrived (the audio clock may have been
+          // running long before the mic opened).
+          if (!leadSet && k.endFrame > k.firstFrame) {
+            n.ignoreBefore = k.firstFrame + Math.round(LEAD_IGNORE * k.sampleRate);
+            leadSet = true;
+          }
           n.tick();
           setHeard(n.strums.length);
         }

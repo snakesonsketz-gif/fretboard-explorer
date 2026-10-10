@@ -88,6 +88,9 @@ export function encodeWav(pcm: Int16Array, sampleRate: number): Uint8Array {
   return new Uint8Array(buf);
 }
 
+/** Develop recordings: strums at most twice a second, so a slow strum never counts twice. */
+export const TAKE_MERGE_WINDOW = 0.35;
+
 // ---------------------------------------------------------------- silence trimming
 
 const PRE_ROLL = 0.15; // s kept before each strum (onset detection needs a little quiet before it)
@@ -100,8 +103,10 @@ const QUIET_HOLD = 0.3; // s the level must stay down for a strum to count as ru
  * is taken from the quiet lead-in *before* that silence is cut, and returned with the audio.
  * Returns null if no strum was found.
  */
-export function trimSilence(x: Float32Array, sr: number): { audio: Float32Array; roomFloor?: number; strums: number } | null {
-  const onsets = detectOnsets(x, sr);
+export function trimSilence(x: Float32Array, sr: number, opts: { ignoreBefore?: number } = {}): { audio: Float32Array; roomFloor?: number; strums: number } | null {
+  // Sounds in the first `ignoreBefore` seconds (mic switching on, the Start tap) aren't strums.
+  const skip = Math.round((opts.ignoreBefore ?? 0) * sr);
+  const onsets = detectOnsets(x, sr, { mergeWindow: TAKE_MERGE_WINDOW }).filter((o) => o >= skip);
   if (!onsets.length) return null;
   const hop = Math.round(0.01 * sr);
   const env: number[] = [];
@@ -182,6 +187,7 @@ export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "
     read: (a, b) => (a < 0 || b > n || b <= a ? null : audio.slice(a, b)),
   };
   const session = new ListenSession(src, () => ({ target: take.target }));
+  session.mergeWindow = TAKE_MERGE_WINDOW;
   if (take.roomFloor !== undefined) {
     session.roomFloor = take.roomFloor; // measured before the silence was trimmed
     session.lockRoom = true;
@@ -190,6 +196,15 @@ export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "
   n = audio.length;
   session.tick(true); // recording over: finish the last strum's ring-out with the audio there is
   return session.strums.filter((s) => s.measure).map((s) => ({ time: s.frame / take.sampleRate, measure: s.measure! }));
+}
+
+/** analyseTake that never throws: a recording must never be lost because its analysis failed. */
+export function safeAnalyse(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomFloor">): { strums: TakeStrum[]; error?: string } {
+  try {
+    return { strums: analyseTake(take) };
+  } catch (e) {
+    return { strums: [], error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 export const judgeTake = (strums: TakeStrum[], target: TargetChord, T: Thresholds): StrumReport[] => strums.map((s) => judgeStrum(s.measure, target, T));

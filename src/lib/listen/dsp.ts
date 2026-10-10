@@ -293,9 +293,30 @@ export function noiseFloorDb(s: Spectrum): number {
  * that is still ringing has lost most of its highs, so the detector looks for a jump in
  * high-passed energy relative to the previous ~40 ms. Each onset is then refined on the waveform.
  */
-export function detectOnsets(x: Float32Array, sr: number, opts: { minGap?: number; floorDb?: number; jump?: number } = {}): number[] {
+export interface OnsetOptions {
+  minGap?: number;
+  floorDb?: number;
+  jump?: number;
+  /**
+   * Only count sounds that ring like a strum (default true). A tap on the phone, a button click,
+   * a knock or a pop dies away within a few tens of ms; a strummed chord is still sounding a
+   * quarter of a second later. Off for timing calibration, where muted strums or taps are asked for.
+   */
+  strumsOnly?: boolean;
+  /** Seconds after a strum in which a new onset must also be clearly louder to count (default 0.2). */
+  mergeWindow?: number;
+  /** Position of the previous strum (sample index in `x`'s frame of reference, may be negative). */
+  prev?: number;
+}
+
+/** Seconds of audio a candidate onset needs after it for the strum (sustain) check. */
+export const ONSET_LOOKAHEAD = 0.25;
+
+export function detectOnsets(x: Float32Array, sr: number, opts: OnsetOptions = {}): number[] {
   const hop = Math.round(sr * 0.005); // 5 ms frames
   const minGap = Math.round((opts.minGap ?? 0.1) * sr);
+  const strumsOnly = opts.strumsOnly ?? true;
+  const mergeWindow = Math.round((opts.mergeWindow ?? 0.2) * sr);
   const floor = 10 ** ((opts.floorDb ?? -50) / 20);
   const jump = opts.jump ?? 1.0; // natural-log ratio: e^1 ≈ 2.7× more high-frequency energy
   // Second difference ≈ high-pass (rises 12 dB/octave), enough to separate attacks from ring.
@@ -318,8 +339,22 @@ export function detectOnsets(x: Float32Array, sr: number, opts: { minGap?: numbe
     if (d[f]! < jump || d[f]! < d[f - 1]! || d[f]! < d[f + 1]!) continue;
     if (Math.max(lvl[f]!, lvl[f + 1]!, lvl[f + 2]!) < floor) continue;
     const t = refineOnset(x, hp, sr, Math.max(0, (f - 4) * hop), Math.min(x.length, (f + 6) * hop));
+    const prev = onsets.length ? onsets[onsets.length - 1]! : opts.prev;
     // A strum crosses the strings in ~10-75 ms; later strings of the same strum are not new strums.
-    if (onsets.length && t - onsets[onsets.length - 1]! < minGap) continue;
+    if (prev !== undefined && t - prev < minGap) continue;
+    // A slow strum (a quarter second or more across the strings) adds one string at a time, each
+    // barely louder than what's already ringing; a new strum is a clear jump in level.
+    if (prev !== undefined && t - prev < mergeWindow) {
+      const before = rms(x, Math.max(0, t - Math.round(0.06 * sr)), Math.max(1, t - Math.round(0.01 * sr)));
+      const after = rms(x, t, Math.min(x.length, t + Math.round(0.03 * sr)));
+      if (after < 1.5 * before) continue;
+    }
+    // Must ring on like a strum: taps, clicks and knocks are gone within ~50 ms.
+    if (strumsOnly && t + Math.round(ONSET_LOOKAHEAD * sr) <= x.length) {
+      const attack = rms(x, t, t + Math.round(0.04 * sr));
+      const ring = rms(x, t + Math.round(0.12 * sr), t + Math.round(ONSET_LOOKAHEAD * sr));
+      if (ring < 0.3 * attack) continue;
+    }
     onsets.push(t);
   }
   return onsets;
@@ -368,7 +403,11 @@ export function ringProfile(x: Float32Array, sr: number, onset: number, end: num
   const binHz = sr / N;
   // Only notes that actually sound at the start count when deciding which partials are a note's
   // own (an unplayed D2 candidate must not "own" every partial of the D3 that was played).
-  const first = spectrumOf(x.slice(onset + Math.round(0.03 * sr), onset + Math.round(0.03 * sr) + N), sr);
+  // Zero-padded: when the next strum (or the end of the audio) comes within 0.2 s there is less
+  // than a full window to look at, and the spectrum needs exactly N samples.
+  const firstWin = new Float32Array(N);
+  firstWin.set(x.subarray(onset + Math.round(0.03 * sr), Math.min(end, x.length, onset + Math.round(0.03 * sr) + N)));
+  const first = spectrumOf(firstWin, sr);
   const fund = midis.map((m) => peakNear(first, midiToHz(m, tuningCents), 25).mag);
   const loud = Math.max(1e-12, ...fund);
   const sounding = new Set(midis.filter((_, j) => fund[j]! >= 0.08 * loud));
