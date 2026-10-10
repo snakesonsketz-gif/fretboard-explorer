@@ -4,7 +4,7 @@
  * (or after a few seconds), and keeps a room-noise reference from quiet moments.
  * Pure logic over a read() source, so it is tested by streaming synthetic guitar through it.
  */
-import { ONSET_LOOKAHEAD, bandFloor, dbfs, detectOnsets, rms, spectrumOf } from "./dsp";
+import { bandFloor, dbfs, detectOnsets, onsetLookahead, rms, spectrumOf } from "./dsp";
 import { THRESHOLDS, judgeStrum, measureStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
 
 export interface AudioSource {
@@ -61,6 +61,8 @@ export class ListenSession {
    * strums a second, so they use a longer window that also keeps very slow strums from splitting.
    */
   mergeWindow: number | undefined = undefined;
+  /** See OnsetOptions.minRise (guided steps where each strum rings out). */
+  minRise: number | undefined = undefined;
   /** Thresholds used to judge strums (Develop tab can supply tuned ones). */
   thresholds: Thresholds = THRESHOLDS;
   private scanned = 0;
@@ -91,18 +93,20 @@ export class ListenSession {
     const end = this.src.endFrame;
     const first = this.src.firstFrame ?? 0;
     const changed = new Set<Strum>();
-    // 1) New strums: scan with 0.15 s of context. Leave the last quarter second for the next pass
-    // (unless the recording is over), so every candidate can be checked for ringing like a strum.
+    // 1) New strums: scan with 0.15 s of context, reading all the audio there is, but decide only
+    // on sounds that started at least a quarter second ago (unless the recording is over), so every
+    // candidate is checked for ringing like a strum against the audio that follows it.
     // Never before the first captured frame (the clock may predate the microphone).
     const from = Math.max(first, this.scanned - Math.round(0.15 * sr), end - Math.round(MAX_RING * sr));
-    const to = final ? end : end - Math.round((this.strumsOnly ? ONSET_LOOKAHEAD + 0.03 : 0.03) * sr);
+    const to = final ? end : end - Math.round((this.strumsOnly ? onsetLookahead(this.minRise) + 0.03 : 0.03) * sr);
     if (to - from > Math.round(0.1 * sr)) {
-      const chunk = this.src.read(from, to);
+      const chunk = this.src.read(from, end);
       if (chunk) {
         const last = this.strums[this.strums.length - 1];
         const prev = this.strums.length ? this.strums[this.strums.length - 1]!.frame - from : undefined;
-        for (const o of detectOnsets(chunk, sr, { strumsOnly: this.strumsOnly, ...(prev !== undefined ? { prev } : {}), ...(this.mergeWindow !== undefined ? { mergeWindow: this.mergeWindow } : {}) })) {
+        for (const o of detectOnsets(chunk, sr, { strumsOnly: this.strumsOnly, atEnd: final, ...(prev !== undefined ? { prev } : {}), ...(this.mergeWindow !== undefined ? { mergeWindow: this.mergeWindow } : {}), ...(this.minRise !== undefined ? { minRise: this.minRise } : {}) })) {
           const frame = from + o;
+          if (frame >= to) break; // too recent to judge yet: next pass
           if (frame < this.ignoreBefore) continue;
           if (frame < this.scanned - Math.round(0.02 * sr) || (last && frame - last.frame < Math.round(0.1 * sr))) continue;
           if (this.strums.length && frame - this.strums[this.strums.length - 1]!.frame < Math.round(0.1 * sr)) continue;

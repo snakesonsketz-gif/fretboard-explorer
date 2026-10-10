@@ -307,16 +307,38 @@ export interface OnsetOptions {
   mergeWindow?: number;
   /** Position of the previous strum (sample index in `x`'s frame of reference, may be negative). */
   prev?: number;
+  /**
+   * `x` is the whole recording (nothing more will come): a sound too close to the end for the
+   * strum check is kept. Otherwise it is left out, to be judged when more audio has arrived.
+   */
+  atEnd?: boolean;
+  /**
+   * The player was asked to let each strum ring out before the next (guided steps). A real strum
+   * then always leaves the guitar clearly louder than it was just before (measured: ≥ 1.48× even
+   * for a soft strum 1.5 s after a loud one); a knock or bump on the guitar while the last chord
+   * is still ringing leaves it no louder (measured ≤ 1.0×). Minimum ratio of the level 0.12-0.25 s
+   * after the onset to the level just before it. Off (undefined) for normal playing.
+   */
+  minRise?: number;
 }
 
 /** Seconds of audio a candidate onset needs after it for the strum (sustain) check. */
 export const ONSET_LOOKAHEAD = 0.25;
+/**
+ * With `minRise` (strums let ring out, so at least ~0.8 s apart): sounds this close together are
+ * one strum. A clearly louder attack inside it (the real strum after a knock, or the bulk of a
+ * slow strum) moves the strum to that attack instead of adding one.
+ */
+export const SPACED_MERGE = 0.6;
+/** Seconds of audio a candidate needs after it before it can be decided, given the options. */
+export const onsetLookahead = (minRise: number | undefined) => (minRise ? SPACED_MERGE + ONSET_LOOKAHEAD : ONSET_LOOKAHEAD);
 
 export function detectOnsets(x: Float32Array, sr: number, opts: OnsetOptions = {}): number[] {
   const hop = Math.round(sr * 0.005); // 5 ms frames
   const minGap = Math.round((opts.minGap ?? 0.1) * sr);
   const strumsOnly = opts.strumsOnly ?? true;
   const mergeWindow = Math.round((opts.mergeWindow ?? 0.2) * sr);
+  const spacedMerge = opts.minRise ? Math.round(SPACED_MERGE * sr) : 0;
   const floor = 10 ** ((opts.floorDb ?? -50) / 20);
   const jump = opts.jump ?? 1.0; // natural-log ratio: e^1 ≈ 2.7× more high-frequency energy
   // Second difference ≈ high-pass (rises 12 dB/octave), enough to separate attacks from ring.
@@ -344,18 +366,42 @@ export function detectOnsets(x: Float32Array, sr: number, opts: OnsetOptions = {
     if (prev !== undefined && t - prev < minGap) continue;
     // A slow strum (a quarter second or more across the strings) adds one string at a time, each
     // barely louder than what's already ringing; a new strum is a clear jump in level.
-    if (prev !== undefined && t - prev < mergeWindow) {
+    let replace = false;
+    if (prev !== undefined && t - prev < Math.max(mergeWindow, spacedMerge)) {
       const before = rms(x, Math.max(0, t - Math.round(0.06 * sr)), Math.max(1, t - Math.round(0.01 * sr)));
       const after = rms(x, t, Math.min(x.length, t + Math.round(0.03 * sr)));
       if (after < 1.5 * before) continue;
+      if (t - prev < spacedMerge) {
+        if (!onsets.length) continue; // the previous strum was already counted; it stays
+        replace = true;
+      }
     }
-    // Must ring on like a strum: taps, clicks and knocks are gone within ~50 ms.
+    // Must ring on like a strum: taps, clicks and knocks are gone within ~50 ms. And a strum
+    // re-strikes the strings, so for the next ~150 ms the sound is brighter (fresh high partials)
+    // than what was ringing just before; a knock or bump on top of a ringing chord is gone within
+    // ~40 ms and leaves the old, duller ring (measured: knocks 0.89-0.98×, real strums ≥ 1.03×).
+    if (strumsOnly && t + Math.round(ONSET_LOOKAHEAD * sr) > x.length && !opts.atEnd) continue;
+    if (strumsOnly && opts.minRise) {
+      const before = rms(x, Math.max(0, t - Math.round(0.06 * sr)), Math.max(1, t - Math.round(0.01 * sr)));
+      const from = t + Math.round(0.12 * sr), to = Math.min(x.length, t + Math.round(ONSET_LOOKAHEAD * sr));
+      // Right at the very end of a recording there may be too little left to tell; a real strum
+      // there would be cut off anyway (the recording keeps going while a strum rings).
+      if (to - from < Math.round(0.03 * sr)) continue;
+      if (rms(x, from, to) < opts.minRise * before) continue;
+    }
     if (strumsOnly && t + Math.round(ONSET_LOOKAHEAD * sr) <= x.length) {
       const attack = rms(x, t, t + Math.round(0.04 * sr));
       const ring = rms(x, t + Math.round(0.12 * sr), t + Math.round(ONSET_LOOKAHEAD * sr));
       if (ring < 0.3 * attack) continue;
+      const brightAfter = rms(hp, t + Math.round(0.06 * sr), t + Math.round(0.15 * sr));
+      const brightBefore = rms(hp, Math.max(0, t - Math.round(0.06 * sr)), Math.max(1, t - Math.round(0.01 * sr)));
+      if (brightAfter < 0.95 * brightBefore) continue;
+      // Only slightly brighter than before AND fading fast: a knock riding on a ringing chord
+      // (measured: knocks ≈ 0.3 of their attack level 0.12-0.25 s later; real strums ≥ 0.5).
+      if (brightAfter < 1.3 * brightBefore && ring < 0.42 * attack) continue;
     }
-    onsets.push(t);
+    if (replace) onsets[onsets.length - 1] = t;
+    else onsets.push(t);
   }
   return onsets;
 }

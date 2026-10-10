@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { ChordPicker } from "@/components/listen/ChordPicker";
 import { MIC_HELP } from "@/components/listen/micHelp";
 import { GuidedSession } from "@/components/develop/GuidedSession";
+import { usePlayer } from "@/components/develop/usePlayer";
 import { Scorecard } from "@/components/develop/Scorecard";
 import { TakeCard } from "@/components/develop/TakeCard";
 import { ThresholdPanel } from "@/components/develop/ThresholdPanel";
-import { DONE_TAP, LEAD_IGNORE, MAX_SECONDS, QUIET_SECONDS, useRecorder } from "@/components/develop/useRecorder";
+import { MAX_SECONDS, QUIET_SECONDS, useRecorder } from "@/components/develop/useRecorder";
 import { setDevMode } from "@/lib/devMode";
 import { engine } from "@/lib/engine";
 import type { TargetChord, Thresholds } from "@/lib/listen/score";
@@ -27,9 +28,9 @@ import {
   newTakeId,
   safeAnalyse,
   saveTake,
+  saveTakeVerified,
   scorecard,
   strumDetection,
-  toFloat,
   toPcm,
   trimSilence,
   type Take,
@@ -65,7 +66,7 @@ function DevelopPage() {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const rec = useRecorder();
   const fileInput = useRef<HTMLInputElement>(null);
-  const player = useRef<AudioBufferSourceNode | null>(null);
+  const player = usePlayer();
 
   useEffect(() => {
     setDevMode(true); // opening /develop shows the tab from now on
@@ -117,7 +118,8 @@ function DevelopPage() {
   const add = async (t: Take, strums?: TakeStrum[]): Promise<boolean> => {
     if (strums) setMeasured((m) => new Map(m).set(t.id, strums));
     setTakes((ts) => [t, ...ts]);
-    const ok = await saveTake(t);
+    // Saved, then read back and compared sample for sample.
+    const ok = await saveTakeVerified(t);
     if (!ok) {
       setMsg("Couldn't save the take on this device (storage blocked or full) — it's here until you leave the page.");
       return false;
@@ -132,10 +134,8 @@ function DevelopPage() {
   };
 
   /** Keep only the sound (each strum until it has rung out); room noise measured first. */
-  const trimmed = (audio: Float32Array, sampleRate: number, fromMic = false) => {
-    // From the mic: leave out the tap on Stop, and the mic switching on in the lead-in.
-    const a = fromMic ? audio.subarray(0, Math.max(0, audio.length - Math.round(DONE_TAP * sampleRate))) : audio;
-    const t = trimSilence(a, sampleRate, fromMic ? { ignoreBefore: LEAD_IGNORE } : {});
+  const trimmed = (audio: Float32Array, sampleRate: number) => {
+    const t = trimSilence(audio, sampleRate);
     return t ? { pcm: toPcm(t.audio), sampleRate, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}), originalSeconds: +(audio.length / sampleRate).toFixed(2) } : null;
   };
 
@@ -143,7 +143,7 @@ function DevelopPage() {
     setMsg(null);
     rec.start((r) => {
       if (!r) return setMsg("That take was too short to keep.");
-      const a = trimmed(r.audio, r.sampleRate, true);
+      const a = trimmed(r.audio, r.sampleRate);
       if (!a) return setMsg("No strums heard in that take — strum firmly, with the phone close to the guitar.");
       void add({ id: newTakeId(), at: Date.now(), target, label, note: note.trim(), ...a, source: "mic", device: deviceLabel() });
     });
@@ -177,24 +177,12 @@ function DevelopPage() {
     if (fileInput.current) fileInput.current.value = "";
   };
 
-  const play = async (t: Take, from = 0) => {
-    engine.unlock();
-    const ctx = await engine.audioContext();
-    if (!ctx) return;
-    try {
-      player.current?.stop();
-    } catch {
-      /* already stopped */
-    }
-    const f = toFloat(t.pcm);
-    const b = ctx.createBuffer(1, f.length, t.sampleRate);
-    b.getChannelData(0).set(f);
-    const src = ctx.createBufferSource();
-    src.buffer = b;
-    src.connect(ctx.destination);
-    if (from > 0) src.start(0, from, 2.5);
-    else src.start();
-    player.current = src;
+  /** The player confirmed how many strums the take really has (the ground truth for the data). */
+  const confirmTake = async (t: Take, strums: number): Promise<boolean> => {
+    const next: Take = { ...t, confirmedStrums: strums, confirmedAt: Date.now() };
+    const ok = await saveTakeVerified(next);
+    if (ok) setTakes((ts) => ts.map((x) => (x.id === t.id ? next : x)));
+    return ok;
   };
 
   const relabel = (t: Take, l: TakeLabel) => {
@@ -242,7 +230,9 @@ function DevelopPage() {
     setImportMsg(`Reading ${f.name}…`);
     try {
       const r = await importTakes(new Uint8Array(await f.arrayBuffer()), f.name, takes);
-      for (const t of r.takes) await saveTake(t);
+      let failed = 0;
+      for (const t of r.takes) if (!(await saveTakeVerified(t))) failed++;
+      if (failed) setMsg(`${failed} imported take${failed === 1 ? "" : "s"} couldn't be stored on this device (storage blocked or full).`);
       setTakes((ts) => [...r.takes, ...ts].sort((a, b) => b.at - a.at));
       const from = r.takes[0]?.device ?? "another device";
       setImportMsg(r.takes.length ? `Imported ${r.takes.length} take${r.takes.length === 1 ? "" : "s"} from ${f.name} (${from})${r.skipped ? ` · ${r.skipped} already here or unreadable` : ""}.` : `Nothing new in ${f.name}${r.skipped ? ` — ${r.skipped} take${r.skipped === 1 ? " is" : "s are"} already here` : ""}.`);
@@ -262,7 +252,7 @@ function DevelopPage() {
   return (
     <AppShell>
       <main className="mx-auto max-w-5xl space-y-4 px-3 py-4 sm:px-4">
-        <GuidedSession rec={rec} takes={takes} measured={measured} onSave={(t, st) => add(t, st)} onExport={() => void exportAll()} />
+        <GuidedSession rec={rec} player={player} takes={takes} measured={measured} onSave={(t, st) => add(t, st)} onConfirm={confirmTake} onExport={() => void exportAll()} />
 
         <section className="panel space-y-4 p-3 sm:p-4" aria-label="Record your own take">
           <button type="button" onClick={() => setOwnOpen(!ownOpen)} aria-expanded={ownOpen} className="flex w-full items-center gap-2 text-left">
@@ -340,7 +330,7 @@ function DevelopPage() {
           {takes.length ? (
             <div className="space-y-2">
               {takes.map((t) => (
-                <TakeCard key={t.id} take={t} strums={measured.get(t.id)} reports={reports.get(t.id)} T={T} onPlay={(from) => void play(t, from)} onDelete={() => remove(t)} onRelabel={(l) => relabel(t, l)} onDownload={() => downloadWav(t)} />
+                <TakeCard key={t.id} take={t} strums={measured.get(t.id)} reports={reports.get(t.id)} T={T} playing={player.playingId === t.id} onPlay={(from) => player.play(t, from, from ? 2.5 : undefined)} onStop={player.stop} onDelete={() => remove(t)} onRelabel={(l) => relabel(t, l)} onDownload={() => downloadWav(t)} />
               ))}
             </div>
           ) : (

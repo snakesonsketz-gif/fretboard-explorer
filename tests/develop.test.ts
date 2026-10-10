@@ -133,7 +133,6 @@ describe("Develop: silence is trimmed, ring-out is kept", () => {
 
   test("the quiet lead-in and the gaps go; every strum stays", () => {
     expect(trimmed.audio.length / SR).toBeLessThan(17 - 1.3);
-    expect(trimmed.strums).toBe(4);
     expect(full.length).toBe(4);
     expect(cut.length).toBe(4);
   });
@@ -151,7 +150,6 @@ describe("Develop: silence is trimmed, ring-out is kept", () => {
   test("real silence between strums is cut (strings stopped, then a long wait)", () => {
     const { audio: stopped } = take([1.5, 5.5, 9.5, 13.5].map((at) => ({ tab: "320003", at, opts: { spread: 0.012, muteAfter: 1.0, letRing: true } })), 17, 0.002);
     const t = trimSilence(stopped, SR)!;
-    expect(t.strums).toBe(4);
     expect(t.audio.length / SR).toBeLessThan(4 * 2); // ~1.5 s kept per strum instead of 4 s
     const strums = analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) });
     expect(strums.length).toBe(4);
@@ -160,7 +158,6 @@ describe("Develop: silence is trimmed, ring-out is kept", () => {
   test("fast strumming: nothing is cut between strums", () => {
     const { audio: fast } = take(Array.from({ length: 8 }, (_, i) => ({ tab: "320003", at: 1.2 + 0.5 * i, opts: { spread: 0.01 } })), 7.5, 0.002);
     const t = trimSilence(fast, SR)!;
-    expect(t.strums).toBe(8);
     expect(analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length).toBe(8);
   });
   test("a recording with no strums gives nothing to keep", () => {
@@ -250,7 +247,7 @@ describe("Develop: strum counting on a real phone (taps, slow strums, the Done t
   const thump = (i: number) => 0.25 * Math.exp(-i / (0.008 * SR)) * (Math.sin((2 * Math.PI * 140 * i) / SR) + 0.6 * crack(i));
   const click = (i: number) => (i < 0.002 * SR ? 0.3 * (i % 2 ? 1 : -1) : 0);
   const count = (a: Float32Array) => {
-    const t = trimSilence(a, SR, { ignoreBefore: 0.8 });
+    const t = trimSilence(a, SR);
     return t ? analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length : 0;
   };
 
@@ -271,9 +268,9 @@ describe("Develop: strum counting on a real phone (taps, slow strums, the Done t
       expect(count(audio)).toBe(4);
     }
   });
-  test("a sound in the 'stay quiet' second doesn't count", () => {
+  test("a strum played during the 'stay quiet' second is kept and counted — it was really played", () => {
     const { audio } = take([0.4, 2.5, 5.5].map((at) => ({ tab: "320003", at, opts: { spread: 0.012 } })), 8, 0.002);
-    expect(count(audio)).toBe(2); // the strum at 0.4 s came before "Play now"
+    expect(count(audio)).toBe(3); // the count then differs from what was asked, and Bradley is asked to check
   });
   test("two sounds close together no longer crash the ring-out analysis", () => {
     const { audio } = take([1.0, 1.12].map((at) => ({ tab: "320003", at, opts: { spread: 0.012, letRing: true } })), 3, 0.002);
@@ -284,7 +281,101 @@ describe("Develop: strum counting on a real phone (taps, slow strums, the Done t
 describe("Develop: the live count and the saved count agree", () => {
   test("a strum played right before Done is counted in the saved take too", () => {
     const { audio } = take([1.2, 3.2, 5.2, 7.0].map((at) => ({ tab: "320003", at, opts: { spread: 0.012 } })), 7.3, 0.002);
-    const t = trimSilence(audio, SR, { ignoreBefore: 0.8 })!;
+    const t = trimSilence(audio, SR)!;
     expect(analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length).toBe(4);
+  });
+});
+
+
+describe("Develop: knocks between let-ring strums are not strums (guided steps)", () => {
+  const counted = (audio: Float32Array, step?: string) => {
+    const t = trimSilence(audio, SR)!;
+    return analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(step ? { step } : {}), ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length;
+  };
+  test("40 takes of 3 strums + 3 knocks or bumps while the chord rings: exactly 3 every time", () => {
+    const TABS = ["320003", "x32010", "xx0232", "022000", "x02210", "133211"];
+    let wrong = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const r = rng(seed * 31);
+      const { audio } = take([1.5, 4.5, 7.5].map((at) => ({ tab: TABS[seed % TABS.length]!, at, opts: { spread: 0.005 + 0.03 * Math.abs(r()) } })), 10, 0.001 + 0.004 * Math.abs(r()), seed);
+      for (let k = 0; k < 3; k++) {
+        const at = [1.5, 4.5, 7.5][k]! + 0.3 + 2.0 * Math.abs(r()), amp = 0.08 + 0.4 * Math.abs(r()), tau = 0.004 + 0.012 * Math.abs(r()), f = 80 + 200 * Math.abs(r());
+        const s = Math.round(at * SR);
+        for (let i = 0; i < 0.06 * SR; i++) audio[s + i]! += amp * Math.exp(-i / (tau * SR)) * (Math.sin((2 * Math.PI * f * i) / SR) + 0.6 * r());
+      }
+      if (counted(audio, "clean-g") !== 3) wrong++;
+    }
+    expect(wrong).toBe(0);
+    }, 60000);
+  test("a soft strum after a loud one, and a slow strum, still count once each", () => {
+    const { audio } = take([
+      { tab: "320003", at: 1.0, opts: { spread: 0.012 } },
+      { tab: "320003", at: 3.0, opts: { spread: 0.012, strings: Object.fromEntries([0, 1, 2, 3, 4, 5].map((s) => [s, { amp: 0.08 }])) } },
+      { tab: "320003", at: 5.5, opts: { spread: 0.05 } },
+      { tab: "320003", at: 8.0, opts: { spread: 0.012 } },
+    ], 9.5, 0.002);
+    expect(counted(audio, "clean-g")).toBe(4);
+  });
+  test("the steady-rhythm step (strums half a second apart) doesn't use the let-ring rule", () => {
+    const times = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5];
+    const { audio } = take(times.map((at) => ({ tab: "320003", at, opts: { spread: 0.01 } })), 6.5, 0.002);
+    expect(counted(audio, "clean-fast")).toBe(8);
+  });
+});
+
+describe("Develop: trimming never removes sound", () => {
+  const r = rng(77);
+  const cases: [string, Float32Array][] = [];
+  for (let i = 0; i < 12; i++) {
+    const n = 2 + (i % 4), gap = 0.6 + 3 * Math.abs(r());
+    const parts = Array.from({ length: n }, (_, k) => ({ tab: ["320003", "x32010", "xx0232", "133211"][k % 4]!, at: 1.2 + k * gap, opts: { spread: 0.005 + 0.05 * Math.abs(r()), amp: 0.05 + 0.3 * Math.abs(r()), ...(i % 3 === 0 ? { muteAfter: 0.4 + Math.abs(r()) } : {}), letRing: i % 2 === 0 } }));
+    const { audio } = take(parts, 1.2 + n * gap + 2, 0.001 + 0.005 * Math.abs(r()), 100 + i);
+    // A knock and a tap somewhere, too.
+    const s0 = Math.round((1.5 + Math.abs(r()) * n * gap) * SR);
+    for (let j = 0; j < 0.04 * SR && s0 + j < audio.length; j++) audio[s0 + j]! += 0.2 * Math.exp(-j / (0.008 * SR)) * Math.sin(j);
+    cases.push([`take ${i + 1} (${n} strums, ${gap.toFixed(1)} s apart)`, audio]);
+  }
+  for (const [name, audio] of cases)
+    test(`${name}: every 10 ms louder than the room is still there`, () => {
+      const t = trimSilence(audio, SR)!;
+      const hop = Math.round(0.01 * SR);
+      const env: number[] = [];
+      for (let i = 0; i + hop <= audio.length; i += hop) { let e = 0; for (let j = i; j < i + hop; j++) e += audio[j]! * audio[j]!; env.push(Math.sqrt(e / hop)); }
+      const room = [...env].sort((a, b) => a - b)[Math.floor(env.length * 0.1)]!;
+      const kept = (f: number) => t.kept.some(([a, b]) => f * hop >= a && (f + 1) * hop <= b);
+      const lost = env.map((v, f) => (v > 2 * room && !kept(f) ? f : -1)).filter((f) => f >= 0);
+      expect(lost).toEqual([]);
+      // And the kept audio is the original, sample for sample (apart from 5 ms fades at the joins).
+      const fade = Math.round(0.005 * SR);
+      let pos = 0;
+      t.kept.forEach(([a, b], k) => {
+        for (let j = fade; j < b - a - fade; j++) expect(t.audio[pos + j]).toBe(audio[a + j]!);
+        pos += b - a - (k < t.kept.length - 1 ? fade : 0);
+      });
+    });
+});
+
+import { sameTake, strumDetection } from "../src/lib/listen/takes";
+
+describe("Develop: the player's confirmed count is the truth", () => {
+  const { audio } = take([1.2, 3.2].map((at) => ({ tab: "320003", at, opts: { spread: 0.012 } })), 5, 0.002);
+  const base: Take = { id: "c1", at: 1, target: G, label: "clean", note: "", sampleRate: SR, pcm: toPcm(audio), source: "mic", device: "x", step: "clean-g", tab: "320003", expected: 2 };
+  test("a confirmed count survives export and import", async () => {
+    const confirmed = { ...base, confirmedStrums: 2, confirmedAt: Date.parse("2026-10-10T21:00:00Z") };
+    const r = await importTakes(exportTakes([confirmed], new Map([["c1", analyseTake(confirmed)]]), THRESHOLDS), "z.zip", []);
+    expect(r.takes[0]!.confirmedStrums).toBe(2);
+    expect(r.takes[0]!.confirmedAt).toBe(confirmed.confirmedAt);
+  });
+  test("detection is scored against the confirmed count, not what Fretlab heard", () => {
+    const heard = new Map([["c1", analyseTake(base).concat(analyseTake(base).slice(0, 1))]]); // pretend Fretlab heard 3
+    const d = strumDetection([{ ...base, confirmedStrums: 2 }], heard);
+    expect(d).toMatchObject({ steps: 1, found: 3, expected: 2, exact: 0, confirmed: 1 });
+  });
+  test("a stored copy must match every sample to count as saved", () => {
+    expect(sameTake(base, { ...base, pcm: base.pcm.slice() })).toBe(true);
+    const bad = base.pcm.slice(); bad[1234] = bad[1234]! + 1;
+    expect(sameTake(base, { ...base, pcm: bad })).toBe(false);
+    expect(sameTake(base, { ...base, pcm: base.pcm.slice(0, -1) })).toBe(false);
+    expect(sameTake(base, null)).toBe(false);
   });
 });

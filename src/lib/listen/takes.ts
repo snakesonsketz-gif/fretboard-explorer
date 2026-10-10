@@ -7,9 +7,10 @@
  * the scorecard shows straight away whether clean strums come out clean and mistakes get caught.
  * Takes stay on this device (IndexedDB) until exported.
  */
-import { bandFloor, detectOnsets, rms, spectrumOf } from "./dsp";
+import { bandFloor, rms, spectrumOf } from "./dsp";
 import { judgeStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
 import { ListenSession, type AudioSource } from "./session";
+import { PLAN } from "./collectPlan";
 
 export type TakeLabel = "clean" | "wrong-note" | "muted" | "buzz" | "other";
 
@@ -45,6 +46,13 @@ export interface Take {
   expected?: number;
   /** Loaded from someone else's export (.zip name), not recorded on this device. */
   imported?: string;
+  /**
+   * The true number of strums, confirmed by the player after listening back (guided steps:
+   * "I played exactly what was asked"). The ground truth for the data — Fretlab's own count can
+   * be fooled; where they differ, that's a counting mistake to learn from.
+   */
+  confirmedStrums?: number;
+  confirmedAt?: number;
 }
 
 export interface TakeStrum {
@@ -90,37 +98,58 @@ export function encodeWav(pcm: Int16Array, sampleRate: number): Uint8Array {
 
 /** Develop recordings: strums at most twice a second, so a slow strum never counts twice. */
 export const TAKE_MERGE_WINDOW = 0.35;
+/**
+ * Guided steps where each strum rings out: a counted strum must leave the guitar at least this
+ * much louder than just before it (knocks while a chord rings: ≤ 1.0×; real strums ≥ 1.48×).
+ */
+export const SPACED_MIN_RISE = 1.25;
+export const isSpacedStep = (step: string | undefined) => !!step && !!PLAN.find((p) => p.id === step)?.spaced;
 
 // ---------------------------------------------------------------- silence trimming
 
-const PRE_ROLL = 0.15; // s kept before each strum (onset detection needs a little quiet before it)
-const TAIL = 0.25; // s kept after a strum has rung out
-const QUIET_HOLD = 0.3; // s the level must stay down for a strum to count as rung out
+const PRE_ROLL = 0.15; // s kept before any sound starts
+const TAIL = 0.25; // s kept after the sound has died back down to the room's level
+const MIN_GAP = 0.6; // s: only silences longer than this are cut (short dips always stay)
 
 /**
- * Keep only the sound: each strum from just before it starts until it has fully rung out (back
- * down near the room's noise), joined end to end. The room-noise reading the buzz measure needs
- * is taken from the quiet lead-in *before* that silence is cut, and returned with the audio.
- * Returns null if no strum was found.
+ * Remove silence — never sound. Decided by volume alone, not by strum detection (which can be
+ * fooled): 10 ms frames more than 6 dB above the room's noise are sound. Every stretch of sound is
+ * kept with PRE_ROLL before and TAIL after, and only silences longer than MIN_GAP are cut, so a
+ * strum's whole ring-out (down to the room's level) always stays. The room level is the lower of
+ * the quiet lead-in and the quietest tenth of the recording, so it errs towards keeping more.
+ * The room-noise reading for the buzz measure is taken from the lead-in before anything is cut.
+ * Returns null if there is no sound at all; `kept` lists the original sample ranges kept.
  */
-export function trimSilence(x: Float32Array, sr: number, opts: { ignoreBefore?: number } = {}): { audio: Float32Array; roomFloor?: number; strums: number } | null {
-  // Sounds in the first `ignoreBefore` seconds (mic switching on, the Start tap) aren't strums.
-  const skip = Math.round((opts.ignoreBefore ?? 0) * sr);
-  const onsets = detectOnsets(x, sr, { mergeWindow: TAKE_MERGE_WINDOW }).filter((o) => o >= skip);
-  if (!onsets.length) return null;
+export function trimSilence(x: Float32Array, sr: number): { audio: Float32Array; roomFloor?: number; kept: [number, number][] } | null {
   const hop = Math.round(0.01 * sr);
   const env: number[] = [];
   for (let i = 0; i + hop <= x.length; i += hop) env.push(rms(x, i, i + hop));
-  // Room level: the lead-in before the first strum (or, without one, the quietest tenth).
-  const leadFrames = Math.floor((onsets[0]! - 0.05 * sr) / hop);
-  const ref = (leadFrames >= 20 ? env.slice(0, leadFrames) : [...env]).sort((a, b) => a - b);
-  const room = Math.max(1e-5, ref[Math.floor(ref.length * (leadFrames >= 20 ? 0.5 : 0.1))] ?? 1e-5);
-  const quietLevel = room * 2; // ~6 dB above the room: "rung out"
-  // Spectral room reference for the buzz measure: quietest 16384-sample stretch of the lead-in.
+  if (!env.length) return null;
+  const sorted = [...env].sort((a, b) => a - b);
+  const tenth = sorted[Math.floor(sorted.length * 0.1)]!;
+  const lead = env.slice(0, Math.round(0.8 / 0.01)).sort((a, b) => a - b);
+  const leadMedian = lead.length >= 20 ? lead[Math.floor(lead.length / 2)]! : Infinity;
+  const room = Math.max(1e-5, Math.min(tenth, leadMedian));
+  const loud = room * 2; // ~6 dB above the room
+  // Stretches of sound, padded, with short gaps bridged.
+  const spans: [number, number][] = [];
+  for (let f = 0; f < env.length; f++) {
+    if (env[f]! <= loud) continue;
+    let g = f;
+    while (g + 1 < env.length && env[g + 1]! > loud) g++;
+    const start = Math.max(0, f * hop - Math.round(PRE_ROLL * sr));
+    const end = Math.min(x.length, (g + 1) * hop + Math.round(TAIL * sr));
+    const last = spans[spans.length - 1];
+    if (last && start <= last[1] + Math.round(MIN_GAP * sr)) last[1] = Math.max(last[1], end);
+    else spans.push([start, end]);
+    f = g;
+  }
+  if (!spans.length) return null;
+  // Spectral room reference for the buzz measure: quietest 16384-sample stretch before the first sound.
   let roomFloor: number | undefined;
-  const leadEnd = onsets[0]! - Math.round(0.05 * sr);
+  const leadEnd = spans[0]![0];
   if (leadEnd >= 16384) {
-    let best = -1, bestRms = Infinity;
+    let best = 0, bestRms = Infinity;
     for (let from = 0; from + 16384 <= leadEnd; from += 4096) {
       const r = rms(x, from, from + 16384);
       if (r < bestRms) {
@@ -132,40 +161,21 @@ export function trimSilence(x: Float32Array, sr: number, opts: { ignoreBefore?: 
     w.set(x.subarray(best, best + 16384));
     roomFloor = bandFloor(spectrumOf(w, sr));
   }
-  // One stretch per strum: pre-roll .. rung out (level held near the room) + tail.
-  const hold = Math.round(QUIET_HOLD / 0.01);
-  const spans = onsets.map((o) => {
-    let k = Math.floor((o + 0.3 * sr) / hop);
-    let run = 0;
-    for (; k < env.length; k++) {
-      run = env[k]! < quietLevel ? run + 1 : 0;
-      if (run >= hold) break;
-    }
-    const end = k >= env.length ? x.length : (k - hold + 1) * hop + Math.round(TAIL * sr);
-    return [Math.max(0, o - Math.round(PRE_ROLL * sr)), Math.min(x.length, end)] as [number, number];
-  });
-  // Merge stretches that touch (a strum played before the last one rang out keeps its overlap).
-  const merged: [number, number][] = [];
-  for (const sp of spans) {
-    const last = merged[merged.length - 1];
-    if (last && sp[0] <= last[1] + Math.round(0.05 * sr)) last[1] = Math.max(last[1], sp[1]);
-    else merged.push([...sp]);
-  }
-  // Join with a 5 ms crossfade so the seams are silent.
+  // Join with a 5 ms crossfade (inside the silent padding, so no sound is altered).
   const fade = Math.round(0.005 * sr);
-  const total = merged.reduce((a, [s, e]) => a + (e - s), 0) - fade * (merged.length - 1);
+  const total = spans.reduce((a, [s0, e]) => a + (e - s0), 0) - fade * (spans.length - 1);
   const out = new Float32Array(Math.max(0, total));
   let pos = 0;
-  merged.forEach(([s, e], i) => {
-    for (let j = 0; j < e - s; j++) {
-      const v = x[s + j]!;
+  spans.forEach(([s0, e], i) => {
+    for (let j = 0; j < e - s0; j++) {
+      const v = x[s0 + j]!;
       if (i > 0 && j < fade) out[pos + j]! += v * (j / fade);
-      else if (i < merged.length - 1 && j >= e - s - fade) out[pos + j] = v * ((e - s - j) / fade);
+      else if (i < spans.length - 1 && j >= e - s0 - fade) out[pos + j] = v * ((e - s0 - j) / fade);
       else out[pos + j] = v;
     }
-    pos += e - s - fade;
+    pos += e - s0 - fade;
   });
-  return { audio: out, ...(roomFloor !== undefined ? { roomFloor } : {}), strums: onsets.length };
+  return { audio: out, ...(roomFloor !== undefined ? { roomFloor } : {}), kept: spans };
 }
 
 // ---------------------------------------------------------------- analysis
@@ -175,7 +185,7 @@ export function trimSilence(x: Float32Array, sr: number, opts: { ignoreBefore?: 
  * fed in 2048-sample blocks through a ListenSession (onsets, room reference, ring-out until the
  * next strum). Thresholds don't affect the measurements, so this runs once per take.
  */
-export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomFloor">): TakeStrum[] {
+export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomFloor" | "step">): TakeStrum[] {
   const audio = toFloat(take.pcm);
   let n = 0;
   const src: AudioSource = {
@@ -188,6 +198,7 @@ export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "
   };
   const session = new ListenSession(src, () => ({ target: take.target }));
   session.mergeWindow = TAKE_MERGE_WINDOW;
+  if (isSpacedStep(take.step)) session.minRise = SPACED_MIN_RISE;
   if (take.roomFloor !== undefined) {
     session.roomFloor = take.roomFloor; // measured before the silence was trimmed
     session.lockRoom = true;
@@ -199,7 +210,7 @@ export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "
 }
 
 /** analyseTake that never throws: a recording must never be lost because its analysis failed. */
-export function safeAnalyse(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomFloor">): { strums: TakeStrum[]; error?: string } {
+export function safeAnalyse(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomFloor" | "step">): { strums: TakeStrum[]; error?: string } {
   try {
     return { strums: analyseTake(take) };
   } catch (e) {
@@ -263,10 +274,12 @@ export function verdictFor(label: TakeLabel, r: StrumReport): { result: "good" |
 
 /** Strum detection on guided steps: strums found vs strums the step asked for. */
 export function strumDetection(takes: Take[], measured: Map<string, TakeStrum[]>) {
-  const asked = takes.filter((t) => t.expected && measured.has(t.id));
+  // The truth is what the player confirmed; until then, what the step asked for.
+  const truth = (t: Take) => t.confirmedStrums ?? t.expected!;
+  const asked = takes.filter((t) => (t.confirmedStrums !== undefined || t.expected) && measured.has(t.id));
   const found = asked.reduce((a, t) => a + measured.get(t.id)!.length, 0);
-  const expected = asked.reduce((a, t) => a + t.expected!, 0);
-  return { steps: asked.length, exact: asked.filter((t) => measured.get(t.id)!.length === t.expected).length, found, expected };
+  const expected = asked.reduce((a, t) => a + truth(t), 0);
+  return { steps: asked.length, exact: asked.filter((t) => measured.get(t.id)!.length === truth(t)).length, found, expected, confirmed: asked.filter((t) => t.confirmedStrums !== undefined).length };
 }
 
 export function scorecard(takes: { label: TakeLabel; reports: StrumReport[] }[]): ScoreLine[] {
@@ -374,6 +387,7 @@ export function exportTakes(takes: Take[], measured: Map<string, TakeStrum[]>, t
       ...(t.fileName ? { fileName: t.fileName } : {}),
       ...(t.step ? { step: t.step, tab: t.tab, strumsAsked: t.expected } : {}),
       strumsFound: (measured.get(t.id) ?? []).length,
+      ...(t.confirmedStrums !== undefined ? { strumsConfirmedByPlayer: t.confirmedStrums, confirmedAt: new Date(t.confirmedAt ?? t.at).toISOString() } : {}),
       ...(t.originalSeconds !== undefined ? { secondsBeforeTrim: t.originalSeconds } : {}),
       roomFloorFromLeadIn: t.roomFloor ?? null,
       ...(t.imported ? { importedFrom: t.imported } : {}),
@@ -470,7 +484,7 @@ export async function importTakes(bytes: Uint8Array, zipName: string, existing: 
   const byName = new Map(files.map((f) => [f.name, f.data]));
   const metaFile = byName.get("takes.json");
   if (!metaFile) throw new Error("this zip has no takes.json — it isn't a Fretlab export");
-  type Meta = { file: string; recorded: string; label: TakeLabel; note?: string; target: TargetChord; source?: "mic" | "file"; device?: string; fileName?: string; step?: string; tab?: string; strumsAsked?: number; secondsBeforeTrim?: number; roomFloorFromLeadIn?: number | null; importedFrom?: string };
+  type Meta = { file: string; recorded: string; label: TakeLabel; note?: string; target: TargetChord; source?: "mic" | "file"; device?: string; fileName?: string; step?: string; tab?: string; strumsAsked?: number; secondsBeforeTrim?: number; roomFloorFromLeadIn?: number | null; importedFrom?: string; strumsConfirmedByPlayer?: number; confirmedAt?: string };
   const meta = JSON.parse(new TextDecoder().decode(metaFile)) as Meta[];
   const have = new Set(existing.map(takeKey));
   const takes: Take[] = [];
@@ -497,6 +511,7 @@ export async function importTakes(bytes: Uint8Array, zipName: string, existing: 
       ...(typeof m.secondsBeforeTrim === "number" ? { originalSeconds: m.secondsBeforeTrim } : {}),
       ...(m.step ? { step: m.step, ...(m.tab ? { tab: m.tab } : {}), ...(m.strumsAsked ? { expected: m.strumsAsked } : {}) } : {}),
       imported: m.importedFrom ?? zipName,
+      ...(typeof m.strumsConfirmedByPlayer === "number" ? { confirmedStrums: m.strumsConfirmedByPlayer, confirmedAt: Date.parse(m.confirmedAt ?? "") || Date.now() } : {}),
     };
     if (have.has(takeKey(t))) {
       skipped++;
@@ -553,6 +568,25 @@ function run<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<
 export async function saveTake(t: Take): Promise<boolean> {
   return (await run("readwrite", (s) => s.put(t))) !== null;
 }
+export async function getTake(id: string): Promise<Take | null> {
+  return (await run<Take | undefined>("readonly", (s) => s.get(id))) ?? null;
+}
+
+/** Is the stored copy exactly the take that was saved? (every audio sample, labels, settings) */
+export function sameTake(a: Take, b: Take | null): boolean {
+  if (!b || a.id !== b.id || a.sampleRate !== b.sampleRate || a.label !== b.label || a.step !== b.step || a.target.label !== b.target.label || a.expected !== b.expected) return false;
+  const pa = a.pcm, pb = b.pcm instanceof Int16Array ? b.pcm : new Int16Array(b.pcm as ArrayLike<number>);
+  if (pa.length !== pb.length) return false;
+  for (let i = 0; i < pa.length; i++) if (pa[i] !== pb[i]) return false;
+  return true;
+}
+
+/** Save, then read it back and compare sample for sample. False if it isn't stored exactly. */
+export async function saveTakeVerified(t: Take): Promise<boolean> {
+  if (!(await saveTake(t))) return false;
+  return sameTake(t, await getTake(t.id));
+}
+
 export async function listTakes(): Promise<Take[]> {
   return ((await run<Take[]>("readonly", (s) => s.getAll())) ?? []).sort((a, b) => b.at - a.at);
 }

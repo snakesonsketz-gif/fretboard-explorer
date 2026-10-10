@@ -21,6 +21,8 @@ export interface PlanStep {
   strums: number;
   title: string;
   how: string;
+  /** The player lets each strum ring out before the next (so knocks between strums can be told apart). */
+  spaced: boolean;
 }
 
 const tri = (rootName: string, minor = false): TargetChord => ({ rootName, degrees: minor ? ["1", "b3", "5"] : ["1", "3", "5"], label: minor ? `${rootName}m` : rootName });
@@ -29,7 +31,7 @@ const G7: TargetChord = { rootName: "G", degrees: ["1", "3", "5", "b7"], label: 
 
 const RING = "Let each strum ring until it has faded away completely (about 3 seconds) before the next one.";
 
-export const PLAN: PlanStep[] = [
+export const PLAN: PlanStep[] = ([
   // ---------------- clean
   { id: "clean-g", label: "clean", target: G, tab: "320003", strums: 4, title: "Open G", how: `Down-strum all six strings at a normal strength. ${RING}` },
   { id: "clean-c", label: "clean", target: C, tab: "x32010", strums: 4, title: "Open C", how: `Strum from the A string down (skip the low E). ${RING}` },
@@ -55,7 +57,7 @@ export const PLAN: PlanStep[] = [
   { id: "buzz-g", label: "buzz", target: G, tab: "320003", strums: 4, title: "G — light pressure (buzz)", how: `Play G pressing the fretted notes very lightly, so they buzz instead of ringing clearly. ${RING}` },
   { id: "buzz-f", label: "buzz", target: F, tab: "133211", strums: 4, title: "F — weak barre (buzz)", how: `Play the F barre with a weak 1st finger so some strings buzz. ${RING}` },
   { id: "buzz-c-far", label: "buzz", target: C, tab: "x32010", strums: 4, title: "C — far from the frets (buzz)", how: `Play C with your fingers far back from the fret wires and light pressure, so the notes buzz. ${RING}` },
-];
+] as Omit<PlanStep, "spaced">[]).map((s) => ({ ...s, spaced: s.how.includes(RING) }));
 
 export const SETUP_TIPS = [
   "Tune your guitar first.",

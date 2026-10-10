@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Download, Play, Trash2 } from "lucide-react";
+import { ChevronDown, Download, Play, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { StrumReport, Thresholds, Verdict } from "@/lib/listen/score";
@@ -16,12 +16,14 @@ const RESULT: Record<string, { text: string; cls: string }> = {
   unsure: { text: "–", cls: "bg-secondary text-muted-foreground" },
 };
 
-export function TakeCard({ take, strums, reports, T, onPlay, onDelete, onRelabel, onDownload }: {
+export function TakeCard({ take, strums, reports, T, playing, onPlay, onStop, onDelete, onRelabel, onDownload }: {
   take: Take;
   strums: TakeStrum[] | undefined;
   reports: StrumReport[] | undefined;
   T: Thresholds;
+  playing: boolean;
   onPlay: (from?: number) => void;
+  onStop: () => void;
   onDelete: () => void;
   onRelabel: (label: TakeLabel) => void;
   onDownload: () => void;
@@ -44,7 +46,11 @@ export function TakeCard({ take, strums, reports, T, onPlay, onDelete, onRelabel
         </span>
         {take.imported ? <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ring-accent/50" title={`Imported from ${take.imported}`}>imported</span> : null}
         <div className="ml-auto flex items-center gap-1">
-          <Button size="sm" variant="secondary" className="h-8 w-8 p-0" onClick={() => onPlay()} aria-label="Play take"><Play className="h-3.5 w-3.5" /></Button>
+          {playing ? (
+            <Button size="sm" variant="secondary" className="h-8 w-8 p-0" onClick={onStop} aria-label="Stop"><Square className="h-3.5 w-3.5 fill-current" /></Button>
+          ) : (
+            <Button size="sm" variant="secondary" className="h-8 w-8 p-0" onClick={() => onPlay()} aria-label="Play take"><Play className="h-3.5 w-3.5" /></Button>
+          )}
           <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground" onClick={onDownload} aria-label="Download as WAV" title="Download as WAV"><Download className="h-3.5 w-3.5" /></Button>
           {confirm ? (
             <Button size="sm" variant="destructive" className="h-8 px-2 text-xs" onClick={onDelete}>Delete?</Button>
@@ -54,6 +60,14 @@ export function TakeCard({ take, strums, reports, T, onPlay, onDelete, onRelabel
         </div>
       </div>
       {take.note ? <p className="mt-1 text-xs text-muted-foreground">“{take.note}”</p> : null}
+      {take.confirmedStrums !== undefined ? (
+        <p className="mt-1 text-xs" data-testid="take-confirmed">
+          <span className="text-extension">✓ Checked by the player:</span> {take.confirmedStrums} strums played
+          {strums && strums.length !== take.confirmedStrums ? <span className="text-muted-foreground"> · Fretlab counted {strums.length} (a counting mistake to learn from)</span> : null}
+        </p>
+      ) : take.expected ? (
+        <p className="mt-1 text-xs text-muted-foreground" data-testid="take-unconfirmed">Not checked yet — open it in Guided recording to listen and confirm.</p>
+      ) : null}
 
       {!strums || !reports ? (
         <p className="mt-2 text-xs text-muted-foreground" aria-busy="true">Analysing…</p>
