@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
-import { Heart, Music2, Star, Trash2 } from "lucide-react";
+import { Heart, Star, Trash2 } from "lucide-react";
+import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -367,28 +368,13 @@ function Workstation() {
   };
 
   return (
-    <div className="dark min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/70 bg-card/40">
-        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-4 sm:flex sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
-              <Music2 className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate font-display text-lg font-black tracking-tight sm:text-xl">
-                Fretlab
-              </h1>
-              <p className="truncate text-xs text-muted-foreground">
-                You create · it analyses · you decide
-              </p>
-            </div>
-          </div>
-          <Badge variant="outline" className="shrink-0 font-mono text-[11px]">
-            {SCALES.length} scales · {CHORDS.length} chords
-          </Badge>
-        </div>
-      </header>
-
+    <AppShell
+      headerRight={
+        <Badge variant="outline" className="font-mono text-[11px]">
+          {SCALES.length} scales · {CHORDS.length} chords
+        </Badge>
+      }
+    >
       <main className="mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-4">
         {/* ------------------------------------------------ current selection */}
         <section className="panel p-4">
@@ -1219,6 +1205,6 @@ function Workstation() {
           judge it yourself.
         </p>
       </main>
-    </div>
+    </AppShell>
   );
 }
