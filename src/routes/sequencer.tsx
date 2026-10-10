@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ChordInspector } from "@/components/sequencer/ChordInspector";
 import { ChordPalette } from "@/components/sequencer/ChordPalette";
 import { ChordTimeline } from "@/components/sequencer/ChordTimeline";
+import { DrumGrid } from "@/components/sequencer/DrumGrid";
 import { SequenceLibrary } from "@/components/sequencer/SequenceLibrary";
 import { TransportBar } from "@/components/sequencer/TransportBar";
 import { useSequencer } from "@/components/sequencer/useSequencer";
@@ -61,6 +62,20 @@ function SequencerPage() {
 
   const selected = arr.chords.find((c) => c.id === selectedId) ?? null;
 
+  // Everything here lives on this device (draft, saved chords, samples), so the server has
+  // nothing real to draw. Until the page is interactive and the draft is loaded, show a
+  // loading state rather than an empty grid that ignores taps.
+  if (!seq.ready)
+    return (
+      <AppShell>
+        <main className="mx-auto max-w-7xl px-3 py-4 sm:px-4">
+          <section className="panel p-6 text-sm text-muted-foreground" aria-busy="true" data-testid="sequencer-loading">
+            Loading your sequencer…
+          </section>
+        </main>
+      </AppShell>
+    );
+
   return (
     <AppShell>
       <main className="mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-4">
@@ -103,10 +118,7 @@ function SequencerPage() {
         {selected ? (
           <ChordInspector arr={arr} chord={selected} grid={grid} armed={armed} update={seq.update} onSelect={setSelectedId} onPreview={preview} />
         ) : null}
-        <section className="panel p-4 text-sm text-muted-foreground" aria-label="Drums">
-          <h2 className="mb-1 font-display text-sm font-semibold uppercase tracking-widest text-foreground">Drums</h2>
-          The drum grid is being built next. It will play on this same clock under your chords.
-        </section>
+        <DrumGrid arr={arr} playing={playing} set={seq.set} update={seq.update} snapshot={seq.snapshot} />
         <SequenceLibrary arr={arr} update={seq.update} onLoaded={() => setSelectedId(null)} />
       </main>
     </AppShell>

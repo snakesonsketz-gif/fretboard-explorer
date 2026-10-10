@@ -13,6 +13,7 @@ import {
   measureTicks,
   overlaps,
   patternSteps,
+  resizePattern,
   retimeChords,
   roomAfter,
   scheduleArrangement,
@@ -174,5 +175,27 @@ describe("scheduleArrangement", () => {
     a.drums.lanes[0] = { ...a.drums.lanes[0]!, hits: [{ step: 2, velocity: 0.5 }] };
     const t = scheduleArrangement(a).map((e) => e.tick);
     expect([...t].sort((x, y) => x - y)).toEqual(t);
+  });
+});
+
+describe("resizePattern", () => {
+  const sig = ts(4, 4);
+  const pat = (hits: number[], spb: 1 | 2 | 3 | 4 = 4, measures = 1) => ({ measures, stepsPerBeat: spb, lanes: [{ id: "k", voice: "kick" as const, name: "Kick", hits: hits.map((step) => ({ step, velocity: 0.75 })), muted: false, solo: false, gain: 1 }] });
+  const steps = (p: ReturnType<typeof resizePattern>) => p.lanes[0]!.hits.map((h) => h.step);
+  test("16ths → 8ths keeps hits at the same time", () => {
+    expect(steps(resizePattern(pat([0, 4, 8, 12]), sig, { stepsPerBeat: 2 }))).toEqual([0, 2, 4, 6]);
+  });
+  test("8ths → 16ths and back is lossless", () => {
+    const up = resizePattern(pat([0, 1, 3, 6], 2), sig, { stepsPerBeat: 4 });
+    expect(steps(up)).toEqual([0, 2, 6, 12]);
+    expect(steps(resizePattern(up, sig, { stepsPerBeat: 2 }))).toEqual([0, 1, 3, 6]);
+  });
+  test("off-grid hits snap to the nearest step without duplicates", () => {
+    // 16th steps 1 and 2 both round onto 8th step 1 (and 3 rounds onto 2): keep one each
+    expect(steps(resizePattern(pat([0, 1, 2, 3]), sig, { stepsPerBeat: 2 }))).toEqual([0, 1, 2]);
+  });
+  test("shortening drops hits past the new end; lengthening keeps them", () => {
+    expect(steps(resizePattern(pat([0, 12, 20, 31], 4, 2), sig, { measures: 1 }))).toEqual([0, 12]);
+    expect(steps(resizePattern(pat([0, 12], 4, 1), sig, { measures: 2 }))).toEqual([0, 12]);
   });
 });

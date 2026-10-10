@@ -165,6 +165,26 @@ export interface DrumPattern {
 export const stepTicks = (ts: TimeSig, p: Pick<DrumPattern, "stepsPerBeat">) => beatTicks(ts) / p.stepsPerBeat;
 export const patternSteps = (ts: TimeSig, p: Pick<DrumPattern, "measures" | "stepsPerBeat">) => p.measures * ts.beats * p.stepsPerBeat;
 
+/**
+ * Change a pattern's grid or length keeping every hit at the same musical time (a 16th-note
+ * hit on beat 2 stays on beat 2 on an 8th grid); hits that no longer land on the grid snap to
+ * the nearest step (first one wins), and hits past a shortened pattern are dropped.
+ */
+export function resizePattern(p: DrumPattern, ts: TimeSig, next: { measures?: number; stepsPerBeat?: Grid }): DrumPattern {
+  const spb = next.stepsPerBeat ?? p.stepsPerBeat;
+  const measures = next.measures ?? p.measures;
+  const total = measures * ts.beats * spb;
+  const lanes = p.lanes.map((l) => {
+    const byStep = new Map<number, DrumHit>();
+    for (const h of [...l.hits].sort((a, b) => a.step - b.step)) {
+      const step = Math.round((h.step * spb) / p.stepsPerBeat);
+      if (step < total && !byStep.has(step)) byStep.set(step, { ...h, step });
+    }
+    return { ...l, hits: [...byStep.values()] };
+  });
+  return { ...p, measures, stepsPerBeat: spb, lanes };
+}
+
 /** Lanes that should sound: solo wins over everything, otherwise every unmuted lane. */
 export function audibleLanes(p: DrumPattern): DrumLane[] {
   const soloed = p.lanes.filter((l) => l.solo);
