@@ -1,0 +1,18 @@
+{
+  "name": "Fretlab — Guitar Theory Workstation",
+  "short_name": "Fretlab",
+  "description": "Explore chords and scales on the fretboard, sequence chords and drums, and check your playing with the microphone.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0f17",
+  "theme_color": "#0b0f17",
+  "categories": ["music", "education"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

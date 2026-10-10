@@ -1,0 +1,14 @@
+{
+  "name": "fretlab-mobile",
+  "private": true,
+  "description": "Android wrapper for Fretlab (Capacitor). Build the web app first with `bun run build:mobile` in the repo root.",
+  "scripts": {
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.1",
+    "@capacitor/cli": "8.5.2",
+    "@capacitor/core": "8.5.2"
+  }
+}
