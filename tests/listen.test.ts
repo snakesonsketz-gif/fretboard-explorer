@@ -168,6 +168,31 @@ describe("Listen: live session", () => {
     const s = stream(audio, () => ({ target: G, expectedTime: 1.0 }), 0.08);
     expect(Math.abs(s.strums[0]!.report!.timing.offsetMs!)).toBeLessThan(2);
   });
+  test("the audio clock started before the microphone (e.g. Sequencer used first)", () => {
+    // A real capture numbers samples by the AudioContext clock: if that clock has been running
+    // 5 s, the first captured sample is frame 240000 and nothing before it holds audio. The
+    // session must take its quiet-room reference (and scan for strums) from real audio only.
+    const { audio } = take([{ tab: "320003", at: 1.0 }], 2.6, 0.002);
+    const live = (offset: number) => {
+      let n = 0; // samples delivered so far; the session is created before the first batch arrives
+      const src: AudioSource = {
+        sampleRate: SR,
+        get endFrame() { return n ? offset + n : 0; },
+        get firstFrame() { return n ? offset : 0; },
+        read: (a, b) => (n === 0 || a < offset || b > offset + n || b <= a ? null : audio.slice(a - offset, b - offset)),
+      };
+      const s = new ListenSession(src, () => ({ target: G }));
+      for (n = 2048; n <= audio.length; n += 2048) if ((n / 2048) % 2 === 0) s.tick();
+      n = audio.length;
+      s.tick();
+      return s;
+    };
+    const fresh = live(0), late = live(5 * SR);
+    expect(late.strums.length).toBe(1);
+    expect(late.roomFloor).toBeCloseTo(fresh.roomFloor!, 6);
+    expect(late.strums[0]!.report!.clarity.verdict).toBe(fresh.strums[0]!.report!.clarity.verdict);
+    expect(late.strums[0]!.report!.clarity.verdict).toBe("good");
+  });
   test("silence and room noise produce no strums", () => {
     const quiet = new Float32Array(SR * 3).map(() => 0.003 * (Math.random() * 2 - 1));
     expect(stream(quiet, () => ({ target: G })).strums.length).toBe(0);

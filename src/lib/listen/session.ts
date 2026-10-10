@@ -10,6 +10,8 @@ import { analyseStrum, type StrumReport, type TargetChord } from "./score";
 export interface AudioSource {
   sampleRate: number;
   readonly endFrame: number;
+  /** First frame that holds captured audio (default 0). */
+  readonly firstFrame?: number;
   read(from: number, to: number): Float32Array | null;
 }
 
@@ -62,9 +64,11 @@ export class ListenSession {
   tick(): Strum[] {
     const sr = this.src.sampleRate;
     const end = this.src.endFrame;
+    const first = this.src.firstFrame ?? 0;
     const changed = new Set<Strum>();
     // 1) New strums: scan with 0.15 s of context, leave 30 ms at the edge for the next pass.
-    const from = Math.max(0, this.scanned - Math.round(0.15 * sr), end - Math.round(MAX_RING * sr));
+    // Never before the first captured frame (the clock may predate the microphone).
+    const from = Math.max(first, this.scanned - Math.round(0.15 * sr), end - Math.round(MAX_RING * sr));
     const to = end - Math.round(0.03 * sr);
     if (to - from > Math.round(0.1 * sr)) {
       const chunk = this.src.read(from, to);
@@ -115,8 +119,9 @@ export class ListenSession {
     // 3) Room noise. First reference: the opening moment after Start (if the player is already
     // strumming it reads high, which only makes buzz *less* likely to be reported). Then refine
     // with any quiet moment: 0.6 s below -45 dBFS with no strum in the last 1.5 s.
-    if (this.roomFloor === undefined && end - this.startFrame >= 16384) {
-      const w = this.src.read(this.startFrame, this.startFrame + 16384);
+    const opening = Math.max(this.startFrame, first);
+    if (this.roomFloor === undefined && end - opening >= 16384) {
+      const w = this.src.read(opening, opening + 16384);
       if (w) this.roomFloor = bandFloor(spectrumOf(w, sr));
     }
     const recent = this.src.read(end - Math.round(0.35 * sr), end);

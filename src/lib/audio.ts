@@ -1,3 +1,5 @@
+import { preferPlayback } from "./audioSession";
+
 let ctx: AudioContext | null = null;
 
 function getCtx(): AudioContext | null {
@@ -5,6 +7,7 @@ function getCtx(): AudioContext | null {
   const Ctor =
     window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
+  preferPlayback(); // iPhone: sound even with the ringer switch on silent
   if (!ctx) ctx = new Ctor();
   return ctx;
 }

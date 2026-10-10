@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { setRecording } from "@/lib/audioSession";
 import { engine } from "@/lib/engine";
 import { startCapture, type Capture, type MicError } from "@/lib/listen/capture";
 import { dbfs, detectNotes, spectrumOf } from "@/lib/listen/dsp";
@@ -116,6 +117,7 @@ export function useListen() {
     engine.setListener({});
     cap.current?.stop();
     cap.current = null;
+    setRecording(false);
   };
 
   const tick = useCallback(() => {
@@ -134,6 +136,8 @@ export function useListen() {
   }, []);
 
   const begin = async (o: StartOptions, calibrating = false) => {
+    engine.unlock(); // must run inside the tap (iPhone)
+    setRecording(true);
     setError(null);
     setState("starting");
     opts.current = o;
@@ -141,6 +145,7 @@ export function useListen() {
     tickCount.current = 0;
     const ctx = await engine.audioContext();
     if (!ctx) {
+      setRecording(false);
       setError("unsupported");
       setState("idle");
       return;
@@ -148,6 +153,7 @@ export function useListen() {
     if (ctx.state === "suspended") await ctx.resume();
     const c = await startCapture(ctx);
     if ("error" in c) {
+      setRecording(false);
       setError(c.error);
       setState("idle");
       return;

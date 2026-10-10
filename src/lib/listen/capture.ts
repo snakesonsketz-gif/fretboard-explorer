@@ -32,6 +32,11 @@ export interface Capture {
   sampleRate: number;
   /** Absolute frame index (AudioContext clock) of the newest captured sample + 1. */
   readonly endFrame: number;
+  /**
+   * Frame index of the first captured sample. The clock may have been running long before the
+   * microphone opened (e.g. after using the Sequencer), so frames before this hold no audio.
+   */
+  readonly firstFrame: number;
   /** Copy of frames [from, to) if still buffered (null if overwritten or not yet captured). */
   read(from: number, to: number): Float32Array | null;
   /** RMS of the newest block (0..1). */
@@ -68,9 +73,11 @@ export async function startCapture(ctx: AudioContext): Promise<Capture | { error
   const size = Math.round(SECONDS * ctx.sampleRate);
   const ring = new Float32Array(size);
   let end = 0;
+  let first = -1;
   let level = 0;
   node.port.onmessage = (ev: MessageEvent<{ frame: number; data: Float32Array }>) => {
     const { frame, data } = ev.data;
+    if (first < 0) first = frame;
     for (let i = 0; i < data.length; i++) ring[(frame + i) % size] = data[i]!;
     end = frame + data.length;
     let s = 0;
@@ -83,11 +90,14 @@ export async function startCapture(ctx: AudioContext): Promise<Capture | { error
     get endFrame() {
       return end;
     },
+    get firstFrame() {
+      return first < 0 ? end : first;
+    },
     get level() {
       return level;
     },
     read(from, to) {
-      if (to > end || from < end - size || to <= from) return null;
+      if (first < 0 || from < first || to > end || from < end - size || to <= from) return null;
       const out = new Float32Array(to - from);
       for (let i = 0; i < out.length; i++) out[i] = ring[(from + i) % size]!;
       return out;

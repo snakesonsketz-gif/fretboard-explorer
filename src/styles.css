@@ -143,6 +143,8 @@
 
   html {
     -webkit-text-size-adjust: 100%;
+    /* Dark behind the page too: no white flash when an iPhone bounces past the edges. */
+    background-color: var(--color-background);
   }
 
   body {

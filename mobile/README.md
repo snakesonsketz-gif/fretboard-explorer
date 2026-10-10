@@ -20,5 +20,5 @@ cd android && ./gradlew assembleRelease   # needs Java 21 + the Android SDK (or 
 
 ## Notes
 - `android/app/fretlab-tester.keystore` is a **test-only** signing key, committed on purpose so every build has the same signature (updates install over the top). Make a private key before any Play Store release.
-- iPhone: there is no APK; testers open the web version in Safari → Share → **Add to Home Screen**. An App Store / TestFlight build needs an Apple Developer account.
+- iPhone / iPad: there is no APK. Testers open the published web link in Safari and tap Share → **Add to Home Screen** — the app shows them a tip saying exactly that. The installed icon opens full screen with the mic working. (An App Store / TestFlight build would need an Apple Developer account.)
 - `vite.mobile.config.ts` is only used for this build. Lovable keeps using `vite.config.ts`.

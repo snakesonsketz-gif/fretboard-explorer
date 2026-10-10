@@ -15,6 +15,7 @@ import {
   type DrumVoice,
   type ScheduledEvent,
 } from "./timeline";
+import { preferPlayback } from "./audioSession";
 import { loadSampleBuffer } from "./sampleStore";
 
 type ToneNS = typeof import("tone");
@@ -51,14 +52,36 @@ class Engine {
   private endId: number | null = null;
   private listener: EngineListener = {};
   private native: AudioContext | null = null;
+  private unlocked = false;
+  private initP: Promise<ToneNS> | null = null;
   private chordsMuted = false;
   private clickMuted = false;
   playing = false;
 
   /** The AudioContext everything plays on (created on first use). */
   async audioContext(): Promise<AudioContext | null> {
+    this.unlock();
     await this.init();
     return this.native;
+  }
+
+  /**
+   * Start audio from inside a tap. iPhones only let sound start synchronously within the user's
+   * gesture, and init() first awaits loading Tone.js — so every method that makes sound calls this
+   * before its first await. Creates the AudioContext, resumes it and plays one silent sample.
+   */
+  unlock() {
+    if (typeof window === "undefined" || typeof AudioContext === "undefined") return;
+    preferPlayback();
+    if (!this.native) this.native = new AudioContext({ latencyHint: "interactive" });
+    if (this.native.state !== "running") void this.native.resume().catch(() => undefined);
+    if (!this.unlocked) {
+      const src = this.native.createBufferSource();
+      src.buffer = this.native.createBuffer(1, 1, this.native.sampleRate);
+      src.connect(this.native.destination);
+      src.start();
+      this.unlocked = true;
+    }
   }
 
   /** Keep the beat events (for timing) but make the click silent. */
@@ -73,15 +96,18 @@ class Engine {
     if (this.chordSynth) this.chordSynth.volume.value = muted ? -Infinity : -9;
   }
 
-  async init() {
-    if (this.T) return this.T;
+  init(): Promise<ToneNS> {
+    // One shared start-up, however many callers arrive while Tone.js is still loading.
+    this.initP ??= this.setup();
+    return this.initP;
+  }
+
+  private async setup() {
     const T = await loadTone();
     // Own a plain AudioContext and hand it to Tone, so Listen mode can record the microphone on
     // exactly the same clock as the beats Tone schedules.
-    if (typeof AudioContext !== "undefined" && !this.native) {
-      this.native = new AudioContext({ latencyHint: "interactive" });
-      T.setContext(new T.Context(this.native));
-    }
+    if (typeof AudioContext !== "undefined" && !this.native) this.native = new AudioContext({ latencyHint: "interactive" });
+    if (this.native) T.setContext(new T.Context(this.native));
     this.T = T;
     T.getContext().lookAhead = 0.06;
     T.getTransport().PPQ = PPQ;
@@ -123,6 +149,7 @@ class Engine {
 
   /** Audition one drum lane right now (for the editor). */
   async previewLane(lane: DrumLane, velocity = 0.9) {
+    this.unlock();
     const T = await this.init();
     await T.start();
     if (lane.sampleId) await this.useSample(lane.sampleId);
@@ -131,6 +158,7 @@ class Engine {
 
   /** Audition a chord right now. */
   async previewChord(midis: number[], strumMs = 18) {
+    this.unlock();
     const T = await this.init();
     await T.start();
     this.playChord(midis, T.now(), 1.2, 0.8, strumMs);
@@ -165,6 +193,7 @@ class Engine {
   }
 
   async play(a: Arrangement) {
+    this.unlock();
     const T = await this.init();
     await T.start(); // browsers require a user gesture before audio; play is one
     this.stop();
