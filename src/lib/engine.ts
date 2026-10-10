@@ -50,11 +50,38 @@ class Engine {
   private countInTicks = 0;
   private endId: number | null = null;
   private listener: EngineListener = {};
+  private native: AudioContext | null = null;
+  private chordsMuted = false;
+  private clickMuted = false;
   playing = false;
+
+  /** The AudioContext everything plays on (created on first use). */
+  async audioContext(): Promise<AudioContext | null> {
+    await this.init();
+    return this.native;
+  }
+
+  /** Keep the beat events (for timing) but make the click silent. */
+  setClickMuted(muted: boolean) {
+    this.clickMuted = muted;
+    if (this.click) this.click.volume.value = muted ? -Infinity : -14;
+  }
+
+  /** Silence the chord synth (Listen play-along: so the mic hears you, not the app). */
+  setChordsMuted(muted: boolean) {
+    this.chordsMuted = muted;
+    if (this.chordSynth) this.chordSynth.volume.value = muted ? -Infinity : -9;
+  }
 
   async init() {
     if (this.T) return this.T;
     const T = await loadTone();
+    // Own a plain AudioContext and hand it to Tone, so Listen mode can record the microphone on
+    // exactly the same clock as the beats Tone schedules.
+    if (typeof AudioContext !== "undefined" && !this.native) {
+      this.native = new AudioContext({ latencyHint: "interactive" });
+      T.setContext(new T.Context(this.native));
+    }
     this.T = T;
     T.getContext().lookAhead = 0.06;
     T.getTransport().PPQ = PPQ;
@@ -65,9 +92,9 @@ class Engine {
       envelope: { attack: 0.004, decay: 0.7, sustain: 0.28, release: 0.9 },
     }).connect(chordFilter);
     this.chordSynth.maxPolyphony = 48;
-    this.chordSynth.volume.value = -9;
+    this.chordSynth.volume.value = this.chordsMuted ? -Infinity : -9;
     this.click = new T.Synth({ oscillator: { type: "square" }, envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.01 } }).connect(this.master);
-    this.click.volume.value = -14;
+    this.click.volume.value = this.clickMuted ? -Infinity : -14;
     return T;
   }
 
