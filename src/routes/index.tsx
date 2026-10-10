@@ -545,6 +545,29 @@ function Workstation() {
             onSelect={markMode ? markFret : setSel}
             onShift={markMode || !editable ? undefined : shiftSelected}
           />
+          {/* Zoom: the fret range. Fewer frets = bigger frets (the board keeps its width). */}
+          <div className="flex items-center gap-3" data-testid="fret-zoom">
+            <Label htmlFor="fret-zoom" className="shrink-0 text-xs uppercase tracking-widest">Zoom</Label>
+            <Slider
+              id="fret-zoom"
+              className="min-w-0 flex-1"
+              aria-label="Zoom: fret range"
+              thumbLabels={["Lowest fret shown", "Highest fret shown"]}
+              value={[fretFrom, fretTo]}
+              min={0}
+              max={24}
+              step={1}
+              onValueChange={(v) => {
+                const a = v[0] ?? 0;
+                const b = v[1] ?? 24;
+                if (b - a >= 3) {
+                  setFretFrom(a);
+                  setFretTo(b);
+                }
+              }}
+            />
+            <span className="w-20 shrink-0 text-right font-mono text-xs text-muted-foreground" data-testid="fret-zoom-range">frets {fretFrom}–{fretTo}</span>
+          </div>
           {overlay && overlayChord ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]" data-testid="overlay-legend">
               <span>
@@ -813,7 +836,7 @@ function Workstation() {
             onReset={revert}
           />
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-widest">Tuning</Label>
               <Select value={tuningId} onValueChange={setTuningId}>
@@ -842,26 +865,6 @@ function Workstation() {
                   <SelectItem value="interval">Intervals</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-widest">
-                Frets {fretFrom}–{fretTo}
-              </Label>
-              <Slider
-                value={[fretFrom, fretTo]}
-                min={0}
-                max={24}
-                step={1}
-                onValueChange={(v) => {
-                  const a = v[0] ?? 0;
-                  const b = v[1] ?? 24;
-                  if (b - a >= 3) {
-                    setFretFrom(a);
-                    setFretTo(b);
-                  }
-                }}
-              />
             </div>
 
             <div className="space-y-2">
