@@ -159,7 +159,7 @@ export function analyzeShape(shape: (number | null)[], tuning: Tuning) {
   const readFor = (rootPc: number) => {
     const root = ROOTS.find((r) => r.pc === rootPc)!;
     const rel = pcsAbs.map((p) => (p - rootPc + 12) % 12);
-    const det = identify(root, rel);
+    const det = identify(root, rel, "chord");
     const degrees: Degree[] =
       det.known?.kind === "chord"
         ? det.known.def.degrees.filter((d) => rel.includes(((degreeToSemitones(d) % 12) + 12) % 12))

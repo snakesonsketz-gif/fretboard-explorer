@@ -909,8 +909,12 @@ export function pcsToDegrees(pcs: number[]): Degree[] {
  * Identify a custom pitch-class set (relative to a root).
  * Returns the conventional name when the set matches a recognised structure,
  * otherwise a clearly-labelled custom formula.
+ *
+ * Some sets are both a chord and a scale (Cm13 = C Dorian). `prefer` picks which name to
+ * give in a context that knows (Chords tab, song slots → "chord"; Scales tab → "scale").
+ * Without it, 6 notes or fewer read as a chord and 7+ as a scale.
  */
-export function identify(root: Root, pcs: number[]): Detection {
+export function identify(root: Root, pcs: number[], prefer?: "chord" | "scale"): Detection {
   const unique = [...new Set(pcs.map((p) => ((p % 12) + 12) % 12))].sort((a, b) => a - b);
   const key = pcKey(unique);
   const degrees = pcsToDegrees(unique);
@@ -931,7 +935,8 @@ export function identify(root: Root, pcs: number[]): Detection {
     if (rs && unique.length >= 5) alternates.push(`${other.name} ${rs.name} (same notes)`);
   }
 
-  if (chord && (!scale || unique.length <= 6)) {
+  const chordWins = prefer === "chord" ? true : prefer === "scale" ? !scale : !scale || unique.length <= 6;
+  if (chord && chordWins) {
     return {
       known: { kind: "chord", name: `${root.name}${chord.suffix}`, suffix: chord.suffix, def: chord },
       alternates: alternates.slice(0, 6),

@@ -66,7 +66,7 @@ const midisFor = (s: { rootName: string; degrees: Degree[] }) =>
   s.degrees.map((d) => 48 + rootByName(s.rootName).pc + degreeToSemitones(d));
 
 function makeSlot(rootName: string, degrees: Degree[]): SongSlot {
-  const det = identify(rootByName(rootName), degreesToPitchClasses(degrees));
+  const det = identify(rootByName(rootName), degreesToPitchClasses(degrees), "chord");
   const suffix = det.known?.kind === "chord" ? (det.known.suffix ?? "") : "custom";
   return { id: newId(), rootName, suffix, degrees: [...degrees], bars: 1 };
 }
@@ -851,7 +851,7 @@ function relDegrees(keyDegrees: Degree[], keyRootName: string, chordRootName: st
   const kr = rootByName(keyRootName);
   const cr = rootByName(chordRootName);
   const rel = keyDegrees.map((d) => (((kr.pc + degreeToSemitones(d) - cr.pc) % 12) + 12) % 12);
-  const det = identify(cr, rel);
+  const det = identify(cr, rel, "chord");
   if (det.known?.kind === "chord") return det.known.def.degrees;
   const names = ["1", "b2", "2", "b3", "3", "4", "b5", "5", "#5", "6", "b7", "7"];
   return [...new Set(rel)].sort((a, b) => a - b).map((p) => names[p]!);

@@ -118,7 +118,7 @@ function Workstation() {
   }, [mode, scale, arp, chord, arpSource]);
 
   const degrees = custom ?? baseDegrees;
-  const detection = identify(root, degreesToPitchClasses(degrees));
+  const detection = identify(root, degreesToPitchClasses(degrees), mode === "scale" ? "scale" : "chord");
 
   const title = detection.known
     ? detection.known.name
@@ -200,7 +200,7 @@ function Workstation() {
   const [overChord, setOverChord] = useState<"own" | "chord" | "off">("own");
   const scaleOwn = useMemo(() => (mode === "scale" ? ownChord(degrees) : null), [mode, degrees]);
   const chordName = (d: Degree[]) => {
-    const det = identify(root, degreesToPitchClasses(d));
+    const det = identify(root, degreesToPitchClasses(d), "chord");
     return det.known?.name ?? `${root.name} (${det.formula})`;
   };
 
@@ -1048,7 +1048,7 @@ function Workstation() {
                   <span className="text-muted-foreground">Source set:</span>
                   <span className="font-mono">{arpSource.map(pretty).join(" ")}</span>
                   <span className="text-muted-foreground">
-                    ({arpSrc ? identify(root, degreesToPitchClasses(arpSrc)).known?.name ?? "custom set" : `${pretty(root.name)}${pretty(chord.suffix)}`})
+                    ({arpSrc ? identify(root, degreesToPitchClasses(arpSrc), "chord").known?.name ?? "custom set" : `${pretty(root.name)}${pretty(chord.suffix)}`})
                   </span>
                   {custom ? (
                     <Button size="sm" variant="secondary" className="h-7 px-2 text-xs"
