@@ -976,6 +976,54 @@ export function classifyAgainstChord(
   });
 }
 
+/** A degree read as a tension above a chord: 2→9, 4→11, 6→13, accidentals kept (b2→b9, #4→#11). */
+export function tensionLabel(d: Degree): Degree {
+  const { number } = parseDegree(d);
+  const compound = number === 2 ? 9 : number === 4 ? 11 : number === 6 ? 13 : null;
+  return compound ? d.replace(/\d+$/, String(compound)) : d;
+}
+
+/**
+ * The scale's own chord on its root: one degree each for 1, 3, 5, 7 (the unaltered one when
+ * a scale has two, e.g. blues keeps 5 over b5). Returns a triad when there is no 7th, or null
+ * when the scale has no 3rd or 5th to build on.
+ */
+export function ownChord(scaleDegrees: Degree[]): Degree[] | null {
+  const pick = (n: number) => {
+    const c = scaleDegrees.filter((d) => parseDegree(d).number === n);
+    return c.find((d) => parseDegree(d).alter === 0) ?? c[0];
+  };
+  const tones = [1, 3, 5, 7].map(pick);
+  if (!tones[0] || !tones[1] || !tones[2]) return null;
+  return tones.filter((d): d is Degree => !!d);
+}
+
+export type OverlayRole = "chord" | "extension" | "other";
+
+/**
+ * Chord-to-scale overlay. Every note of the set, keyed by semitones above the root, as a chord
+ * tone, an extension (labelled 9/11/13 etc.) or another scale tone (a semitone above a guide
+ * tone; usually passed through rather than held). Uses classifyAgainstChord so every view agrees.
+ */
+export function chordScaleOverlay(
+  setDegrees: Degree[],
+  chordDegrees: Degree[],
+): Map<number, { role: OverlayRole; label: Degree }> {
+  const out = new Map<number, { role: OverlayRole; label: Degree }>();
+  const has = (d: Degree) => chordDegrees.includes(d);
+  for (const r of classifyAgainstChord(setDegrees, chordDegrees)) {
+    const pc = ((degreeToSemitones(r.degree) % 12) + 12) % 12;
+    const role: OverlayRole = r.role === "chord tone" ? "chord" : r.role === "tension" ? "extension" : "other";
+    let label = role === "chord" ? r.degree : tensionLabel(r.degree);
+    // Name it as a tension of the chord when the chord already owns that letter: b3 over a
+    // major 3rd is #9, b5 over a perfect 5th is #11.
+    if (role !== "chord" && label === "b3" && has("3")) label = "#9";
+    if (role !== "chord" && label === "b5" && has("5")) label = "#11";
+    out.set(pc, { role, label });
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ harmonizer */
 
 export interface HarmonizedChord {

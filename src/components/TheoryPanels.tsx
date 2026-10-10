@@ -397,6 +397,7 @@ export function AdvancedTheory({
   onToggleSeventh,
   onPickScale,
   onPickDegrees,
+  tension,
 }: {
   root: Root;
   degrees: Degree[];
@@ -406,6 +407,8 @@ export function AdvancedTheory({
   onToggleSeventh: () => void;
   onPickScale: (scaleId: string, rootName?: string) => void;
   onPickDegrees: (degrees: Degree[]) => void;
+  /** When the fretboard shows a chord-to-scale overlay, measure tensions against the same set and chord. */
+  tension?: { set: Degree[]; chord: Degree[]; label: string } | undefined;
 }) {
   return (
     <Accordion type="multiple" className="w-full">
@@ -438,9 +441,9 @@ export function AdvancedTheory({
         <AccordionTrigger>Tensions &amp; avoid notes</AccordionTrigger>
         <AccordionContent>
           <TensionPanel
-            scale={scale.degrees}
-            chordDegrees={chord.degrees}
-            chordLabel={`${root.name}${chord.suffix}`}
+            scale={tension?.set ?? scale.degrees}
+            chordDegrees={tension?.chord ?? chord.degrees}
+            chordLabel={tension?.label ?? `${root.name}${chord.suffix}`}
           />
         </AccordionContent>
       </AccordionItem>

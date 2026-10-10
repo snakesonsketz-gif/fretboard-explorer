@@ -23,7 +23,6 @@ import { SongWorkspace } from "@/components/SongWorkspace";
 import { analyzeShape, findVoicings, shapeMidis, shapeToTab } from "@/lib/voicings";
 import { TUNINGS, degreeMap } from "@/lib/fretboard";
 import { NoteEditor } from "@/components/NoteEditor";
-import { parseDegree } from "@/lib/theory";
 import { DegreeAlter } from "@/components/DegreeAlter";
 import { ModeFamily } from "@/components/ModeFamily";
 import { IdentifierPanel } from "@/components/IdentifierPanel";
@@ -43,15 +42,17 @@ import {
   ROOTS,
   SCALES,
   SCALE_FAMILIES,
-  classifyAgainstChord,
+  chordScaleOverlay,
   degreeToSemitones,
   identify,
   degreesToPitchClasses,
+  ownChord,
   preferFlatsFor,
   pretty,
   rootByName,
   spellDegree,
   type Degree,
+  type OverlayRole,
 } from "@/lib/theory";
 
 export const Route = createFileRoute("/")({
@@ -194,12 +195,14 @@ function Workstation() {
     pluck(selInfo.midi + delta);
   };
 
-  const roles = useMemo(() => {
-    if (mode !== "scale") return undefined;
-    const map: Record<string, "chord tone" | "tension" | "avoid"> = {};
-    for (const r of classifyAgainstChord(degrees, chord.degrees)) map[r.degree] = r.role;
-    return map;
-  }, [mode, degrees, chord]);
+  // Chord-to-scale overlay: in scale view the scale is coloured against a chord the user can see —
+  // the scale's own chord (default), the chord picked on the Chords tab, or nothing.
+  const [overChord, setOverChord] = useState<"own" | "chord" | "off">("own");
+  const scaleOwn = useMemo(() => (mode === "scale" ? ownChord(degrees) : null), [mode, degrees]);
+  const chordName = (d: Degree[]) => {
+    const det = identify(root, degreesToPitchClasses(d));
+    return det.known?.name ?? `${root.name} (${det.formula})`;
+  };
 
   // ---- CAGED / position window / pathways (visual layers over the shared state)
   const [cagedOn, setCagedOn] = useState(false);
@@ -208,9 +211,8 @@ function Workstation() {
   const [posWin, setPosWin] = useState<{ start: number; size: number } | null>(null);
   const [pathway, setPathway] = useState<Pathway>("none");
   const [pathPair, setPathPair] = useState(0);
-  // In scale mode the CAGED chord is the scale's own 1-3-5-7, so chord tones always belong to the active collection.
-  const scaleSeventh = mode === "scale" ? degrees.filter((d) => [1, 3, 5, 7].includes(parseDegree(d).number)) : [];
-  const cagedChord = mode === "chord" ? degrees : mode === "arpeggio" ? arpSource : scaleSeventh.length >= 3 ? scaleSeventh : chord.degrees;
+  // In scale mode the CAGED chord is the overlay chord: the scale's own 1-3-5-7 unless the user chose the Chords-tab chord.
+  const cagedChord = mode === "chord" ? degrees : mode === "arpeggio" ? arpSource : overChord === "chord" ? chord.degrees : (scaleOwn ?? chord.degrees);
   const cagedScale = mode === "scale" ? degrees : scale.degrees;
   const cagedArp = mode === "arpeggio" ? degrees : arp.transform(cagedChord);
   const cagedAll = useMemo(() => visiblePositions(cagedPositions(tuning, root.pc), fretFrom, fretTo), [tuning, root.pc, fretFrom, fretTo]);
@@ -224,6 +226,26 @@ function Workstation() {
       : cagedLayer === "scale"
         ? sortDegrees([...cagedScale, ...cagedChord.filter((d) => !degreesToPitchClasses(cagedScale).includes(pcOf(d)))])
         : cagedArp;
+  const overlayChord: Degree[] | null =
+    cagedOn && cagedLayer !== "chord"
+      ? cagedChord
+      : mode === "scale" && overChord !== "off"
+        ? overChord === "chord"
+          ? chord.degrees
+          : scaleOwn
+        : null;
+  const overlay = useMemo(() => {
+    if (!overlayChord) return undefined;
+    const byPc = new Map<number, { role: OverlayRole; label: Degree }>();
+    for (const [pc, v] of chordScaleOverlay(fbDegrees, overlayChord)) byPc.set((pc + root.pc) % 12, v);
+    return byPc;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fbDegrees.join(), overlayChord?.join(), root.pc]);
+  const overlayGroups = useMemo(() => {
+    const g: Record<OverlayRole, string[]> = { chord: [], extension: [], other: [] };
+    if (overlay) for (const v of [...overlay.values()].sort((a, b) => degreeToSemitones(a.label) - degreeToSemitones(b.label))) g[v.role].push(v.label);
+    return g;
+  }, [overlay]);
   const editable = !cagedOn || cagedLayer === mode;
   const cagedScaleWin = cagedPos && cagedLayer !== "chord" ? scaleWindow(cagedPos, fretFrom, fretTo) : null;
   const focus = cagedPos
@@ -430,6 +452,23 @@ function Workstation() {
                 </Button>
               ))}
             </div>
+            {mode === "scale" ? (
+              <div className="flex flex-wrap items-center gap-1.5" data-testid="over-chord">
+                <span className="w-14 text-[11px] uppercase tracking-widest text-muted-foreground" title="Colour the scale against a chord: chord tones, extensions, other tones">Over</span>
+                <Button size="sm" variant={overChord === "own" ? "default" : "secondary"} className="h-7 px-2 text-xs" disabled={!scaleOwn}
+                  onClick={() => setOverChord("own")}>
+                  {scaleOwn ? `${pretty(chordName(scaleOwn))} · its own chord` : "No 1-3-5 chord in this scale"}
+                </Button>
+                <Button size="sm" variant={overChord === "chord" ? "default" : "secondary"} className="h-7 px-2 text-xs"
+                  onClick={() => setOverChord("chord")}>
+                  {pretty(`${root.name}${chord.suffix}`)} · from Chords
+                </Button>
+                <Button size="sm" variant={overChord === "off" ? "default" : "secondary"} className="h-7 px-2 text-xs"
+                  onClick={() => setOverChord("off")}>
+                  Off
+                </Button>
+              </div>
+            ) : null}
             {mode === "scale" && MAJOR_MODES.includes(scaleId) ? (
               <>
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -506,7 +545,6 @@ function Workstation() {
             degrees={fbDegrees}
             focus={focus}
             neighbors={neighbors}
-            chordTonePcs={cagedOn && cagedLayer !== "chord" ? chordPcSet : undefined}
             pathKeys={pathKeys}
             pathOrder={pathway === "none" ? undefined : pathOrder}
             fretFrom={fretFrom}
@@ -515,12 +553,40 @@ function Workstation() {
             labelMode={labelMode}
             preferFlats={preferFlatsFor(root)}
             showAllNotes={showAllNotes || markMode}
-            roles={roles}
+            overlay={overlay}
             altered={custom ? altered : undefined}
             selected={sel}
             onSelect={markMode ? markFret : setSel}
             onShift={markMode || !editable ? undefined : shiftSelected}
           />
+          {overlay && overlayChord ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]" data-testid="overlay-legend">
+              <span>
+                <span className="uppercase tracking-widest text-muted-foreground">Over</span>{" "}
+                <span className="font-semibold">{pretty(chordName(overlayChord))}</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-3 w-3 rounded-full bg-root" />
+                <span className="h-3 w-3 rounded-full bg-third" />
+                <span className="h-3 w-3 rounded-full bg-fifth" />
+                <span className="h-3 w-3 rounded-full bg-seventh" />
+                chord tones <span className="font-mono">{overlayGroups.chord.map(pretty).join(" ")}</span>
+              </span>
+              {overlayGroups.extension.length ? (
+                <span className="flex items-center gap-1">
+                  <span className="h-3 w-3 rounded-full bg-extension" />
+                  extensions <span className="font-mono">{overlayGroups.extension.map(pretty).join(" ")}</span>
+                </span>
+              ) : null}
+              {overlayGroups.other.length ? (
+                <span className="flex items-center gap-1" title="A half step above the 3rd or 7th — usually passed through rather than held">
+                  <span className="h-2.5 w-2.5 rounded-full bg-secondary ring-1 ring-border" />
+                  other scale tones <span className="font-mono">{overlayGroups.other.map(pretty).join(" ")}</span>
+                  <span className="text-muted-foreground">(half step above a chord tone)</span>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <div className="space-y-2 rounded-md border border-border/70 p-2" data-testid="caged-panel">
             <div className="flex flex-wrap items-center gap-1.5">
               <Switch id="caged" checked={cagedOn} onCheckedChange={(v) => { setCagedOn(v); setCagedIdx(0); if (v) setPosWin(null); }} aria-label="CAGED" />
@@ -551,7 +617,6 @@ function Workstation() {
                 <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-third" />3rd</span>
                 <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-fifth" />5th</span>
                 <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-seventh" />7th</span>
-                {cagedLayer !== "chord" ? <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-secondary ring-1 ring-border" />other {cagedLayer} tone</span> : null}
                 <span className="text-muted-foreground">· shape letter = CAGED chord form, not the key</span>
               </div>
             ) : null}
@@ -581,7 +646,7 @@ function Workstation() {
                 <p className="font-mono text-xs" data-testid="caged-info">
                   {cagedPos.form} shape · root on {pretty(tuning.strings[cagedPos.rootString]!.note)} string fret {cagedPos.rootFret} · chord tones{" "}
                   {cagedChord.map((d) => `${pretty(d)}=${pretty(spellDegree(root, d))}`).join("  ")}
-                  {cagedLayer !== "chord" ? " · small grey dots = other scale/arpeggio tones" : ""}
+                  {cagedLayer !== "chord" ? " · green = extensions (9/11/13), small grey = other tones" : ""}
                 </p>
                 {cagedScaleWin ? (
                   <div className="overflow-x-auto" data-testid="caged-scale-map">
@@ -1067,6 +1132,7 @@ function Workstation() {
                 onToggleSeventh={() => setSeventh((s) => !s)}
                 onPickScale={pickScale}
                 onPickDegrees={(d) => commit(d)}
+                tension={mode === "scale" && overlayChord ? { set: degrees, chord: overlayChord, label: chordName(overlayChord) } : undefined}
               />
             </div>
           </section>

@@ -2,7 +2,7 @@ import { useMemo, useRef, type PointerEvent as RPointerEvent } from "react";
 import { cn } from "@/lib/utils";
 import { pluck } from "@/lib/audio";
 import { DOUBLE_INLAY, INLAY_FRETS, buildFretboard, type Tuning } from "@/lib/fretboard";
-import { INTERVAL_SHORT, parseDegree, pretty, type Degree, type Root } from "@/lib/theory";
+import { INTERVAL_SHORT, parseDegree, pretty, type Degree, type OverlayRole, type Root } from "@/lib/theory";
 
 export type LabelMode = "note" | "degree" | "interval" | "both";
 
@@ -21,7 +21,11 @@ export interface FretboardProps {
   labelMode: LabelMode;
   preferFlats: boolean;
   showAllNotes: boolean;
-  roles?: Record<string, "chord tone" | "tension" | "avoid"> | undefined;
+  /**
+   * Chord-to-scale overlay keyed by absolute pitch class: chord tones keep their function
+   * colours, extensions are green with 9/11/13 labels, other scale tones are small grey dots.
+   */
+  overlay?: Map<number, { role: OverlayRole; label: Degree }> | undefined;
   /** Degrees that differ from the unmodified preset — drawn with a dashed ring. */
   altered?: Set<string> | undefined;
   selected?: FretPos | null | undefined;
@@ -35,8 +39,6 @@ export interface FretboardProps {
   focus?: { from: number; to: number; label?: string } | null | undefined;
   /** Neighbouring windows drawn with a faint band and label. */
   neighbors?: { from: number; to: number; label: string }[] | undefined;
-  /** Pitch classes treated as chord tones; other set notes render as smaller scale tones. */
-  chordTonePcs?: Set<number> | undefined;
   /** "string-fret" keys of a visual pathway; set notes off the path are dimmed. */
   pathKeys?: Set<string> | undefined;
   /** "string-fret" -> 1-based step number of an ordered pathway. */
@@ -44,10 +46,10 @@ export interface FretboardProps {
 }
 
 /** Color role for a degree, using semantic tokens only. */
-function roleClass(degree: Degree | undefined, isRoot: boolean, role?: string): string {
+function roleClass(degree: Degree | undefined, isRoot: boolean, role?: OverlayRole): string {
   if (isRoot) return "bg-root text-root-foreground";
-  if (role === "avoid") return "bg-avoid text-foreground";
-  if (role === "tension") return "bg-tension text-foreground";
+  if (role === "extension") return "bg-extension text-background";
+  if (role === "other") return "bg-secondary text-foreground";
   if (!degree) return "bg-neutral-note text-foreground";
   const { number, alter } = parseDegree(degree);
   if (number === 3 || number === 10) return "bg-third text-background";
@@ -68,7 +70,7 @@ export function Fretboard(props: FretboardProps) {
     labelMode,
     preferFlats,
     showAllNotes,
-    roles,
+    overlay,
     altered,
     selected,
     onSelect,
@@ -77,7 +79,6 @@ export function Fretboard(props: FretboardProps) {
     shape,
     focus,
     neighbors,
-    chordTonePcs,
     pathKeys,
     pathOrder,
   } = props;
@@ -180,15 +181,17 @@ export function Fretboard(props: FretboardProps) {
                   style={{ left: "2.75rem", height: `${thickness}px` }}
                 />
                 {notes.map((n) => {
-                  const role = n.degree ? roles?.[n.degree] : undefined;
+                  const ov = n.inSet ? overlay?.get(n.pc) : undefined;
+                  const role = ov?.role;
                   const visible = n.inSet || showAllNotes;
                   const isSel = selected?.string === n.string && selected?.fret === n.fret;
                   // With a pathway showing, the path decides what is lit (a diagonal shape may run past the window).
                   const outOfFocus = pathKeys ? !pathKeys.has(`${n.string}-${n.fret}`) : !!focus && !inWin(n.fret, focus);
-                  const scaleTone = !!chordTonePcs && n.inSet && !chordTonePcs.has(n.pc);
+                  const scaleTone = role === "other" && !n.isRoot;
+                  const degreeLabel = ov?.label ?? n.degree ?? "";
                   const label =
                     labelMode === "degree" || labelMode === "both"
-                      ? (n.degree ?? "")
+                      ? degreeLabel
                       : labelMode === "interval"
                         ? (INTERVAL_SHORT[n.intervalSemitones ?? -1] ?? "")
                         : n.noteName;
@@ -232,7 +235,7 @@ export function Fretboard(props: FretboardProps) {
                         inWin(n.fret, focus) && "bg-primary/10",
                       )}
                       aria-pressed={isSel}
-                      aria-label={`${n.noteName} on ${pretty(open.note)} string, fret ${n.fret}${n.degree ? `, degree ${n.degree}` : ""}`}
+                      aria-label={`${n.noteName} on ${pretty(open.note)} string, fret ${n.fret}${n.degree ? `, degree ${n.degree}` : ""}${role ? `, ${role === "chord" ? "chord tone" : role === "extension" ? `extension ${degreeLabel}` : "other scale tone"}` : ""}`}
                     >
                       {ri === Math.floor(nStrings / 2) && INLAY_FRETS.has(n.fret) ? (
                         <span
@@ -268,7 +271,7 @@ export function Fretboard(props: FretboardProps) {
                         {labelMode === "both" && n.inSet ? (
                           <span className="flex flex-col items-center leading-[9px]">
                             <span>{pretty(n.noteName)}</span>
-                            <span className="text-[8px] font-normal opacity-80">{pretty(n.degree ?? "")}</span>
+                            <span className="text-[8px] font-normal opacity-80">{pretty(degreeLabel)}</span>
                           </span>
                         ) : (
                           pretty(label || (isSel ? n.noteName : ""))

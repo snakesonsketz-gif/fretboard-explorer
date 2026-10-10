@@ -42,7 +42,9 @@ export function CircleOfFifths({ rootPc, onPickKey, onLoadChord }: Props) {
   const c = size / 2;
   const pos = (slot: number, r: number) => {
     const a = (slot / 12) * Math.PI * 2 - Math.PI / 2;
-    return { x: c + r * Math.cos(a), y: c + r * Math.sin(a) };
+    // Rounded so server and browser trig agree (otherwise React reports a hydration mismatch).
+    const round = (v: number) => Math.round(v * 100) / 100;
+    return { x: round(c + r * Math.cos(a)), y: round(c + r * Math.sin(a)) };
   };
 
   return (
