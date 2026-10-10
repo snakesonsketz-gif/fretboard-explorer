@@ -45,7 +45,8 @@ export function GuidedSession({ rec, takes, measured, onSave, onExport }: {
     }
   }, []);
 
-  const takeFor = (id: string) => takes.find((t) => t.step === id);
+  // Only takes recorded on this device count as done here (imported ones are someone else's).
+  const takeFor = (id: string) => takes.find((t) => t.step === id && !t.imported);
   const done = PLAN.filter((s) => takeFor(s.id)).length;
   const firstOpen = PLAN.findIndex((s) => !takeFor(s.id));
   const idx = pick ?? (firstOpen < 0 ? null : firstOpen);
@@ -172,7 +173,7 @@ export function GuidedSession({ rec, takes, measured, onSave, onExport }: {
       {ready && !step ? (
         <div className="space-y-2 rounded-lg border border-extension/50 bg-extension/10 p-3" data-testid="guided-finished">
           <p className="font-display text-lg font-black">All {PLAN.length} steps recorded — thank you!</p>
-          <p className="text-sm">Tap <b>Export & send</b>, then send the .zip file to Vix (text, email or AirDrop).</p>
+          <p className="text-sm">Tap <b>Export & send</b>, then send the .zip file to Vix (text, email, AirDrop or Google Drive). On the PC he opens Develop → <b>Import takes</b>.</p>
           <Button size="lg" className="h-12 gap-2" onClick={onExport}><Download className="h-4 w-4" /> Export & send</Button>
         </div>
       ) : null}

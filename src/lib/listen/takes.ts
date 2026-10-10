@@ -43,6 +43,8 @@ export interface Take {
   step?: string;
   tab?: string;
   expected?: number;
+  /** Loaded from someone else's export (.zip name), not recorded on this device. */
+  imported?: string;
 }
 
 export interface TakeStrum {
@@ -359,6 +361,7 @@ export function exportTakes(takes: Take[], measured: Map<string, TakeStrum[]>, t
       strumsFound: (measured.get(t.id) ?? []).length,
       ...(t.originalSeconds !== undefined ? { secondsBeforeTrim: t.originalSeconds } : {}),
       roomFloorFromLeadIn: t.roomFloor ?? null,
+      ...(t.imported ? { importedFrom: t.imported } : {}),
       strums: (measured.get(t.id) ?? []).map((s) => ({
         time: +s.time.toFixed(3),
         peakDb: +s.measure.peakDb.toFixed(1),
@@ -375,6 +378,126 @@ export function exportTakes(takes: Take[], measured: Map<string, TakeStrum[]>, t
   const json = (o: unknown) => new TextEncoder().encode(JSON.stringify(o, null, 2));
   files.push({ name: "takes.json", data: json(meta) }, { name: "thresholds.json", data: json(thresholds) });
   return makeZip(files);
+}
+
+// ---------------------------------------------------------------- import (someone else's export)
+
+/** Files in a .zip — stored or deflated entries (a zip re-packed by an email or drive app). */
+export async function readZip(bytes: Uint8Array): Promise<{ name: string; data: Uint8Array }[]> {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--)
+    if (v.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  if (eocd < 0) throw new Error("not a zip file");
+  const count = v.getUint16(eocd + 10, true);
+  let p = v.getUint32(eocd + 16, true);
+  const dec = new TextDecoder();
+  const out: { name: string; data: Uint8Array }[] = [];
+  for (let n = 0; n < count; n++) {
+    if (v.getUint32(p, true) !== 0x02014b50) throw new Error("damaged zip directory");
+    const method = v.getUint16(p + 10, true);
+    const size = v.getUint32(p + 20, true);
+    const nameLen = v.getUint16(p + 28, true), extraLen = v.getUint16(p + 30, true), commentLen = v.getUint16(p + 32, true);
+    const local = v.getUint32(p + 42, true);
+    const name = dec.decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    p += 46 + nameLen + extraLen + commentLen;
+    if (name.endsWith("/")) continue;
+    const start = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
+    const raw = bytes.subarray(start, start + size);
+    if (method === 0) out.push({ name, data: raw });
+    else if (method === 8 && typeof DecompressionStream !== "undefined")
+      out.push({ name, data: new Uint8Array(await new Response(new Blob([raw as BlobPart]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer()) });
+  }
+  return out;
+}
+
+/** 16-bit PCM WAV (as exported) → mono samples. Null for any other kind of audio. */
+export function readWav(bytes: Uint8Array): { pcm: Int16Array; sampleRate: number } | null {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const tag = (o: number) => String.fromCharCode(bytes[o]!, bytes[o + 1]!, bytes[o + 2]!, bytes[o + 3]!);
+  if (bytes.length < 44 || tag(0) !== "RIFF" || tag(8) !== "WAVE") return null;
+  let channels = 1, rate = 0, bits = 0, format = 0;
+  for (let p = 12; p + 8 <= bytes.length; ) {
+    const id = tag(p), size = v.getUint32(p + 4, true);
+    if (id === "fmt ") {
+      format = v.getUint16(p + 8, true);
+      channels = v.getUint16(p + 10, true);
+      rate = v.getUint32(p + 12, true);
+      bits = v.getUint16(p + 22, true);
+    } else if (id === "data") {
+      if (format !== 1 || bits !== 16 || !rate) return null;
+      const frames = Math.floor(Math.min(size, bytes.length - p - 8) / (2 * channels));
+      const pcm = new Int16Array(frames);
+      for (let i = 0; i < frames; i++) {
+        let sum = 0;
+        for (let c = 0; c < channels; c++) sum += v.getInt16(p + 8 + 2 * (i * channels + c), true);
+        pcm[i] = Math.round(sum / channels);
+      }
+      return { pcm, sampleRate: rate };
+    }
+    p += 8 + size + (size % 2);
+  }
+  return null;
+}
+
+/** Same recording already here? (recorded time, label, chord and length) */
+const takeKey = (t: Pick<Take, "at" | "label" | "target" | "pcm" | "sampleRate">) => `${t.at}|${t.label}|${t.target.label}|${(t.pcm.length / t.sampleRate).toFixed(2)}`;
+
+/**
+ * Takes from a Fretlab export (.zip from "Export all" / "Export & send"), ready to save on this
+ * device. Recordings already here are skipped.
+ */
+export async function importTakes(bytes: Uint8Array, zipName: string, existing: Take[]): Promise<{ takes: Take[]; skipped: number; thresholds?: Partial<Thresholds> }> {
+  const files = await readZip(bytes);
+  const byName = new Map(files.map((f) => [f.name, f.data]));
+  const metaFile = byName.get("takes.json");
+  if (!metaFile) throw new Error("this zip has no takes.json — it isn't a Fretlab export");
+  type Meta = { file: string; recorded: string; label: TakeLabel; note?: string; target: TargetChord; source?: "mic" | "file"; device?: string; fileName?: string; step?: string; tab?: string; strumsAsked?: number; secondsBeforeTrim?: number; roomFloorFromLeadIn?: number | null; importedFrom?: string };
+  const meta = JSON.parse(new TextDecoder().decode(metaFile)) as Meta[];
+  const have = new Set(existing.map(takeKey));
+  const takes: Take[] = [];
+  let skipped = 0;
+  for (const m of meta) {
+    const wav = byName.get(m.file);
+    const audio = wav ? readWav(wav) : null;
+    if (!audio || !m.target?.rootName || !Array.isArray(m.target.degrees)) {
+      skipped++;
+      continue;
+    }
+    const t: Take = {
+      id: newTakeId(),
+      at: Date.parse(m.recorded) || Date.now(),
+      target: { rootName: m.target.rootName, degrees: m.target.degrees, label: m.target.label ?? m.target.rootName },
+      label: TAKE_LABELS.some((l) => l.id === m.label) ? m.label : "other",
+      note: m.note ?? "",
+      sampleRate: audio.sampleRate,
+      pcm: audio.pcm,
+      source: m.source === "file" ? "file" : "mic",
+      device: m.device ?? "unknown",
+      ...(m.fileName ? { fileName: m.fileName } : {}),
+      ...(typeof m.roomFloorFromLeadIn === "number" ? { roomFloor: m.roomFloorFromLeadIn } : {}),
+      ...(typeof m.secondsBeforeTrim === "number" ? { originalSeconds: m.secondsBeforeTrim } : {}),
+      ...(m.step ? { step: m.step, ...(m.tab ? { tab: m.tab } : {}), ...(m.strumsAsked ? { expected: m.strumsAsked } : {}) } : {}),
+      imported: m.importedFrom ?? zipName,
+    };
+    if (have.has(takeKey(t))) {
+      skipped++;
+      continue;
+    }
+    have.add(takeKey(t));
+    takes.push(t);
+  }
+  const th = byName.get("thresholds.json");
+  let thresholds: Partial<Thresholds> | undefined;
+  try {
+    thresholds = th ? (JSON.parse(new TextDecoder().decode(th)) as Partial<Thresholds>) : undefined;
+  } catch {
+    thresholds = undefined;
+  }
+  return { takes, skipped, ...(thresholds ? { thresholds } : {}) };
 }
 
 // ---------------------------------------------------------------- storage (IndexedDB, this device)

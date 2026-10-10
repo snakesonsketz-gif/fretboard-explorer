@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Download, FileAudio, Mic, Square, Trash2 } from "lucide-react";
+import { ChevronDown, Download, FileAudio, FolderInput, Mic, Square, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,9 @@ import {
   clearTakes,
   deleteTake,
   deviceLabel,
+  encodeWav,
   exportTakes,
+  importTakes,
   judgeTake,
   listTakes,
   newTakeId,
@@ -34,7 +36,7 @@ import {
   type TakeLabel,
   type TakeStrum,
 } from "@/lib/listen/takes";
-import { loadTuning, saveTuning } from "@/lib/listen/tuning";
+import { changedKeys, loadTuning, sanitize, saveTuning } from "@/lib/listen/tuning";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/develop")({
@@ -57,6 +59,10 @@ function DevelopPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [ownOpen, setOwnOpen] = useState(false);
+  /** Thresholds that came with an imported zip (offered, never applied without a tap). */
+  const [offered, setOffered] = useState<{ values: Thresholds; from: string } | null>(null);
+  const zipInput = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
   const rec = useRecorder();
   const fileInput = useRef<HTMLInputElement>(null);
   const player = useRef<AudioBufferSourceNode | null>(null);
@@ -191,13 +197,12 @@ function DevelopPage() {
     void deleteTake(t.id);
   };
 
-  const exportAll = async () => {
-    const zip = exportTakes([...takes].reverse(), measured, T);
-    const name = `fretlab-takes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.zip`;
-    const file = new File([zip as BlobPart], name, { type: "application/zip" });
+  /** Hand a file to the person: the share sheet on phones (text, email, AirDrop), else a download. */
+  const deliver = async (data: Uint8Array, name: string, type: string, share: boolean) => {
+    const file = new File([data as BlobPart], name, { type });
     const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
     try {
-      if (nav.canShare?.({ files: [file] })) return void (await nav.share({ files: [file], title: "Fretlab takes" }));
+      if (share && nav.canShare?.({ files: [file] })) return void (await nav.share({ files: [file], title: "Fretlab takes" }));
     } catch {
       /* share cancelled: fall back to a download */
     }
@@ -207,6 +212,37 @@ function DevelopPage() {
     a.download = name;
     a.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  const exportAll = async () => {
+    const zip = exportTakes([...takes].reverse(), measured, T);
+    await deliver(zip, `fretlab-takes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.zip`, "application/zip", true);
+  };
+
+  const downloadWav = (t: Take) => {
+    const slug = `${t.step ?? t.label}-${t.target.label}`.replace(/[^a-z0-9#]+/gi, "-");
+    void deliver(encodeWav(t.pcm, t.sampleRate), `fretlab-${slug}-${new Date(t.at).toISOString().slice(0, 10)}.wav`, "audio/wav", false);
+  };
+
+  /** Load a Fretlab export (.zip) sent from another phone — e.g. Bradley's guided recordings. */
+  const importZip = async (files: FileList | null) => {
+    const f = files?.[0];
+    if (zipInput.current) zipInput.current.value = "";
+    if (!f) return;
+    setImportMsg(`Reading ${f.name}…`);
+    try {
+      const r = await importTakes(new Uint8Array(await f.arrayBuffer()), f.name, takes);
+      for (const t of r.takes) await saveTake(t);
+      setTakes((ts) => [...r.takes, ...ts].sort((a, b) => b.at - a.at));
+      const from = r.takes[0]?.device ?? "another device";
+      setImportMsg(r.takes.length ? `Imported ${r.takes.length} take${r.takes.length === 1 ? "" : "s"} from ${f.name} (${from})${r.skipped ? ` · ${r.skipped} already here or unreadable` : ""}.` : `Nothing new in ${f.name}${r.skipped ? ` — ${r.skipped} take${r.skipped === 1 ? " is" : "s are"} already here` : ""}.`);
+      if (r.thresholds) {
+        const t = sanitize(r.thresholds);
+        setOffered(changedKeys(t).length ? { values: t, from: f.name } : null);
+      }
+    } catch (e) {
+      setImportMsg(`Couldn't import ${f.name}: ${(e as Error).message}.`);
+    }
   };
 
   const recording = rec.state !== "idle";
@@ -271,6 +307,8 @@ function DevelopPage() {
             <h2 className="font-display text-sm font-semibold uppercase tracking-widest">Takes</h2>
             <span className="text-xs text-muted-foreground">{takes.length} on this device · {totalMb.toFixed(1)} MB</span>
             <div className="ml-auto flex items-center gap-1">
+              <Button size="sm" variant="secondary" className="h-8 gap-1.5" onClick={() => zipInput.current?.click()} data-testid="import"><FolderInput className="h-3.5 w-3.5" /> Import takes</Button>
+              <input ref={zipInput} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="hidden" onChange={(e) => void importZip(e.target.files)} data-testid="import-input" />
               <Button size="sm" variant="secondary" className="h-8 gap-1.5" disabled={!takes.length} onClick={() => void exportAll()} data-testid="export"><Download className="h-3.5 w-3.5" /> Export all (.zip)</Button>
               {confirmClear ? (
                 <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => { void clearTakes(); setTakes([]); setMeasured(new Map()); setConfirmClear(false); }}>Delete all?</Button>
@@ -279,11 +317,20 @@ function DevelopPage() {
               )}
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">Got a .zip from Bradley's phone? Tap <b className="text-foreground">Import takes</b> and pick it — his recordings load here with their labels, ready to play, score and download.</p>
+          {importMsg ? <p className="text-sm" role="status" data-testid="import-msg">{importMsg}</p> : null}
+          {offered ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/10 p-2 text-sm" data-testid="offered-thresholds">
+              <span className="min-w-0 flex-1">{offered.from} also has tuned thresholds ({changedKeys(offered.values).length} changed from the defaults).</span>
+              <Button size="sm" className="h-8" onClick={() => { changeT(offered.values); setOffered(null); }}>Use them</Button>
+              <Button size="sm" variant="ghost" className="h-8" onClick={() => setOffered(null)}>No thanks</Button>
+            </div>
+          ) : null}
           {typeof window !== "undefined" && isNativeApp() ? <p className="text-xs text-muted-foreground">Exporting works best from the browser version of Fretlab.</p> : null}
           {takes.length ? (
             <div className="space-y-2">
               {takes.map((t) => (
-                <TakeCard key={t.id} take={t} strums={measured.get(t.id)} reports={reports.get(t.id)} T={T} onPlay={(from) => void play(t, from)} onDelete={() => remove(t)} onRelabel={(l) => relabel(t, l)} />
+                <TakeCard key={t.id} take={t} strums={measured.get(t.id)} reports={reports.get(t.id)} T={T} onPlay={(from) => void play(t, from)} onDelete={() => remove(t)} onRelabel={(l) => relabel(t, l)} onDownload={() => downloadWav(t)} />
               ))}
             </div>
           ) : (

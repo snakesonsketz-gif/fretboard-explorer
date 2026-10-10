@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Play, Trash2 } from "lucide-react";
+import { ChevronDown, Download, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { StrumReport, Thresholds, Verdict } from "@/lib/listen/score";
@@ -16,7 +16,7 @@ const RESULT: Record<string, { text: string; cls: string }> = {
   unsure: { text: "–", cls: "bg-secondary text-muted-foreground" },
 };
 
-export function TakeCard({ take, strums, reports, T, onPlay, onDelete, onRelabel }: {
+export function TakeCard({ take, strums, reports, T, onPlay, onDelete, onRelabel, onDownload }: {
   take: Take;
   strums: TakeStrum[] | undefined;
   reports: StrumReport[] | undefined;
@@ -24,6 +24,7 @@ export function TakeCard({ take, strums, reports, T, onPlay, onDelete, onRelabel
   onPlay: (from?: number) => void;
   onDelete: () => void;
   onRelabel: (label: TakeLabel) => void;
+  onDownload: () => void;
 }) {
   const [open, setOpen] = useState<number | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -39,9 +40,12 @@ export function TakeCard({ take, strums, reports, T, onPlay, onDelete, onRelabel
         <span className="text-xs text-muted-foreground">
           {secs.toFixed(1)} s · {new Date(take.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
           {take.source === "file" ? ` · ${take.fileName ?? "file"}` : ""}
+          {take.imported ? ` · from ${take.device}` : ""}
         </span>
+        {take.imported ? <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ring-accent/50" title={`Imported from ${take.imported}`}>imported</span> : null}
         <div className="ml-auto flex items-center gap-1">
           <Button size="sm" variant="secondary" className="h-8 w-8 p-0" onClick={() => onPlay()} aria-label="Play take"><Play className="h-3.5 w-3.5" /></Button>
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground" onClick={onDownload} aria-label="Download as WAV" title="Download as WAV"><Download className="h-3.5 w-3.5" /></Button>
           {confirm ? (
             <Button size="sm" variant="destructive" className="h-8 px-2 text-xs" onClick={onDelete}>Delete?</Button>
           ) : (

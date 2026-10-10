@@ -168,3 +168,67 @@ describe("Develop: silence is trimmed, ring-out is kept", () => {
     expect(trimSilence(quiet, SR)).toBeNull();
   });
 });
+
+import { deflateRawSync } from "node:zlib";
+import { exportTakes, importTakes, readZip, type Take } from "../src/lib/listen/takes";
+
+/** A zip whose entries are deflated (as an email or drive app may re-pack it). */
+function deflatedZip(files: { name: string; data: Uint8Array }[]): Uint8Array {
+  const enc = new TextEncoder();
+  const parts: Uint8Array[] = [], central: Uint8Array[] = [];
+  let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), comp = new Uint8Array(deflateRawSync(f.data)), crc = crc32(f.data);
+    const lh = new Uint8Array(30 + name.length), lv = new DataView(lh.buffer);
+    lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(8, 8, true); lv.setUint32(14, crc, true);
+    lv.setUint32(18, comp.length, true); lv.setUint32(22, f.data.length, true); lv.setUint16(26, name.length, true); lh.set(name, 30);
+    const ch = new Uint8Array(46 + name.length), cv = new DataView(ch.buffer);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(10, 8, true); cv.setUint32(16, crc, true);
+    cv.setUint32(20, comp.length, true); cv.setUint32(24, f.data.length, true); cv.setUint16(28, name.length, true); cv.setUint32(42, off, true); ch.set(name, 46);
+    parts.push(lh, comp); central.push(ch); off += lh.length + comp.length;
+  }
+  const size = central.reduce((a, c) => a + c.length, 0), end = new Uint8Array(22), ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true); ev.setUint32(12, size, true); ev.setUint32(16, off, true);
+  const all = [...parts, ...central, end], out = new Uint8Array(all.reduce((a, p) => a + p.length, 0));
+  let o = 0; for (const p of all) { out.set(p, o); o += p.length; }
+  return out;
+}
+
+describe("Develop: importing Bradley's export on another device", () => {
+  const { audio } = take([1.2, 3.2].map((at) => ({ tab: "320003", at, opts: { spread: 0.012 } })), 5, 0.002);
+  const t = trimSilence(audio, SR)!;
+  const mine: Take = {
+    id: "a1", at: Date.parse("2026-10-10T20:00:00Z"), target: G, label: "clean", note: "Open G", sampleRate: SR, pcm: toPcm(t.audio),
+    roomFloor: t.roomFloor!, originalSeconds: 5, source: "mic", device: "iPhone · Safari", step: "clean-g", tab: "320003", expected: 4,
+  };
+  const zip = exportTakes([mine], new Map([["a1", analyseTake(mine)]]), THRESHOLDS);
+
+  test("an export imports back exactly: audio, labels, guided step, room reading", async () => {
+    const r = await importTakes(zip, "fretlab-takes.zip", []);
+    expect(r.skipped).toBe(0);
+    expect(r.takes.length).toBe(1);
+    const got = r.takes[0]!;
+    expect([got.label, got.target.label, got.step, got.tab, got.expected, got.device, got.at, got.sampleRate]).toEqual(["clean", "G", "clean-g", "320003", 4, "iPhone · Safari", mine.at, SR]);
+    expect(got.roomFloor).toBeCloseTo(mine.roomFloor!, 12);
+    expect(got.pcm).toEqual(mine.pcm);
+    expect(got.imported).toBe("fretlab-takes.zip");
+    // Analysed on the PC exactly as on the phone.
+    expect(analyseTake(got).map((s) => s.measure.ring.seconds)).toEqual(analyseTake(mine).map((s) => s.measure.ring.seconds));
+  });
+  test("importing the same zip twice doesn't duplicate anything", async () => {
+    const first = await importTakes(zip, "z.zip", []);
+    const again = await importTakes(zip, "z.zip", first.takes);
+    expect(again).toMatchObject({ takes: [], skipped: 1 });
+  });
+  test("a re-packed (deflated) zip still imports", async () => {
+    const files = await readZip(zip);
+    const r = await importTakes(deflatedZip(files), "repacked.zip", []);
+    expect(r.takes[0]!.pcm).toEqual(mine.pcm);
+    expect(r.thresholds?.heard).toBe(THRESHOLDS.heard);
+  });
+  test("a zip that isn't a Fretlab export is refused with a clear reason", async () => {
+    const other = makeZip([{ name: "photo.txt", data: new TextEncoder().encode("hi") }]);
+    await expect(importTakes(other, "x.zip", [])).rejects.toThrow("takes.json");
+    await expect(importTakes(new Uint8Array([1, 2, 3]), "x.zip", [])).rejects.toThrow("not a zip");
+  });
+});
