@@ -10,3 +10,14 @@ Preserve all existing features (CAGED, customization, identifier, modes, playbac
 6. [ ] Theory Propagation — custom alterations update every connected view consistently.
 7. [ ] Voice-Leading Analyzer — track common tones and movement between chords.
 8. [ ] Advanced Harmony Lab — upper structures, shell voicings, rootless chords, altered harmony.
+
+# Master plan progress (Sequencer / Listen expansion)
+
+Approved order: tests → tabs → shared timing engine → chord sequencer → drum sequencer → MIDI export → Listen mode → piano / practice history / polish. `v1-original` branch = the app before this work, untouched.
+
+- [x] Test suite — `bun run test` (tests/ — outside src/, not part of the app build).
+- [x] Tabs — Explore / Sequencer / Listen (src/components/AppShell.tsx).
+- [x] Shared timing engine — src/lib/timeline.ts (pure: ticks @ 480 PPQ, time signatures, chord start ≠ duration, drum patterns that loop under longer chord parts, count-in, one event list for playback + MIDI) and src/lib/engine.ts (one Tone.js transport; lazy-loaded). Measured in Chromium: 0.000 ms event error, exact loop period, clean tempo changes.
+- [x] Chord sequencer — /sequencer: palette from Explore "Save" + song chords + quick add; tap to place, drag to move, drag edge to resize, inspector (move/length presets/until next/repeat/swap/remove), undo, tempo (tap), time signature (chords keep bar positions), measures, snap grid incl. triplets, loop, count-in, click, strum, zoom/fit, saved sequences, import a Song-workspace song, auto-saved draft. Sequences are stored separately from songs (a timed arrangement vs. a song sheet) but use the same chord data and import songs.
+- [ ] Drum sequencer — engine + data model done (built-in synth kit, per-lane user samples in IndexedDB); grid UI next.
+- [ ] MIDI export · [ ] Listen mode · [ ] Song workspace play-through → shared engine (still on its own timer) · [ ] keep a fretboard voicing with saved chords.
