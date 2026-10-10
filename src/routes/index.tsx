@@ -239,14 +239,16 @@ function Workstation() {
   // Ordered pathway: true degree order from a chosen start degree, wrapping cyclically.
   const [pathStart, setPathStart] = useState<string>("1");
   const startDeg = fbDegrees.includes(pathStart) ? pathStart : (fbDegrees[0] ?? "1");
+  // Horizontal uses string pairs, diagonal uses string triples; clamp so switching kinds never points past the top string.
+  const pair = Math.min(pathPair, Math.max(0, tuning.strings.length - (pathway === "diagonal" ? 3 : 2)));
   const pathSteps = useMemo(() => {
     if (pathway === "none") return [];
     const pcs = new Set(degreesToPitchClasses(fbDegrees).map((p) => (p + root.pc) % 12));
     const from = focus?.from ?? fretFrom;
     const to = pathway === "diagonal" ? fretTo : (focus?.to ?? (pathway === "vertical" ? Math.min(fretTo, fretFrom + 4) : fretTo));
-    return orderedPathway({ kind: pathway, tuning, pcs, startPc: (root.pc + pcOf(startDeg)) % 12, from, to, stringPair: pathPair });
+    return orderedPathway({ kind: pathway, tuning, pcs, startPc: (root.pc + pcOf(startDeg)) % 12, from, to, stringPair: pair, minFret: fretFrom });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathway, tuning, root.pc, fbDegrees.join(), startDeg, fretFrom, fretTo, focus?.from, focus?.to, pathPair]);
+  }, [pathway, tuning, root.pc, fbDegrees.join(), startDeg, fretFrom, fretTo, focus?.from, focus?.to, pair]);
   const pathKeys = useMemo(
     () => (pathway === "none" ? undefined : new Set(pathSteps.map((p) => `${p.string}-${p.fret}`))),
     [pathway, pathSteps],
@@ -634,9 +636,9 @@ function Workstation() {
                 </Button>
               ))}
               {pathway === "horizontal" || pathway === "diagonal" ? (
-                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setPathPair((p) => (p + 1) % Math.max(1, tuning.strings.length - (pathway === "diagonal" ? 2 : 1)))}>
-                  Strings {pretty(tuning.strings[pathPair]!.note)}+{pretty(tuning.strings[pathPair + 1]?.note ?? "")}
-                  {pathway === "diagonal" ? `+${pretty(tuning.strings[pathPair + 2]?.note ?? "")}` : ""} ↻
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setPathPair((pair + 1) % Math.max(1, tuning.strings.length - (pathway === "diagonal" ? 2 : 1)))}>
+                  Strings {pretty(tuning.strings[pair]!.note)}+{pretty(tuning.strings[pair + 1]?.note ?? "")}
+                  {pathway === "diagonal" ? `+${pretty(tuning.strings[pair + 2]?.note ?? "")}` : ""} ↻
                 </Button>
               ) : null}
             </div>
@@ -657,7 +659,17 @@ function Workstation() {
                   {pathSteps.length
                     ? pathSteps.map((p) => pretty(degOfPc(p.pc))).join("–")
                     : `No ${pretty(startDeg)} inside this window.`}
-                  {pathSteps.length ? <span className="text-muted-foreground"> · {pathSteps.length} notes · frets {pathSteps[0]!.fret === Math.min(...pathSteps.map((x) => x.fret)) ? pathSteps[0]!.fret : Math.min(...pathSteps.map((x) => x.fret))}–{Math.max(...pathSteps.map((x) => x.fret))}{pathway === "diagonal" ? " (diagonal climbs from the window start)" : ""}</span> : null}
+                  {pathSteps.length ? <span className="text-muted-foreground"> · {pathSteps.length} notes · frets {Math.min(...pathSteps.map((x) => x.fret))}–{Math.max(...pathSteps.map((x) => x.fret))}{pathway === "diagonal" ? " · 3 notes per string" : ""}</span> : null}
+                  {pathway === "diagonal" && focus && pathSteps.length > 0 && (pathSteps[0]!.fret < focus.from || pathSteps[0]!.fret > focus.to) ? (
+                    <span className="block text-muted-foreground" data-testid="pathway-moved">
+                      No {pretty(startDeg)} on the {pretty(tuning.strings[pair]!.note)} string inside frets {focus.from}–{focus.to}, so this is the nearest full shape.
+                    </span>
+                  ) : null}
+                  {pathway === "diagonal" && pathSteps.length > 0 && pathSteps.length < 9 ? (
+                    <span className="block text-muted-foreground" data-testid="pathway-cut">
+                      The full 9-note shape runs off frets {fretFrom}–{fretTo}; widen the fret range to see the rest.
+                    </span>
+                  ) : null}
                 </p>
               </div>
             ) : null}

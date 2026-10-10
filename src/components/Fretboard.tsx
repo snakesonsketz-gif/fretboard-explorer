@@ -183,7 +183,8 @@ export function Fretboard(props: FretboardProps) {
                   const role = n.degree ? roles?.[n.degree] : undefined;
                   const visible = n.inSet || showAllNotes;
                   const isSel = selected?.string === n.string && selected?.fret === n.fret;
-                  const outOfFocus = (!!focus && !inWin(n.fret, focus)) || (!!pathKeys && !pathKeys.has(`${n.string}-${n.fret}`));
+                  // With a pathway showing, the path decides what is lit (a diagonal shape may run past the window).
+                  const outOfFocus = pathKeys ? !pathKeys.has(`${n.string}-${n.fret}`) : !!focus && !inWin(n.fret, focus);
                   const scaleTone = !!chordTonePcs && n.inSet && !chordTonePcs.has(n.pc);
                   const label =
                     labelMode === "degree" || labelMode === "both"

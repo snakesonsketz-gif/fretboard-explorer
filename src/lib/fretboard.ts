@@ -248,6 +248,12 @@ export function orderedPathway(opts: {
   from: number;
   to: number;
   stringPair?: number;
+  /**
+   * Diagonal only: lowest fret later strings may use. A 3-notes-per-string shape often
+   * drops a fret or two as it crosses strings, so it can sit below `from` (the window
+   * start, which only decides where the start note is looked for). Defaults to `from`.
+   */
+  minFret?: number;
 }): PathStep[] {
   const { kind, tuning, pcs, startPc, from, to } = opts;
   const n = tuning.strings.length;
@@ -257,30 +263,46 @@ export function orderedPathway(opts: {
     strings = [a, a + 1];
   } else if (kind === "diagonal") {
     const a = Math.min(Math.max(0, opts.stringPair ?? 0), Math.max(0, n - 3));
-    strings = tuning.strings.map((_, i) => i).filter((x) => x >= a);
+    strings = tuning.strings.map((_, i) => i).filter((x) => x >= a && x < a + 3);
   } else strings = tuning.strings.map((_, i) => i);
   if (kind === "diagonal") {
-    // 3 notes per string, climbing across adjacent strings from the start degree.
-    const out: PathStep[] = [];
-    let last = -1;
-    let used = 0;
-    for (const si of strings) {
-      if (used >= 3) break;
-      const s = tuning.strings[si]!;
-      const base = s.pc + (s.octave + 1) * 12;
-      let placed = 0;
-      for (let f = from; f <= to && placed < 3; f++) {
-        const pc = (s.pc + f) % 12;
-        const midi = base + f;
-        if (!pcs.has(pc) || midi <= last) continue;
-        if (!out.length && pc !== startPc) continue;
-        out.push({ string: si, fret: f, pc, midi });
-        last = midi;
-        placed++;
+    // Classic 3-notes-per-string: the start degree on the chosen string, then the next
+    // scale tones in pitch order, exactly three per string across three adjacent strings.
+    // The shape is never bent to fit; it stops if a note would fall off the fret range.
+    const s0 = strings[0];
+    if (s0 === undefined || !pcs.has(startPc)) return [];
+    const openMidi = (si: number) => tuning.strings[si]!.pc + (tuning.strings[si]!.octave + 1) * 12;
+    const lo = Math.min(opts.minFret ?? from, from);
+    const build = (startFret: number) => {
+      const out: PathStep[] = [];
+      let midi = openMidi(s0) + startFret;
+      for (const si of strings) {
+        for (let k = 0; k < 3; k++) {
+          if (out.length) {
+            do midi++;
+            while (!pcs.has(midi % 12));
+          }
+          const fret = midi - openMidi(si);
+          if (fret < lo || fret > to) return out;
+          out.push({ string: si, fret, pc: midi % 12, midi });
+        }
       }
-      if (placed) used++;
+      return out;
+    };
+    // Try the start note at/after the window start first, then just below it; take the
+    // first occurrence whose shape fits completely (e.g. an open-string start whose next
+    // string would need a negative fret moves up an octave), else the longest partial.
+    const isStart = (f: number) => (tuning.strings[s0]!.pc + f) % 12 === startPc;
+    const starts: number[] = [];
+    for (let f = from; f <= to; f++) if (isStart(f)) starts.push(f);
+    for (let f = from - 1; f >= lo; f--) if (isStart(f)) starts.push(f);
+    let best: PathStep[] = [];
+    for (const f of starts) {
+      const path = build(f);
+      if (path.length === strings.length * 3) return path;
+      if (path.length > best.length) best = path;
     }
-    return out;
+    return best;
   }
   const byMidi = new Map<number, PathStep>();
   for (const si of strings) {
