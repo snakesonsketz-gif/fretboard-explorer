@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { engine } from "@/lib/engine";
 import { loadSeqDraft, saveSeqDraft } from "@/lib/sequences";
-import { emptyArrangement, type Arrangement } from "@/lib/timeline";
+import { drumsOnly, emptyArrangement, type Arrangement } from "@/lib/timeline";
 
 /**
  * Sequencer state: the arrangement (auto-saved as a draft), undo, and the link to the one
@@ -11,6 +11,8 @@ export function useSequencer() {
   const [arr, setArrState] = useState<Arrangement>(() => emptyArrangement());
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
+  /** What is playing: the whole arrangement, or the drum pattern on its own. */
+  const [playMode, setPlayMode] = useState<"all" | "drums">("all");
   const [currentChord, setCurrentChord] = useState<string | null>(null);
   const history = useRef<Arrangement[]>([]);
   const [canUndo, setCanUndo] = useState(false);
@@ -37,8 +39,8 @@ export function useSequencer() {
 
   // Swap events into the running transport when anything changes.
   useEffect(() => {
-    if (playing) void engine.load(arr);
-  }, [arr, playing]);
+    if (playing) void engine.load(playMode === "drums" ? drumsOnly(arr) : arr);
+  }, [arr, playing, playMode]);
 
   /** Record the current state so the next change can be undone. */
   const snapshot = useCallback(() => {
@@ -62,7 +64,14 @@ export function useSequencer() {
   }, []);
 
   const play = useCallback(async () => {
+    setPlayMode("all");
     await engine.play(arrRef.current);
+    setPlaying(true);
+  }, []);
+  /** Loop just the drum pattern (no chords, no count-in). */
+  const playDrums = useCallback(async () => {
+    setPlayMode("drums");
+    await engine.play(drumsOnly(arrRef.current));
     setPlaying(true);
   }, []);
   const stop = useCallback(() => {
@@ -78,7 +87,7 @@ export function useSequencer() {
     [set],
   );
 
-  return { arr, ready, playing, currentChord, canUndo, set, update, snapshot, undo, play, stop, setBpm };
+  return { arr, ready, playing, playMode, currentChord, canUndo, set, update, snapshot, undo, play, playDrums, stop, setBpm };
 }
 
 /** Calls `onFrame(ticks)` every animation frame while playing (for the playhead and counter). */

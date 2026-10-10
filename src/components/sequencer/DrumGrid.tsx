@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
-import { ChevronLeft, ChevronRight, Trash2, Upload, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Play, Square, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -29,12 +29,16 @@ const LABEL_W = 132;
 interface Props {
   arr: Arrangement;
   playing: boolean;
+  /** Is the drum pattern playing on its own (vs the whole arrangement)? */
+  drumsOnly?: boolean;
+  onPlayDrums?: () => void;
+  onStop?: () => void;
   set: (fn: (a: Arrangement) => Arrangement) => void;
   update: (fn: (a: Arrangement) => Arrangement) => void;
   snapshot: () => void;
 }
 
-export function DrumGrid({ arr, playing, set, update, snapshot }: Props) {
+export function DrumGrid({ arr, playing, drumsOnly = false, onPlayDrums, onStop, set, update, snapshot }: Props) {
   const p = arr.drums;
   const steps = patternSteps(arr.ts, p);
   const perBar = arr.ts.beats * p.stepsPerBeat;
@@ -104,6 +108,17 @@ export function DrumGrid({ arr, playing, set, update, snapshot }: Props) {
     <section className="panel space-y-3 p-3 sm:p-4" aria-label="Drums">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h2 className="font-display text-sm font-semibold uppercase tracking-widest">Drums</h2>
+        {onPlayDrums && onStop ? (
+          playing && drumsOnly ? (
+            <Button size="sm" className="h-8 gap-1.5" onClick={onStop} aria-label="Stop drums" data-testid="drums-play">
+              <Square className="h-3.5 w-3.5 fill-current" /> Stop
+            </Button>
+          ) : (
+            <Button size="sm" className="h-8 gap-1.5" onClick={onPlayDrums} aria-label="Play drums" data-testid="drums-play" title="Loop the drum pattern on its own">
+              <Play className="h-3.5 w-3.5 fill-current" /> Play drums
+            </Button>
+          )
+        ) : null}
         <div className="flex items-center gap-1">
           <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Pattern</span>
           <Button size="sm" variant="secondary" className="h-8 w-8 p-0" disabled={p.measures <= 1} onClick={() => setPattern({ measures: p.measures - 1 })} aria-label="Shorter pattern">−</Button>

@@ -118,7 +118,7 @@ function SequencerPage() {
         {selected ? (
           <ChordInspector arr={arr} chord={selected} grid={grid} armed={armed} update={seq.update} onSelect={setSelectedId} onPreview={preview} />
         ) : null}
-        <DrumGrid arr={arr} playing={playing} set={seq.set} update={seq.update} snapshot={seq.snapshot} />
+        <DrumGrid arr={arr} playing={playing} drumsOnly={seq.playMode === "drums"} onPlayDrums={() => void seq.playDrums()} onStop={seq.stop} set={seq.set} update={seq.update} snapshot={seq.snapshot} />
         <SequenceLibrary arr={arr} update={seq.update} onLoaded={() => setSelectedId(null)} />
       </main>
     </AppShell>

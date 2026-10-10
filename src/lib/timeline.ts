@@ -210,6 +210,9 @@ export interface Arrangement {
 
 export const arrangementTicks = (a: Pick<Arrangement, "measures" | "ts">) => a.measures * measureTicks(a.ts);
 
+/** Just the drum pattern, looping on its own (no chords, no count-in): the drum section's Play. */
+export const drumsOnly = (a: Arrangement): Arrangement => ({ ...a, chords: [], measures: Math.max(1, a.drums.measures), countIn: 0, loop: true });
+
 export type ScheduledEvent =
   | { kind: "chord"; tick: number; duration: number; midis: number[]; velocity: number; chordId: string }
   | { kind: "drum"; tick: number; duration: number; laneId: string; voice: DrumVoice; velocity: number }

@@ -7,6 +7,7 @@ import {
   chordAt,
   chordMidis,
   describeLength,
+  drumsOnly,
   emptyArrangement,
   fromBarBeat,
   gridTicks,
@@ -137,6 +138,16 @@ describe("scheduleArrangement", () => {
     expect(kicks).toEqual([0, 60 * (PPQ / 4), four, four + 60 * (PPQ / 4)]);
     const short = scheduleArrangement({ ...a, measures: 2 }).filter((e) => e.kind === "drum");
     expect(short.map((e) => e.tick)).toEqual([0]); // step 60 is in bar 4: past a 2-bar arrangement
+  });
+  test("drums only: the pattern on its own, one pattern long, looping, no chords or count-in", () => {
+    const a = arr({ measures: 8, countIn: 2, loop: false, chords: [chord("x", 0, PPQ * 4)] });
+    a.drums = { ...a.drums, measures: 2, stepsPerBeat: 4, lanes: a.drums.lanes.map((l, i) => (i === 0 ? { ...l, hits: [{ step: 0, velocity: 1 }, { step: 20, velocity: 1 }] } : l)) };
+    const d = drumsOnly(a);
+    expect([d.measures, d.countIn, d.loop, d.chords.length]).toEqual([2, 0, true, 0]);
+    const ev = scheduleArrangement(d, { countIn: true }).filter((e) => e.kind !== "click");
+    expect(ev.every((e) => e.kind === "drum")).toBe(true);
+    expect(ev.map((e) => e.tick)).toEqual([0, 20 * (PPQ / 4)]);
+    expect(a.chords.length).toBe(1); // the arrangement itself is untouched
   });
   test("drum pattern steps follow the time signature (7/8, triplet grid)", () => {
     const a = arr({ measures: 1, ts: ts(7, 8) });
