@@ -117,10 +117,7 @@ function evaluate(
   const span = fretted.length ? maxFret - minFret : 0;
   if (span > o.maxSpan) return null;
 
-  // Finger count: notes at the lowest fret can be barred.
-  const atMin = fretted.filter((f) => f === minFret).length;
-  const fingers = atMin >= 2 ? fretted.length - atMin + 1 : fretted.length;
-  if (fingers > 4) return null;
+  if (fingersNeeded(cur) > 4) return null;
 
   return {
     shape: [...cur],
@@ -131,6 +128,37 @@ function evaluate(
     omitted: [...set].filter((p) => !present.has(p)),
   };
 }
+
+/**
+ * How many fretting fingers a shape needs (Infinity when it can't be held). One finger may barre
+ * the lowest fret across a run of strings — but a barre presses every string it lies across, so
+ * the run can't include an open or muted string (an F barre can't leave the B string open).
+ * Strings fretted higher inside the run are fine: those fingers sit above the barre.
+ */
+export function fingersNeeded(shape: readonly (number | null)[]): number {
+  const fretted = shape.map((f, i) => ({ f, i })).filter((x): x is { f: number; i: number } => x.f !== null && x.f > 0);
+  if (!fretted.length) return 0;
+  let best = fretted.length; // no barre: one finger per fretted note
+  const minFret = Math.min(...fretted.map((x) => x.f));
+  const atMin = fretted.filter((x) => x.f === minFret).map((x) => x.i);
+  // Try every barre from one lowest-fret string to another.
+  for (let a = 0; a < atMin.length; a++)
+    for (let b = a + 1; b < atMin.length; b++) {
+      const lo = atMin[a]!, hi = atMin[b]!;
+      let ok = true;
+      for (let s = lo; s <= hi; s++) {
+        const f = shape[s];
+        if (f === null || f === undefined || f < minFret) ok = false; // open or muted under the barre
+      }
+      if (!ok) continue;
+      const underBarre = fretted.filter((x) => x.i >= lo && x.i <= hi && x.f === minFret).length;
+      best = Math.min(best, 1 + fretted.length - underBarre);
+    }
+  return best;
+}
+
+/** A shape that can't be held with four fingers (and an optional barre). */
+export const isImpossibleShape = (shape: readonly (number | null)[]) => fingersNeeded(shape) > 4;
 
 export function shapeToTab(shape: Shape): string {
   const wide = shape.some((f) => f !== null && f > 9);

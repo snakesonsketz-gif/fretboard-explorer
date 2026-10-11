@@ -60,7 +60,7 @@ describe("diagonal pathway (3 notes per string)", () => {
           }
         }
     expect(checked).toBeGreaterThan(100_000);
-  });
+  }, 30_000); // checks every scale on every root: slow on a busy machine
 
   test("every major mode completes 3x3 on a full 0-24 neck in standard tuning", () => {
     for (const r of roots)

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ImpossibleList } from "@/components/develop/ImpossibleList";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Download, FileAudio, FolderInput, Mic, Square, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -259,6 +260,7 @@ function DevelopPage() {
   return (
     <AppShell>
       <main className="mx-auto max-w-5xl space-y-4 px-3 py-4 sm:px-4">
+        <ImpossibleList />
         <GuidedSession rec={rec} player={player} takes={takes} measured={measured} onSave={(t, st) => add(t, st)} onConfirm={confirmTake} onExport={() => void exportAll()} />
 
         <section className="panel space-y-4 p-3 sm:p-4" aria-label="Record your own take">

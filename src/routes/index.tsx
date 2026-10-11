@@ -23,6 +23,8 @@ import { AdvancedTheory } from "@/components/TheoryPanels";
 import { SongWorkspace } from "@/components/SongWorkspace";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { analyzeShape, findVoicings, shapeMidis, shapeToTab, type Shape } from "@/lib/voicings";
+import { isMarkedImpossible, loadImpossible, markImpossible, type ImpossibleShape } from "@/lib/impossible";
+import { useDevMode } from "@/lib/devMode";
 import { voicingTab, type SlotVoicing } from "@/lib/song";
 
 /** Identity of a chord independent of how its degrees are ordered (for re-showing a saved shape). */
@@ -371,9 +373,19 @@ function Workstation() {
 
   const [bassMode, setBassMode] = useState<"root" | "any">("root");
   const [shapeIdx, setShapeIdx] = useState<number | null>(null);
+  const dev = useDevMode();
+  // Shapes marked "impossible" in developer mode are never suggested again.
+  const [impossible, setImpossible] = useState<ImpossibleShape[]>([]);
+  useEffect(() => {
+    const load = () => setImpossible(loadImpossible());
+    load();
+    window.addEventListener("fretlab-impossible", load);
+    return () => window.removeEventListener("fretlab-impossible", load);
+  }, []);
+  const [impNote, setImpNote] = useState<string | null>(null);
   const voicings = useMemo(
     () =>
-      degrees.length <= tuning.strings.length
+      (degrees.length <= tuning.strings.length
         ? findVoicings({
             tuning,
             rootPc: root.pc,
@@ -382,10 +394,10 @@ function Workstation() {
             fretTo,
             bass: bassMode,
             maxSpan: 3,
-            limit: 24,
-          })
-        : [],
-    [tuning, root.pc, degrees, fretFrom, fretTo, bassMode],
+            limit: 30,
+          }).filter((v) => !isMarkedImpossible(impossible, v.shape, tuning.id)).slice(0, 24)
+        : []),
+    [tuning, root.pc, degrees, fretFrom, fretTo, bassMode, impossible],
   );
   useEffect(() => setShapeIdx(null), [voicings]);
   // A shape brought back from a saved chord or a song chord stays shown while that chord is on
@@ -886,7 +898,27 @@ function Workstation() {
                 <Button size="sm" variant={bassMode === "root" ? "default" : "secondary"} onClick={() => setBassMode("root")}>Root in bass</Button>
                 <Button size="sm" variant={bassMode === "any" ? "default" : "secondary"} onClick={() => setBassMode("any")}>Inversions too</Button>
                 {shape ? <Button size="sm" variant="ghost" onClick={() => { setShapeIdx(null); setPin(null); }}>Show all notes</Button> : null}
+                {dev && shape ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="border-2 font-bold hover:bg-red-500/15"
+                    style={{ borderColor: "#ef4444", color: "#fca5a5" }}
+                    data-testid="impossible-chord"
+                    title="Developer mode: this shape can't actually be played — never suggest it again (listed in Develop)"
+                    onClick={() => {
+                      markImpossible(shape, tuning.id, title);
+                      setImpNote(`Marked ${shapeToTab(shape)} (${pretty(title)}) as impossible — it won't be suggested again. It's listed in the Develop tab.`);
+                      window.setTimeout(() => setImpNote(null), 4000);
+                      setShapeIdx(null);
+                      setPin(null);
+                    }}
+                  >
+                    Impossible chord
+                  </Button>
+                ) : null}
               </div>
+              {impNote ? <p role="status" className="rounded-md bg-red-500/15 px-2 py-1 text-xs font-semibold text-red-300" data-testid="impossible-note">{impNote}</p> : null}
               <div className="flex flex-wrap gap-1.5">
                 {voicings.length === 0 ? (
                   <span className="text-sm text-muted-foreground">No 4-finger shape found here — widen the fret range or allow inversions.</span>
