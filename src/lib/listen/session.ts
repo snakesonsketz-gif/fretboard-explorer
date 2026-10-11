@@ -5,7 +5,7 @@
  * Pure logic over a read() source, so it is tested by streaming synthetic guitar through it.
  */
 import { dbfs, hfFloor, detectOnsets, onsetLookahead, rms, spectrumOf } from "./dsp";
-import { BUZZ_MIN_RING, THRESHOLDS, judgeStrum, measureStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
+import { BUZZ_MIN_RING, THRESHOLDS, judgeStrum, looksLikeNoise, measureStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
 
 export interface AudioSource {
   sampleRate: number;
@@ -149,7 +149,8 @@ export class ListenSession {
       });
       s.report = judgeStrum(s.measure, s.target, this.thresholds);
       s.final = done;
-      if (first && this.ignore?.(s, s.report)) s.target = null;
+      // A knock, squeak or voice isn't a strum: drop it the first time it's judged.
+      if (first && (looksLikeNoise(s.measure) || this.ignore?.(s, s.report))) s.target = null;
       changed.add(s);
     });
     this.strums = this.strums.filter((s) => s.target !== null || !s.report);

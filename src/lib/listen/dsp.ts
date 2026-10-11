@@ -520,7 +520,7 @@ function refineOnset(x: Float32Array, hp: Float32Array, sr: number, a: number, b
 }
 
 export interface RingProfile {
-  /** Seconds until the overall level fell 20 dB below its peak (or `end` was reached). */
+  /** Seconds until the overall level fell 20 dB below the strum's body, 0.1 s past its peak (or `end` was reached). */
   seconds: number;
   /** True if it was still ringing when the next strum / end came. */
   stillRinging: boolean;
@@ -537,7 +537,14 @@ export function ringProfile(x: Float32Array, sr: number, onset: number, end: num
   for (let i = onset; i + hop <= Math.min(end, x.length); i += hop) env.push(rms(x, i, i + hop));
   const peak = Math.max(1e-9, ...env.slice(0, 10));
   const peakIdx = env.indexOf(peak);
-  let dropAt = env.findIndex((v, i) => i > peakIdx && v < peak * 0.1);
+  // Ring-out is counted from the strum's body, 0.1 s past the loudest moment: a hard strum's first
+  // spike (Bradley's G5 power chords, Oct 2026) is 4–6 dB over the ringing chord and fell 20 dB
+  // under it in 0.9 s while the chord kept sounding for over two. A sound that has already dropped
+  // 20 dB by then (a chug, a scratch) is short however it's counted.
+  const bodyIdx = peakIdx + 5;
+  const early = env.findIndex((v, i) => i > peakIdx && i <= bodyIdx && v < peak * 0.1);
+  const ref = early < 0 && bodyIdx < env.length ? env[bodyIdx]! : peak;
+  let dropAt = early >= 0 ? early : env.findIndex((v, i) => i > (ref === peak ? peakIdx : bodyIdx) && v < ref * 0.1);
   const stillRinging = dropAt < 0;
   if (dropAt < 0) dropAt = env.length;
 

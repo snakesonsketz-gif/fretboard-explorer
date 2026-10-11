@@ -32,7 +32,7 @@ export const THRESHOLDS = {
   // iPhone (Oct 2026): 76 clean strums -87…-70, buzzing strums -71…-63.
   buzzSome: -69,
   buzzStrong: -64,
-  buzzAboveRoom: 12, // the hiss must be this far (dB) above the room's to be the guitar's (soft clean strum: +9.9, buzz: ≥ +16)
+  buzzAboveRoom: 15, // the hiss must be this far (dB) above the room's to be the guitar's (soft clean strum: +9.9, phone across the room: +13.7, buzz: ≥ +16)
   // A note that stops this soon while the chord rings on was deadened (and must also be far under
   // the loudest note 0.3 s in, see deadNotes). Real guitar: muted strings stop by ~0.25 s.
   deadNoteSeconds: 0.5,
@@ -146,6 +146,20 @@ export interface StrumMeasure {
   expectedSeconds?: number;
   complete: boolean;
 }
+
+/**
+ * Not a strum at all: a knock on the body, a hand squeaking along the neck, a clap, a voice. Seen in
+ * Bradley's "no strums" recordings (Oct 2026): quiet (under −35 dBFS), the chord's notes only faintly
+ * there (the strings ringing along) and other sound on top of them. Real strums — even soft ones or
+ * from across the room — have their notes clearly on top. A different chord played instead would
+ * swamp the expected notes (extras at or above them), so it's still heard as a strum.
+ */
+export function looksLikeNoise(m: Pick<StrumMeasure, "peakDb" | "chord">): boolean {
+  const extra = Math.max(0, ...m.chord.extras.map((e) => e.strength));
+  return m.peakDb < NOISE_MAX_DB && m.chord.topSalience < NOISE_MAX_SALIENCE && extra >= 0.2 && extra < 0.9;
+}
+const NOISE_MAX_DB = -35;
+const NOISE_MAX_SALIENCE = 6.5;
 
 /** Seconds a strum must ring on its own (no other attack) for buzz to be judged. */
 export const BUZZ_MIN_RING = 0.5;

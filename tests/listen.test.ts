@@ -270,3 +270,24 @@ describe("Listen: non-stop strumming", () => {
     expect(s.strums.every((x) => x.report!.clarity.verdict !== "unsure")).toBe(true);
   });
 });
+
+describe("Listen: Bradley's 'no strums' recordings (iPhone, round 3)", () => {
+  const { looksLikeNoise } = require("../src/lib/listen/score") as typeof import("../src/lib/listen/score");
+  const m = (peakDb: number, topSalience: number, extras: number[]) =>
+    ({ peakDb, chord: { target: [], extras: extras.map((strength, i) => ({ pc: i, midi: 60 + i, strength })), tuningCents: 0, topSalience } }) as Parameters<typeof looksLikeNoise>[0];
+  test("knocks, squeaks, claps and voices aren't strums", () => {
+    // Measured on his takes: hand noises holding G, a clap, putting a cup down.
+    expect(looksLikeNoise(m(-46.9, 3.9, [0.75, 0.5]))).toBe(true);
+    expect(looksLikeNoise(m(-47.3, 1.5, [0.21, 0.16]))).toBe(true);
+    expect(looksLikeNoise(m(-36.9, 4.3, [0.79, 0.7]))).toBe(true);
+    expect(looksLikeNoise(m(-50.9, 2.2, [0.48, 0.45]))).toBe(true);
+  });
+  test("real strums stay strums: soft, across the room, a wrong chord, muted scratches", () => {
+    expect(looksLikeNoise(m(-45.6, 6.6, [0.06, 0.05]))).toBe(false); // soft C
+    expect(looksLikeNoise(m(-43.1, 9.7, []))).toBe(false); // G with the phone across the room
+    expect(looksLikeNoise(m(-38.5, 10.6, [0.63]))).toBe(false); // small F with the high E open (wrong note)
+    expect(looksLikeNoise(m(-35.3, 5.1, [0.17]))).toBe(false); // a fast, light G
+    expect(looksLikeNoise(m(-24.8, 4.3, [0.38, 0.31]))).toBe(false); // a muted scratch: loud
+    expect(looksLikeNoise(m(-42, 2.0, [1.4, 1.2]))).toBe(false); // a different chord altogether
+  });
+});
