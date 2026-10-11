@@ -103,7 +103,7 @@ describe("Develop: the guided recording plan is musically right", () => {
       const chord = new Set(pcsOf(step.target));
       const notes = tabMidis(step.tab).map((m, s) => ({ s, pc: m === null ? null : m % 12 })).filter((n) => n.pc !== null);
       const off = notes.filter((n) => !chord.has(n.pc!)).map((n) => n.s);
-      if (step.label === "wrong-note") {
+      if (step.label === "wrong-note" || step.wrong) {
         expect(step.wrong?.length).toBeGreaterThan(0);
         expect(off).toEqual(step.wrong!); // exactly the strings marked wrong are outside the chord
       } else expect(off).toEqual([]); // every played note belongs to the chord
@@ -125,7 +125,7 @@ describe("Develop: the guided recording plan is musically right", () => {
     }
   });
   test("rounds: every step in exactly one round, ids unique across rounds", () => {
-    expect(ROUNDS.map((r) => r.round)).toEqual([1, 2, 3]);
+    expect(ROUNDS.map((r) => r.round)).toEqual([1, 2, 3, 4]);
     expect(ROUNDS[0]!.steps.length).toBe(21); // round 1 unchanged: Bradley's recordings still match it
     expect(ROUNDS.reduce((a, r) => a + r.steps.length, 0)).toBe(PLAN.length);
   });

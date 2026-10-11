@@ -1,6 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ImpossibleList } from "@/components/develop/ImpossibleList";
 import { useTabActive } from "@/lib/tabActive";
+import { analyseAsync } from "@/lib/listen/analyseAsync";
+import { clearDraft, loadDraft } from "@/lib/listen/drafts";
+import { PLAN as GUIDED_PLAN } from "@/lib/listen/collectPlan";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Download, FileAudio, FolderInput, Mic, Square, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -87,16 +90,64 @@ export function DevelopPage() {
     const t = loadTuning();
     setT(t.values);
     setUseInListen(t.useInListen);
-    void listTakes().then(setTakes);
+    void listTakes().then(async (list) => {
+      setTakes(list);
+      // A recording the page never finished saving (it was closed, crashed or reloaded right after
+      // Done): its audio was kept on the device while it recorded — turn it back into a take.
+      const d = await loadDraft().catch(() => null);
+      if (!d) return;
+      const step = d.meta.step ? GUIDED_PLAN.find((p) => p.id === d.meta.step) : undefined;
+      const already = list.some((t) => t.at >= d.meta.startedAt && (!step || t.step === step.id));
+      if (already || d.pcm.length < d.meta.sampleRate) return void clearDraft();
+      const audio = new Float32Array(d.pcm.length);
+      for (let i = 0; i < audio.length; i++) audio[i] = d.pcm[i]! / 32768;
+      let pcm = d.pcm, roomHf: number | undefined;
+      try {
+        const tr = trimSilence(audio, d.meta.sampleRate);
+        if (tr) {
+          pcm = toPcm(tr.audio);
+          roomHf = tr.roomHf;
+        }
+      } catch {
+        /* keep it untrimmed */
+      }
+      const info = d.meta.info as { label?: TakeLabel; target?: Take["target"]; note?: string };
+      const t: Take = {
+        id: newTakeId(),
+        at: d.meta.startedAt,
+        target: step?.target ?? info.target ?? { rootName: "G", degrees: ["1", "3", "5"], label: "G" },
+        label: step?.label ?? info.label ?? "other",
+        note: step?.title ?? info.note ?? "Recovered recording",
+        sampleRate: d.meta.sampleRate,
+        pcm,
+        ...(roomHf !== undefined ? { roomHf } : {}),
+        originalSeconds: +(d.pcm.length / d.meta.sampleRate).toFixed(2),
+        source: "mic",
+        device: deviceLabel(),
+        ...(step ? { step: step.id, tab: step.tab, expected: step.strums } : {}),
+      };
+      if (await saveTakeVerified(t)) {
+        await clearDraft();
+        setTakes((ts) => [t, ...ts]);
+        setMsg(`Recovered your last recording${step ? ` (“${step.title}”)` : ""} — the app closed before it was saved. Check it below.`);
+      }
+    });
     setMounted(true);
   }, []);
 
-  // Measure each take once (thresholds don't change measurements), one at a time.
+  // Measure each take once (thresholds don't change measurements), one at a time, in the
+  // background so the page never freezes while it works.
+  const measuring = useRef(false);
   useEffect(() => {
+    if (measuring.current) return;
     const todo = takes.find((t) => !measured.has(t.id));
     if (!todo) return;
-    const id = window.setTimeout(() => setMeasured((m) => new Map(m).set(todo.id, safeAnalyse(todo).strums)), 30);
-    return () => window.clearTimeout(id);
+    measuring.current = true;
+    void analyseAsync(todo).then((r) => {
+      measuring.current = false;
+      if (r.error) setMsg(`Couldn't analyse a take (${r.error}) — it's saved; download it and send it to Vix.`);
+      setMeasured((m) => new Map(m).set(todo.id, r.strums));
+    });
   }, [takes, measured]);
 
   const reports = useMemo(() => {
@@ -158,11 +209,19 @@ export function DevelopPage() {
   const record = () => {
     setMsg(null);
     rec.start((r) => {
-      if (!r) return setMsg("That take was too short to keep.");
+      if (!r) {
+        void clearDraft();
+        return setMsg("That take was too short to keep.");
+      }
       const a = trimmed(r.audio, r.sampleRate);
-      if (!a) return setMsg("No strums heard in that take — strum firmly, with the phone close to the guitar.");
-      void add({ id: newTakeId(), at: Date.now(), target, label, note: note.trim(), ...a, source: "mic", device: deviceLabel() });
-    });
+      if (!a) {
+        void clearDraft();
+        return setMsg("No strums heard in that take — strum firmly, with the phone close to the guitar.");
+      }
+      void add({ id: newTakeId(), at: Date.now(), target, label, note: note.trim(), ...a, source: "mic", device: deviceLabel() }).then((ok) => {
+        if (ok) void clearDraft();
+      });
+    }, { draft: { label, target, note: note.trim() } });
   };
 
   const addFiles = async (files: FileList | null) => {

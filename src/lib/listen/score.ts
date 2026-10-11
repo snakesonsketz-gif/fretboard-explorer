@@ -66,6 +66,8 @@ export interface StrumReport {
   clarity: { score: number | null; verdict: Verdict; buzz: "none" | "some" | "strong" | "unknown"; dead: string[]; summary: string };
   ringOut: { seconds: number; untilNext: boolean; verdict: Verdict; short: { name: string; seconds: number }[]; summary: string };
   timing: { offsetMs: number | null; verdict: Verdict; summary: string };
+  /** How it was played: let ring, palm-muted, a choked chop or a muted scratch. */
+  technique: Technique;
 }
 
 const pcName = (root: string, pc: number) => {
@@ -142,6 +144,8 @@ export interface StrumMeasure {
   roomFloor?: number;
   /** The note check saw this strum alone (≥ 0.2 s, no other attack); else extras are only "maybe". */
   clearLook: boolean;
+  /** How the strum was played: palm-muted, choked (a reggae chop), scratched or let ring. */
+  feel: StrumFeel;
   offsetMs: number | null;
   expectedSeconds?: number;
   complete: boolean;
@@ -163,6 +167,63 @@ const NOISE_MAX_SALIENCE = 6.5;
 
 /** Seconds a strum must ring on its own (no other attack) for buzz to be judged. */
 export const BUZZ_MIN_RING = 0.5;
+
+/**
+ * The sound's shape, for telling playing styles apart. On Bradley's iPhone (Oct 2026):
+ * - palm-muted chugs keep their notes but lose their highs fast — brightness 0.25 s in about
+ *   −38 to −46 dB, where the same power chord let ring stays near −18 to −26 dB;
+ * - a muted scratch (no notes) falls 30–40 dB in its first 0.2 s, a let-ring strum 2–13 dB.
+ * A reggae chop is a short, choked chord: notes at the start, then gone like a scratch.
+ */
+export interface StrumFeel {
+  /** Level 0.2 s after the attack against the attack (dB, positive = quieter); null if the next strum came first. */
+  dropDb: number | null;
+  /** 0.8–4 kHz against 60–400 Hz (dB), just after the attack and 0.25 s later (null if cut short). */
+  brightEarlyDb: number;
+  brightLateDb: number | null;
+}
+export type Technique = "open" | "palm-mute" | "chop" | "scratch";
+export const TECHNIQUE_NAME: Record<Technique, string> = { open: "let ring", "palm-mute": "palm-muted", chop: "chop (choked)", scratch: "muted scratch" };
+
+const PALM_BRIGHT_LATE = -32; // dB
+const PALM_DARKENS = -12; // dB from just after the attack to 0.25 s
+const CHOP_DROP = 20; // dB in 0.2 s
+
+function bandRatioDb(audio: Float32Array, sr: number, from: number, to: number): number | null {
+  const N = 4096;
+  if (to - from < N / 2) return null;
+  const w = new Float32Array(N);
+  w.set(audio.subarray(from, Math.min(to, from + N)));
+  const sp = spectrumOf(w, sr), binHz = sr / N;
+  const band = (lo: number, hi: number) => {
+    let e = 0;
+    for (let k = Math.ceil(lo / binHz); k <= Math.min(sp.mags.length - 1, Math.floor(hi / binHz)); k++) e += sp.mags[k]! * sp.mags[k]!;
+    return e;
+  };
+  return 10 * Math.log10((band(800, 4000) + 1e-20) / (band(60, 400) + 1e-20));
+}
+
+function measureFeel(audio: Float32Array, sr: number, onset: number, end: number): StrumFeel {
+  const hop = Math.round(0.01 * sr);
+  let peak = 1e-9;
+  for (let i = onset; i < Math.min(end, onset + Math.round(0.08 * sr)); i += hop) peak = Math.max(peak, rms(audio, i, i + hop));
+  const at = onset + Math.round(0.2 * sr);
+  const dropDb = at + 2 * hop <= end ? dbfs(peak) - dbfs(rms(audio, at, at + 2 * hop)) : null;
+  const early = onset + Math.round(0.04 * sr), late = onset + Math.round(0.25 * sr);
+  return { dropDb, brightEarlyDb: bandRatioDb(audio, sr, early, end) ?? 0, brightLateDb: bandRatioDb(audio, sr, late, end) };
+}
+
+/**
+ * How the strum was played. Provisional rules from round 3 (one take of palm-muted chugs, three
+ * scratches); round 4 records palm muting and reggae chops properly to tune them.
+ */
+export function techniqueOf(m: Pick<StrumMeasure, "feel" | "chord">): Technique {
+  const { dropDb, brightEarlyDb, brightLateDb } = m.feel;
+  const notes = m.chord.topSalience >= 6;
+  if (dropDb !== null && dropDb >= CHOP_DROP) return notes ? "chop" : "scratch";
+  if (brightLateDb !== null && (brightLateDb <= PALM_BRIGHT_LATE || brightLateDb - brightEarlyDb <= PALM_DARKENS)) return notes || brightEarlyDb < PALM_BRIGHT_LATE + 10 ? "palm-mute" : "scratch";
+  return "open";
+}
 
 export function measureStrum(input: StrumInput): StrumMeasure {
   const { audio, sr, onset, end, target } = input;
@@ -215,6 +276,7 @@ export function measureStrum(input: StrumInput): StrumMeasure {
     hfFloor: hfFloor(spec),
     hfRelDb: alone ? hfRelDb(spec) : null,
     clearLook,
+    feel: measureFeel(audio, sr, onset, end),
     ...(input.roomFloor !== undefined ? { roomFloor: input.roomFloor } : {}),
     offsetMs: input.offsetMs ?? null,
     ...(input.expectedSeconds !== undefined ? { expectedSeconds: input.expectedSeconds } : {}),
@@ -354,6 +416,7 @@ export function judgeStrum(m: StrumMeasure, target: TargetChord, T: Thresholds =
     clarity: { score: clarScore, verdict: clarVerdict, buzz, dead, summary: clarSummary },
     ringOut: { seconds: ring.seconds, untilNext, verdict: ringVerdict, short: shortNotes, summary: ringSummary },
     timing: { offsetMs: off, verdict: timingVerdict, summary: timingSummary },
+    technique: techniqueOf(m),
   };
 }
 

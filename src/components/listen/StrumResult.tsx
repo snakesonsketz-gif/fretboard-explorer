@@ -1,5 +1,5 @@
 import { pretty } from "@/lib/theory";
-import type { StrumReport, Verdict } from "@/lib/listen/score";
+import { TECHNIQUE_NAME, type StrumReport, type Verdict } from "@/lib/listen/score";
 import { cn } from "@/lib/utils";
 import { verdictClass, verdictText } from "./verdicts";
 
@@ -59,6 +59,9 @@ export function StrumResult({ report, label }: { report: StrumReport; label: str
         </Tile>
       </div>
       <p className="text-[11px] text-muted-foreground">
+        {r.technique && r.technique !== "open" ? (
+          <span className="mr-1 rounded bg-primary/15 px-1.5 py-0.5 font-semibold text-primary" data-testid="technique">Played: {TECHNIQUE_NAME[r.technique]}</span>
+        ) : null}
         {pretty(label)} · {Math.abs(r.tuningCents) >= 8 ? `guitar about ${Math.abs(Math.round(r.tuningCents))} cents ${r.tuningCents < 0 ? "flat" : "sharp"} · ` : "in tune · "}
         <span title="Hover a note for details">✓ heard · ✕ missing · ? couldn't tell (not counted) · – optional</span>
       </p>

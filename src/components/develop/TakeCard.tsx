@@ -3,6 +3,7 @@ import { ChevronDown, Download, Play, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { StrumReport, Thresholds, Verdict } from "@/lib/listen/score";
+import { TECHNIQUE_NAME } from "@/lib/listen/score";
 import { TAKE_LABELS, verdictFor, type Take, type TakeLabel, type TakeStrum } from "@/lib/listen/takes";
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
@@ -96,7 +97,7 @@ export function TakeCard({ take, strums, reports, T, playing, onPlay, onStop, on
                   <div className="mt-1 space-y-1.5 pl-1">
                     <div className="flex items-center gap-2">
                       <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => onPlay(Math.max(0, s.time - 0.1))}><Play className="h-3 w-3" /> Hear this strum</Button>
-                      <span className="text-[11px] text-muted-foreground">{r.accuracy.summary} {r.clarity.summary}</span>
+                      <span className="text-[11px] text-muted-foreground">Played: {TECHNIQUE_NAME[r.technique]} · {r.accuracy.summary} {r.clarity.summary}</span>
                     </div>
                     <StrumDetail m={s.measure} r={r} target={take.target} T={T} />
                   </div>

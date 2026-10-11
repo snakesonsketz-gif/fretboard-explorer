@@ -98,7 +98,7 @@ describe("Listen: up-strums", () => {
           flagged += r.accuracy.notes.filter((n) => n.status === "missing").length + r.accuracy.extras.filter((e) => e.status === "wrong").length + r.clarity.dead.length + (r.clarity.buzz === "some" || r.clarity.buzz === "strong" ? 1 : 0);
         }
     expect(flagged).toBe(0);
-  });
+  }, 30_000); // many synthetic strums: slow on a busy machine
   test("down-up strumming: every down-strum and nearly every up-strum is counted, nothing extra", () => {
     let found = 0, total = 0, extra = 0;
     for (let seed = 1; seed <= 6; seed++) {
@@ -289,5 +289,23 @@ describe("Listen: Bradley's 'no strums' recordings (iPhone, round 3)", () => {
     expect(looksLikeNoise(m(-35.3, 5.1, [0.17]))).toBe(false); // a fast, light G
     expect(looksLikeNoise(m(-24.8, 4.3, [0.38, 0.31]))).toBe(false); // a muted scratch: loud
     expect(looksLikeNoise(m(-42, 2.0, [1.4, 1.2]))).toBe(false); // a different chord altogether
+  });
+});
+
+describe("Listen: how a strum was played (palm mute, chop, scratch, let ring)", () => {
+  const { techniqueOf } = require("../src/lib/listen/score") as typeof import("../src/lib/listen/score");
+  const t = (dropDb: number | null, brightEarlyDb: number, brightLateDb: number | null, topSalience: number) =>
+    techniqueOf({ feel: { dropDb, brightEarlyDb, brightLateDb }, chord: { target: [], extras: [], tuningCents: 0, topSalience } });
+  test("Bradley's round 3: palm-muted E5 chugs, G5 let ring, muted scratches", () => {
+    expect(t(8.5, -21.1, -44.0, 8)).toBe("palm-mute");
+    expect(t(13.3, -25.7, -38.7, 8)).toBe("palm-mute");
+    expect(t(10.5, -21.1, -24.5, 9)).toBe("open");
+    expect(t(9.9, -15.7, -18.0, 9)).toBe("open");
+    expect(t(31.8, -13.5, -20.5, 4.3)).toBe("scratch");
+  });
+  test("a chop is a chord that stops at once; a palm too heavy is a dark thud", () => {
+    expect(t(26, -12, -30, 9)).toBe("chop");
+    expect(t(12, -30, -45, 3)).toBe("palm-mute");
+    expect(t(null, -12, null, 9)).toBe("open"); // the next strum came too soon to tell
   });
 });

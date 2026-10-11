@@ -12,13 +12,15 @@ import { judgeStrum, type StrumMeasure, type StrumReport, type TargetChord, type
 import { ListenSession, type AudioSource } from "./session";
 import { PLAN } from "./collectPlan";
 
-export type TakeLabel = "clean" | "wrong-note" | "muted" | "buzz" | "noise" | "other";
+export type TakeLabel = "clean" | "wrong-note" | "muted" | "buzz" | "palm-mute" | "chop" | "noise" | "other";
 
 export const TAKE_LABELS: { id: TakeLabel; name: string; hint: string }[] = [
   { id: "clean", name: "Clean", hint: "Played the chord right — Fretlab should find nothing wrong." },
   { id: "wrong-note", name: "Wrong note", hint: "Fretted a note that isn't in the chord on purpose." },
   { id: "muted", name: "Muted string", hint: "Touched or muted a string so a chord note is missing or dies." },
   { id: "buzz", name: "Buzz", hint: "Pressed lightly or behind the fret so a string buzzes." },
+  { id: "palm-mute", name: "Palm-muted", hint: "Strummed with the side of the hand resting on the strings by the bridge — short, dark chugs that keep their notes." },
+  { id: "chop", name: "Chop (reggae)", hint: "A short, choked chord: strummed, then the fretting hand lets go so it stops at once." },
   { id: "noise", name: "Not a strum", hint: "Sounds that aren't strums (knocks, squeaks, talking) — Fretlab should count nothing." },
   { id: "other", name: "Other", hint: "Anything else — not counted in the scorecard." },
 ];
@@ -298,6 +300,12 @@ export function verdictFor(label: TakeLabel, r: StrumReport): { result: "good" |
     case "buzz":
       if (r.clarity.buzz === "some" || r.clarity.buzz === "strong") return { result: "good" };
       return r.clarity.buzz === "unknown" ? { result: "unsure", why: "room too noisy" } : { result: "bad" };
+    case "palm-mute":
+      if (r.technique === "palm-mute") return { result: "good" };
+      return { result: "bad", why: r.technique === "open" ? "rang open" : r.technique === "scratch" ? "no notes (too heavy)" : "choked, not muted" };
+    case "chop":
+      if (r.technique === "chop") return r.accuracy.extras.some((e) => e.status === "wrong") ? { result: "bad", why: "extra note" } : { result: "good" };
+      return { result: "bad", why: r.technique === "open" ? "rang on (not choked)" : r.technique === "scratch" ? "no notes" : "palm-muted, not choked" };
     default:
       return { result: "unsure" };
   }

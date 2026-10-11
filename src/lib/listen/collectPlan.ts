@@ -136,12 +136,52 @@ const ROUND_3 = [
   { id: "r3-music-c", label: "clean", target: C, tab: "x32010", strums: 4, title: "Open C — with music playing", how: `Play some music quietly in the room (another phone or a speaker, not loud), then play clean C. ${RING}` },
 ] as Omit<PlanStep, "spaced" | "round">[];
 
+/**
+ * Round 4: palm muting and reggae chops — each played well, and each with its usual problems
+ * (a palm too heavy or too light; a chop that rings on or catches the low strings), with the
+ * let-ring versions to compare. Plus fast chugs and a gallop for strum counting at speed.
+ */
+const E5: TargetChord = { rootName: "E", degrees: ["1", "5"], label: "E5" };
+const PM = "Rest the side of your strumming hand on the strings right where they meet the bridge, and keep it there while you strum.";
+const CHOP = "Strum, then straight away loosen your fretting fingers (keep touching the strings) so the chord stops — a short “chk”.";
+const ROUND_4 = [
+  // ---------------- palm muting
+  { id: "r4-pm-e5", label: "palm-mute", target: E5, tab: "022xxx", strums: 8, title: "Palm-muted E5", how: `${PM} Strum the low three strings 8 times, evenly, about two per second — tight chugs where you can still hear the notes.` },
+  { id: "r4-open-e5", label: "clean", target: E5, tab: "022xxx", strums: 4, title: "E5 let ring (to compare)", how: `Same E5 on the low three strings, but with your hand off the strings. ${RING}` },
+  { id: "r4-pm-g5", label: "palm-mute", target: G5, tab: "355xxx", strums: 8, title: "Palm-muted G5", how: `${PM} G5 power chord (3rd fret low E, 5th fret A and D), 8 chugs, about two per second.` },
+  { id: "r4-pm-g", label: "palm-mute", target: G, tab: "320003", strums: 8, title: "Palm-muted full G", how: `${PM} Open G, strum all six strings 8 times, about two per second.` },
+  { id: "r4-pm-fast", label: "palm-mute", target: E5, tab: "022xxx", strums: 16, title: "Fast palm-muted chugs", how: `${PM} E5, 16 even chugs about four per second (down strokes, or down-up) without stopping.` },
+  { id: "r4-pm-gallop", label: "palm-mute", target: E5, tab: "022xxx", strums: 12, title: "Gallop rhythm", how: `${PM} E5 in a gallop — “da-da-DUM, da-da-DUM” — four times (12 chugs), then stop.` },
+  // ---------------- palm-muting problems (on purpose)
+  { id: "r4-pm-heavy", label: "other", target: E5, tab: "022xxx", strums: 8, title: "Palm mute too heavy", how: `Move your palm forward, away from the bridge (over the pickups or the soundhole), and press down — E5, 8 strums that come out as dull thuds with almost no note.` },
+  { id: "r4-pm-light", label: "other", target: E5, tab: "022xxx", strums: 8, title: "Palm mute too light", how: `Rest your palm only just on the strings, behind the bridge, barely touching — E5, 8 strums that still mostly ring.` },
+  { id: "r4-pm-mixed", label: "other", target: E5, tab: "022xxx", strums: 8, title: "Muted and open, mixed", how: `E5: two palm-muted chugs, then lift your palm and let two strums ring (about a second each) — then the same again (8 strums: mute, mute, ring, ring, mute, mute, ring, ring).` },
+  // ---------------- reggae chops
+  { id: "r4-chop-am", label: "chop", target: Am, tab: "xxx555", strums: 8, title: "Reggae chop — A minor (top 3 strings)", how: `A minor on the top three strings at the 5th fret (one finger across G, B and e). ${CHOP} 8 chops, about two per second, down strokes.` },
+  { id: "r4-chop-c", label: "chop", target: C, tab: "xxx553", strums: 8, title: "Reggae chop — C (top 3 strings)", how: `C on the top three strings: G and B strings at the 5th fret, high e at the 3rd. ${CHOP} 8 chops, about two per second.` },
+  { id: "r4-chop-g", label: "chop", target: G, tab: "xx5433", strums: 8, title: "Reggae chop — G (top 4 strings)", how: `G on the top four strings: D string 5th fret, G 4th, B and e 3rd. ${CHOP} 8 chops, about two per second.` },
+  { id: "r4-chop-up", label: "chop", target: Am, tab: "xxx555", strums: 8, title: "Reggae chop — up strokes", how: `Same A minor on the top three strings, but strum UP (high e first). ${CHOP} 8 chops, about two per second.` },
+  { id: "r4-chop-skank", label: "other", target: Am, tab: "xxx555", strums: 16, title: "Chop with a scratch between", how: `A minor chop, then a muted scratch (fingers resting, no notes), chop, scratch… — 8 chops and 8 scratches (16 strums), evenly, about three per second.` },
+  // ---------------- chop problems (on purpose)
+  { id: "r4-chop-ring", label: "other", target: Am, tab: "xxx555", strums: 4, title: "Chop that rings on", how: `A minor on the top three strings, but keep pressing after you strum so it rings for about a second before the next — 4 strums.` },
+  { id: "r4-chop-low", label: "other", target: Am, tab: "x00555", wrong: [2], strums: 8, title: "Chop that hits the low strings", how: `A minor chop on the top three strings, but let your strum also catch the open A and D strings (a common slip). ${CHOP} 8 chops.` },
+  // ---------------- up strums (more chords than round 2)
+  { id: "r4-up-em", label: "clean", target: Em, tab: "022000", strums: 4, title: "E minor — up strums", how: `Strum UP only (from the high e towards the low strings), all six strings if you can. ${RING}` },
+  { id: "r4-up-d", label: "clean", target: D, tab: "xx0232", strums: 4, title: "D — up strums", how: `D chord, strum UP across the top four strings only (high e to D). ${RING}` },
+  { id: "r4-up-f", label: "clean", target: F, tab: "133211", strums: 4, title: "F barre — up strums", how: `F barre at the 1st fret, strum UP. ${RING}` },
+  { id: "r4-up-light-g", label: "clean", target: G, tab: "320003", strums: 4, title: "G — light up strums (top strings)", how: `G chord, a light up strum that only catches the top three or four strings, like in a strumming pattern. ${RING}` },
+  { id: "r4-downup-am", label: "clean", target: Am, tab: "x02210", strums: 8, title: "A minor — down-up", how: "A minor: down, up, down, up… 8 strums in a steady rhythm, about two per second, then let the last one ring." },
+  { id: "r4-pm-downup", label: "palm-mute", target: E5, tab: "022xxx", strums: 8, title: "Palm-muted down-up chugs", how: `${PM} E5: down, up, down, up… 8 chugs, about two per second.` },
+  { id: "r4-stop-g", label: "other", target: G, tab: "320003", strums: 4, title: "Let ring, then stop it", how: "Strum G, let it ring about a second, then stop all the strings with your strumming palm — 4 times, a couple of seconds apart." },
+] as Omit<PlanStep, "spaced" | "round">[];
+
 const withMeta = (steps: Omit<PlanStep, "spaced" | "round">[], round: number): PlanStep[] => steps.map((s) => ({ ...s, spaced: s.how.includes(RING), round }));
 
 export const ROUNDS: { round: number; title: string; steps: PlanStep[] }[] = [
   { round: 1, title: "Round 1", steps: withMeta(ROUND_1, 1) },
   { round: 2, title: "Round 2", steps: withMeta(ROUND_2, 2) },
   { round: 3, title: "Round 3", steps: withMeta(ROUND_3, 3) },
+  { round: 4, title: "Round 4", steps: withMeta(ROUND_4, 4) },
 ];
 
 /** Every step of every round. */

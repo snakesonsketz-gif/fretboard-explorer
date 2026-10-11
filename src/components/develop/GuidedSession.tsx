@@ -3,7 +3,8 @@ import { Check, ChevronDown, CircleAlert, Download, Mic, Play, RotateCcw, Square
 import { Button } from "@/components/ui/button";
 import { MIC_HELP } from "@/components/listen/micHelp";
 import { ROUNDS, SETUP_TIPS, type PlanStep } from "@/lib/listen/collectPlan";
-import { deviceKind, deviceLabel, deviceName, encodeWav, newTakeId, safeAnalyse, setDeviceName, toPcm, trimSilence, type Take, type TakeStrum } from "@/lib/listen/takes";
+import { deviceKind, deviceLabel, deviceName, encodeWav, newTakeId, setDeviceName, toPcm, trimSilence, type Take, type TakeStrum } from "@/lib/listen/takes";
+import { clearDraft } from "@/lib/listen/drafts";
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
 import { ChordBox } from "./ChordBox";
@@ -19,6 +20,8 @@ const KIND: Record<PlanStep["label"], { name: string; cls: string }> = {
   "wrong-note": { name: "Wrong note — on purpose", cls: "bg-destructive/20 text-foreground ring-1 ring-destructive/50" },
   muted: { name: "Muted string — on purpose", cls: "bg-root/20 text-foreground ring-1 ring-root/50" },
   buzz: { name: "Buzz — on purpose", cls: "bg-accent/20 text-foreground ring-1 ring-accent/50" },
+  "palm-mute": { name: "Palm mute", cls: "bg-primary/20 text-foreground ring-1 ring-primary/50" },
+  chop: { name: "Reggae chop", cls: "bg-primary/20 text-foreground ring-1 ring-primary/50" },
   noise: { name: "No strums — on purpose", cls: "bg-secondary text-foreground ring-1 ring-border" },
   other: { name: "Playing style", cls: "bg-secondary text-foreground ring-1 ring-border" },
 };
@@ -38,7 +41,7 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
   takes: Take[];
   measured: Map<string, TakeStrum[]>;
   /** Resolves true once the take is stored on this device (and read back identical). */
-  onSave: (take: Take, strums: TakeStrum[]) => Promise<boolean>;
+  onSave: (take: Take, strums?: TakeStrum[]) => Promise<boolean>;
   /** The player confirmed the take: store the true strum count. Resolves true once stored. */
   onConfirm: (take: Take, strums: number) => Promise<boolean>;
   onExport: () => void;
@@ -58,7 +61,7 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
     setDevEdit(false);
   };
   /** The last recording exactly as captured (nothing trimmed), so it can always be sent to Vix. */
-  const [lastRaw, setLastRaw] = useState<{ stepId: string; wav: Uint8Array; name: string } | null>(null);
+  const [lastRaw, setLastRaw] = useState<{ stepId: string; pcm: Int16Array; sampleRate: number; name: string } | null>(null);
   useEffect(() => {
     try {
       setReady(window.localStorage.getItem(SETUP_KEY) === "1");
@@ -122,9 +125,16 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
     setSave(null);
     player.stop();
     rec.start((r) => {
-      if (!r) return setSave({ stepId: s.id, error: "That was too short to keep — tap Start and try again." });
+      if (!r) {
+        void clearDraft();
+        return setSave({ stepId: s.id, error: "That was too short to keep — tap Start and try again." });
+      }
+      // Done: save first, as little work as possible before the take is safe on the device. The
+      // analysis runs afterwards in the background (an iPad reloaded the page while the old Done
+      // trimmed, encoded and analysed everything at once, and the take was lost).
       const sr = r.sampleRate;
-      setLastRaw({ stepId: s.id, wav: encodeWav(toPcm(r.audio), sr), name: `fretlab-raw-${s.id}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.wav` });
+      const raw = toPcm(r.audio);
+      setLastRaw({ stepId: s.id, pcm: raw, sampleRate: sr, name: `fretlab-raw-${s.id}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.wav` });
       // Trimming cuts only silence (by volume) — every sound stays.
       let audio: Float32Array = r.audio, roomHf: number | undefined, problem: string | undefined;
       try {
@@ -152,12 +162,13 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
         tab: s.tab,
         expected: s.strums,
       };
-      const a = safeAnalyse(t);
-      if (a.error) problem = `The analysis failed (${a.error}) — the recording is saved; please download it and send it to Vix.`;
       setSave({ stepId: s.id, ...(problem ? { problem } : {}) });
       setPick(PLAN.findIndex((p) => p.id === s.id)); // stay on this step until it's checked
-      void onSave(t, a.strums).then((saved) => setSave((cur) => (cur && cur.stepId === s.id ? { ...cur, saved } : cur)));
-    }, { step: s.id });
+      void onSave(t).then((saved) => {
+        if (saved) void clearDraft(); // safe: the draft kept while recording isn't needed any more
+        setSave((cur) => (cur && cur.stepId === s.id ? { ...cur, saved } : cur));
+      });
+    }, { step: s.id, draft: { guided: true } });
   };
 
   const confirm = (s: PlanStep, t: Take) => {
@@ -172,7 +183,7 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
 
   const downloadRaw = () => {
     if (!lastRaw) return;
-    const url = URL.createObjectURL(new Blob([lastRaw.wav as BlobPart], { type: "audio/wav" }));
+    const url = URL.createObjectURL(new Blob([encodeWav(lastRaw.pcm, lastRaw.sampleRate) as BlobPart], { type: "audio/wav" }));
     const a = document.createElement("a");
     a.href = url;
     a.download = lastRaw.name;
