@@ -9,11 +9,12 @@ import { degreeToSemitones, rootByName, spellDegree, pcsToDegrees, type Degree }
 import {
   HIGHEST_MIDI,
   LOWEST_MIDI,
-  bandFloor,
   checkChord,
   dbfs,
+  detectOnsets,
   midiToHz,
-  noiseFloorDb,
+  hfFloor,
+  hfRelDb,
   ringProfile,
   rms,
   spectrumOf,
@@ -27,11 +28,14 @@ export const THRESHOLDS = {
   wrong: 0.13, // extra note counted as wrong (no false alarms seen on 288 correct strums)
   maybeWrong: 0.08, // between maybeWrong and wrong: "maybe" (not counted)
   tooQuietDb: -48, // strum peak below this: unsure, too quiet
-  buzzRiseSome: 6, // dB of sustain noise above the room
-  buzzRiseStrong: 12,
-  buzzRelSome: -48, // without a room measurement: noise floor vs peaks (dB)
-  buzzRelStrong: -36,
-  deadNoteSeconds: 0.6, // analysis frames smear decay by up to ~0.17 s; healthy notes ring > 1 s
+  // Buzz: hiss in the 3–10 kHz band relative to the strongest note (dB). Bradley's guitar on an
+  // iPhone (Oct 2026): 76 clean strums -87…-70, buzzing strums -71…-63.
+  buzzSome: -69,
+  buzzStrong: -64,
+  buzzAboveRoom: 12, // the hiss must be this far (dB) above the room's to be the guitar's (soft clean strum: +9.9, buzz: ≥ +16)
+  // A note that stops this soon while the chord rings on was deadened (and must also be far under
+  // the loudest note 0.3 s in, see deadNotes). Real guitar: muted strings stop by ~0.25 s.
+  deadNoteSeconds: 0.5,
   timingGoodMs: 25,
   timingOkMs: 60,
 };
@@ -108,7 +112,7 @@ export interface StrumInput {
   onset: number;
   end: number;
   target: TargetChord;
-  /** Room noise (bandFloor of a quiet moment), if known. */
+  /** Room noise (hfFloor of a quiet moment), if known. */
   roomFloor?: number;
   /** Expected strum time minus actual, in ms, computed by the caller (play-along / metronome). */
   offsetMs?: number | null;
@@ -130,22 +134,55 @@ export interface StrumMeasure {
   pcs: number[];
   chord: ChordCheck;
   ring: RingProfile;
-  /** Noise floor of the 1.5–6 kHz band in the analysis window (compare with roomFloor). */
-  bandFloor: number;
-  /** Noise floor relative to the spectrum's peaks (dB), used when there is no room reference. */
-  noiseRelDb: number;
+  /** Buzz-band (3–10 kHz) floor in the analysis window (compare with roomFloor). */
+  hfFloor: number;
+  /** Buzz measure: buzz-band floor relative to the strongest note (dB); null if the strum is too short to measure. */
+  hfRelDb: number | null;
+  /** Room's buzz-band floor (hfFloor of a quiet moment), if known. */
   roomFloor?: number;
+  /** The note check saw this strum alone (≥ 0.2 s, no other attack); else extras are only "maybe". */
+  clearLook: boolean;
   offsetMs: number | null;
   expectedSeconds?: number;
   complete: boolean;
 }
 
+/** Seconds a strum must ring on its own (no other attack) for buzz to be judged. */
+export const BUZZ_MIN_RING = 0.5;
+
 export function measureStrum(input: StrumInput): StrumMeasure {
   const { audio, sr, onset, end, target } = input;
   const N = 16384;
   const win = new Float32Array(N);
-  win.set(audio.subarray(onset + Math.round(0.08 * sr), onset + Math.round(0.08 * sr) + N));
+  // A slow strum's main attack can come well after its first string (Bradley: +8 to +14 dB
+  // 0.12 s in). The spectra are taken after the loudest part of the strum has struck, not
+  // during it — otherwise the strum's own attack looks like a different sound in the window.
+  let body = onset;
+  {
+    const a0 = onset + Math.round(0.03 * sr), a1 = Math.min(end, onset + Math.round(0.35 * sr));
+    const startLevel = rms(audio, onset, onset + Math.round(0.05 * sr));
+    if (a1 - a0 > Math.round(0.05 * sr))
+      for (const o of detectOnsets(audio.subarray(a0, a1), sr, { strumsOnly: false })) {
+        const a = a0 + o;
+        if (a <= onset + Math.round(0.3 * sr) && rms(audio, a, a + Math.round(0.02 * sr)) > startLevel) body = a;
+      }
+  }
+  // Stop at the next strum: its attack would add notes and hiss that aren't this strum's.
+  const from = body + Math.round(0.08 * sr);
+  const to = Math.min(from + N, end - Math.round(0.01 * sr));
+  if (to > from) win.set(audio.subarray(from, to));
   const spec = spectrumOf(win, sr);
+  // Buzz is judged on the ring alone, so the strum must ring on its own for a while: no other
+  // attack (the next strum, a brush of the strings, a scrape, a knock) within BUZZ_MIN_RING. In
+  // quick rhythm playing the strings are re-struck and brushed so often that the hiss between
+  // strums is the playing itself (Bradley's steady-rhythm take read like strong buzz on every strum).
+  const aloneTo = Math.min(end, body + Math.round(BUZZ_MIN_RING * sr));
+  let alone = aloneTo - body >= Math.round(BUZZ_MIN_RING * sr);
+  if (alone && detectOnsets(audio.subarray(from, aloneTo), sr, { strumsOnly: false }).length) alone = false;
+  // The note check needs a clean look too: at least 0.2 s of this strum alone. Otherwise (quick
+  // rhythm playing, a brush or scrape in between) a note that isn't in the chord is only a "maybe".
+  const clearTo = Math.min(to, body + Math.round(0.28 * sr));
+  const clearLook = clearTo - from >= Math.round(0.2 * sr) && (alone || !detectOnsets(audio.subarray(from, to), sr, { strumsOnly: false }).length);
   const root = rootByName(target.rootName);
   const pcs = target.degrees.map((d) => (((root.pc + degreeToSemitones(d)) % 12) + 12) % 12);
   const chord = checkChord(spec, pcs);
@@ -157,8 +194,9 @@ export function measureStrum(input: StrumInput): StrumMeasure {
     pcs,
     chord,
     ring: ringProfile(audio, sr, onset, end, candidates, chord.tuningCents),
-    bandFloor: bandFloor(spec),
-    noiseRelDb: noiseFloorDb(spec),
+    hfFloor: hfFloor(spec),
+    hfRelDb: alone ? hfRelDb(spec) : null,
+    clearLook,
     ...(input.roomFloor !== undefined ? { roomFloor: input.roomFloor } : {}),
     offsetMs: input.offsetMs ?? null,
     ...(input.expectedSeconds !== undefined ? { expectedSeconds: input.expectedSeconds } : {}),
@@ -166,14 +204,38 @@ export function measureStrum(input: StrumInput): StrumMeasure {
   };
 }
 
-/** Buzz measure: sustain noise above the room (dB), or null without a room reference. */
-export const buzzRiseDb = (m: StrumMeasure): number | null =>
-  m.roomFloor !== undefined && m.roomFloor > 1e-18 ? 10 * Math.log10(m.bandFloor / m.roomFloor) : null;
+/** How far the strum's buzz-band hiss is above the room's (dB), or null without a room reading. */
+export const hfAboveRoomDb = (m: StrumMeasure): number | null =>
+  m.roomFloor !== undefined && m.roomFloor > 1e-18 ? 10 * Math.log10(m.hfFloor / m.roomFloor) : null;
 
 /** Notes that sounded at the start and can be followed on their own (for per-note ring-out). */
 export function soundingNotes(m: StrumMeasure) {
   const loudest = Math.max(1e-9, ...m.ring.notes.filter((n) => n.separable).map((n) => n.early));
   return m.ring.notes.filter((n) => n.separable && n.early >= 0.12 * loudest);
+}
+
+/**
+ * Lowest note whose ring-out can be trusted. Phone mics barely pick up the fundamentals of the
+ * low strings, so a low note looks like it "died" while it was ringing fine (Bradley's iPhone:
+ * G2, E2 and A2 read 0.2–0.6 s on clean strums), and notes an octave below the real one show up.
+ */
+export const DEAD_NOTE_MIN_MIDI = 50; // D3
+/** How far under the loudest note a dead note is 0.3 s in (dB): muted 23–57 dB down, ringing ≤ 20. */
+const DEAD_NOTE_LATE_DB = -20;
+/** A note too weak at the start to follow (an octave the guitar didn't play) isn't judged. */
+const DEAD_NOTE_MIN_EARLY = 0.2;
+
+/** Notes (grouped by pitch class) that died early while the chord rang on. */
+export function deadNotes(m: StrumMeasure, T: Thresholds): StrumMeasure["ring"]["notes"][] {
+  const sounding = soundingNotes(m);
+  const loudest = Math.max(1e-9, ...sounding.map((n) => n.early));
+  const judged = sounding.filter((n) => n.early >= DEAD_NOTE_MIN_EARLY * loudest);
+  // Judge "died early" only with enough to look at: the chord kept ringing well past the cutoff.
+  if (m.ring.seconds < T.deadNoteSeconds + 0.3) return [];
+  return [...new Set(judged.map((n) => n.midi % 12))]
+    .map((pc) => judged.filter((n) => n.midi % 12 === pc))
+    // Both views must agree: its partials faded early, and by 0.3 s it is far under the loudest note.
+    .filter((ns) => ns.some((n) => n.midi >= DEAD_NOTE_MIN_MIDI) && ns.every((n) => !n.stillRinging && n.seconds < T.deadNoteSeconds && n.lateDb < DEAD_NOTE_LATE_DB));
 }
 
 export function analyseStrum(input: StrumInput, T: Thresholds = THRESHOLDS): StrumReport {
@@ -193,6 +255,7 @@ export function judgeStrum(m: StrumMeasure, target: TargetChord, T: Thresholds =
     const pc = pcs[i]!;
     const name = spellDegree(root, d);
     const t = chord.target.find((x) => x.pc === pc)!;
+    if (t.weak && !optional.has(d)) return { name, degree: d, status: "missing", note: "Barely sounding — that string is muted or deadened" };
     if (t.strength >= T.heard) {
       const src = onlyOvertones(t.octaves, chord, tuning);
       return src !== null
@@ -207,7 +270,7 @@ export function judgeStrum(m: StrumMeasure, target: TargetChord, T: Thresholds =
   });
   const extras = chord.extras
     .filter((e) => e.strength >= T.maybeWrong)
-    .map((e) => ({ name: pcName(target.rootName, e.pc), status: (e.strength >= T.wrong ? "wrong" : "maybe") as "wrong" | "maybe" }))
+    .map((e) => ({ name: pcName(target.rootName, e.pc), status: (e.strength >= T.wrong && m.clearLook ? "wrong" : "maybe") as "wrong" | "maybe" }))
     .filter((e, i, a) => a.findIndex((x) => x.name === e.name) === i);
   const judged = notes.filter((n) => n.status === "heard" || n.status === "missing");
   const wrong = extras.filter((e) => e.status === "wrong").length;
@@ -228,12 +291,7 @@ export function judgeStrum(m: StrumMeasure, target: TargetChord, T: Thresholds =
   // Keep the octaves that actually sounded at the start, and judge per note name: a note
   // "died early" only if every separable octave of it did.
   const untilNext = ring.stillRinging;
-  const sounding = soundingNotes(m);
-  const shortNotes = [...new Set(sounding.map((n) => n.midi % 12))]
-    .map((pc) => sounding.filter((n) => n.midi % 12 === pc))
-    // Judge "died early" only with enough to look at: the chord kept ringing well past the cutoff.
-    .filter((ns) => ns.every((n) => !n.stillRinging && n.seconds < T.deadNoteSeconds) && ring.seconds >= T.deadNoteSeconds + 0.3)
-    .map((ns) => ({ name: pcName(target.rootName, ns[0]!.midi % 12), seconds: Math.max(...ns.map((n) => n.seconds)) }));
+  const shortNotes = deadNotes(m, T).map((ns) => ({ name: pcName(target.rootName, ns[0]!.midi % 12), seconds: Math.max(...ns.map((n) => n.seconds)) }));
   const wanted = m.expectedSeconds;
   const ringVerdict: Verdict = tooQuiet ? "unsure" : untilNext || (wanted ? ring.seconds >= 0.85 * wanted : ring.seconds >= 1) ? (shortNotes.length ? "fix" : "good") : "fix";
   const complete = m.complete;
@@ -243,15 +301,14 @@ export function judgeStrum(m: StrumMeasure, target: TargetChord, T: Thresholds =
 
   // ---------------- clarity (buzz/noise + dead notes)
   let buzz: StrumReport["clarity"]["buzz"] = "unknown";
-  if (!tooQuiet) {
-    const rise = buzzRiseDb(m);
-    if (rise !== null) {
-      buzz = rise >= T.buzzRiseStrong ? "strong" : rise >= T.buzzRiseSome ? "some" : "none";
-    } else {
-      const rel = m.noiseRelDb;
-      buzz = rel >= T.buzzRelStrong ? "strong" : rel >= T.buzzRelSome ? "some" : "none";
-      if (m.roomFloor === undefined && rel >= T.buzzRelSome) buzz = "unknown"; // could be the room
-    }
+  if (!tooQuiet && m.hfRelDb !== null) {
+    const rel = m.hfRelDb;
+    buzz = rel >= T.buzzStrong ? "strong" : rel >= T.buzzSome ? "some" : "none";
+    // Hiss barely above the room's is the room (a soft strum in a noisy room): no buzz found.
+    // Without a quiet-room reading, hiss can't be told from room noise, so it isn't called buzz.
+    const above = hfAboveRoomDb(m);
+    if (above !== null && above < T.buzzAboveRoom) buzz = "none";
+    else if (above === null && buzz !== "none") buzz = "unknown";
   }
   const dead = shortNotes.map((n) => n.name);
   const clarScore = tooQuiet || (buzz === "unknown" && !dead.length) ? null : Math.max(0, 100 - (buzz === "strong" ? 60 : buzz === "some" ? 30 : 0) - 25 * dead.length);
@@ -286,5 +343,5 @@ export function judgeStrum(m: StrumMeasure, target: TargetChord, T: Thresholds =
 export function roomFloorOf(audio: Float32Array, sr: number, from: number): number {
   const w = new Float32Array(16384);
   w.set(audio.subarray(from, from + 16384));
-  return bandFloor(spectrumOf(w, sr));
+  return hfFloor(spectrumOf(w, sr));
 }

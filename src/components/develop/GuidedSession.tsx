@@ -76,12 +76,12 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
       const sr = r.sampleRate;
       setLastRaw({ stepId: s.id, wav: encodeWav(toPcm(r.audio), sr), name: `fretlab-raw-${s.id}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.wav` });
       // Trimming cuts only silence (by volume) — every sound stays.
-      let audio: Float32Array = r.audio, roomFloor: number | undefined, problem: string | undefined;
+      let audio: Float32Array = r.audio, roomHf: number | undefined, problem: string | undefined;
       try {
         const t = trimSilence(r.audio, sr);
         if (t) {
           audio = t.audio;
-          roomFloor = t.roomFloor;
+          roomHf = t.roomHf;
         } else problem = "Only silence was recorded — saved anyway; redo it if you did play.";
       } catch (e) {
         problem = `Couldn't trim the silence (${e instanceof Error ? e.message : e}) — saved untrimmed.`;
@@ -94,7 +94,7 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
         note: s.title,
         sampleRate: sr,
         pcm: toPcm(audio),
-        ...(roomFloor !== undefined ? { roomFloor } : {}),
+        ...(roomHf !== undefined ? { roomHf } : {}),
         originalSeconds: +(r.audio.length / sr).toFixed(2),
         source: "mic",
         device: deviceLabel(),

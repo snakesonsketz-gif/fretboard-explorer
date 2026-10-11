@@ -24,17 +24,18 @@ export const THRESHOLD_INFO: ThresholdInfo[] = [
   { key: "faint", group: "Accuracy", label: "Faint (can't tell) from", help: "Between this and 'Note heard' a note is 'too faint to tell' and not counted. Below it, the note is missing.", min: 0.005, max: 0.2, step: 0.005, unit: "" },
   { key: "wrong", group: "Accuracy", label: "Wrong note at", help: "A note that isn't in the chord this strong counts as a mistake. Lower it to catch more wrong notes; raise it if clean strums get flagged.", min: 0.05, max: 0.5, step: 0.005, unit: "" },
   { key: "maybeWrong", group: "Accuracy", label: "'Maybe wrong' from", help: "Between this and 'Wrong note' an extra note is shown with a ? and not counted.", min: 0.02, max: 0.4, step: 0.005, unit: "" },
-  { key: "buzzRiseSome", group: "Clarity", label: "Some buzz at", help: "How far (dB) the hiss between the notes rises above the quiet room before it counts as buzz.", min: 1, max: 30, step: 0.5, unit: "dB" },
-  { key: "buzzRiseStrong", group: "Clarity", label: "Strong buzz at", help: "Rise above the room (dB) that counts as strong buzz or rattle.", min: 2, max: 40, step: 0.5, unit: "dB" },
-  { key: "buzzRelSome", group: "Clarity", label: "Some buzz (no room reading)", help: "Only used when the room wasn't quiet enough to measure: noise compared with the notes themselves (dB).", min: -70, max: -10, step: 1, unit: "dB" },
-  { key: "buzzRelStrong", group: "Clarity", label: "Strong buzz (no room reading)", help: "As above, for strong buzz.", min: -70, max: -5, step: 1, unit: "dB" },
+  { key: "buzzSome", group: "Clarity", label: "Some buzz at", help: "Hiss between the notes (3–10 kHz) compared with the strongest note, in dB. Closer to 0 = more hiss. Lower it to catch lighter buzz; raise it if clean strums get flagged.", min: -90, max: -40, step: 0.5, unit: "dB" },
+  { key: "buzzStrong", group: "Clarity", label: "Strong buzz at", help: "As above, for strong buzz or rattle.", min: -90, max: -30, step: 0.5, unit: "dB" },
+  { key: "buzzAboveRoom", group: "Clarity", label: "Hiss must beat the room by", help: "The hiss only counts as buzz if it is this many dB above the quiet room's own hiss (soft strums in a noisy room otherwise look buzzy).", min: 0, max: 30, step: 0.5, unit: "dB" },
   { key: "deadNoteSeconds", group: "Ring-out", label: "Note died early under", help: "A note that fades within this many seconds (while the rest of the chord rings on) is reported as dead — usually a finger touching that string.", min: 0.2, max: 2, step: 0.05, unit: "s" },
   { key: "tooQuietDb", group: "Level", label: "Too quiet below", help: "Strums quieter than this (dBFS) aren't judged at all. Lower it for a quiet guitar or a far-away phone.", min: -70, max: -20, step: 1, unit: "dB" },
   { key: "timingGoodMs", group: "Timing", label: "'On the beat' within", help: "With the click or play-along: this close to the beat counts as on it.", min: 5, max: 100, step: 1, unit: "ms" },
   { key: "timingOkMs", group: "Timing", label: "Timing OK within", help: "Further off than this is marked early or late.", min: 10, max: 200, step: 1, unit: "ms" },
 ];
 
-const KEY = "fretlab.thresholds.v1";
+// v2 (Oct 2026): defaults re-tuned on real recordings and the buzz measure changed; old slider
+// settings were for the old measures, so they are not carried over.
+const KEY = "fretlab.thresholds.v2";
 
 interface Stored {
   values: Partial<Thresholds>;
@@ -50,8 +51,7 @@ export function sanitize(values: Partial<Thresholds>): Thresholds {
   }
   t.faint = Math.min(t.faint, t.heard);
   t.maybeWrong = Math.min(t.maybeWrong, t.wrong);
-  t.buzzRiseSome = Math.min(t.buzzRiseSome, t.buzzRiseStrong);
-  t.buzzRelSome = Math.min(t.buzzRelSome, t.buzzRelStrong);
+  t.buzzSome = Math.min(t.buzzSome, t.buzzStrong);
   t.timingGoodMs = Math.min(t.timingGoodMs, t.timingOkMs);
   return t;
 }

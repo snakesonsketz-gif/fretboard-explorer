@@ -1,4 +1,4 @@
-import { buzzRiseDb, soundingNotes, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "@/lib/listen/score";
+import { deadNotes, hfAboveRoomDb, soundingNotes, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "@/lib/listen/score";
 import { rootByName, spellDegree, pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
 
@@ -38,8 +38,9 @@ const linScale = (min: number, max: number) => (v: number) => (v - min) / (max -
 /** The raw numbers behind one strum's verdicts, against the current thresholds. */
 export function StrumDetail({ m, r, target, T }: { m: StrumMeasure; r: StrumReport; target: TargetChord; T: Thresholds }) {
   const root = rootByName(target.rootName);
-  const rise = buzzRiseDb(m);
+  const above = hfAboveRoomDb(m);
   const sounding = soundingNotes(m);
+  const deadPcs = new Set(deadNotes(m, T).map((ns) => ns[0]!.midi % 12));
   const notesByPc = new Map<number, typeof sounding>();
   for (const n of sounding) notesByPc.set(n.midi % 12, [...(notesByPc.get(n.midi % 12) ?? []), n]);
 
@@ -73,18 +74,19 @@ export function StrumDetail({ m, r, target, T }: { m: StrumMeasure; r: StrumRepo
 
       <div className="space-y-1.5">
         <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Buzz & level</p>
-        {rise !== null ? (
-          <Meter label="Buzz" value={rise} text={`${rise >= 0 ? "+" : ""}${rise.toFixed(1)} dB`} title="Hiss between the notes, compared with the quiet room"
-            lines={[{ at: T.buzzRiseSome, name: "some" }, { at: T.buzzRiseStrong, name: "strong" }]} scale={linScale(-20, 30)}
-            tone={rise >= T.buzzRiseSome ? "fix" : "good"} />
+        {m.hfRelDb !== null ? (
+          <Meter label="Buzz" value={m.hfRelDb} text={`${m.hfRelDb.toFixed(0)} dB`} title="Hiss between the notes (3–10 kHz) compared with the strongest note"
+            lines={[{ at: T.buzzSome, name: "some" }, { at: T.buzzStrong, name: "strong" }]} scale={linScale(-90, -50)}
+            tone={r.clarity.buzz === "unknown" ? "unsure" : m.hfRelDb >= T.buzzSome ? "fix" : "good"} />
         ) : (
-          <Meter label="Buzz*" value={m.noiseRelDb} text={`${m.noiseRelDb.toFixed(0)} dB`} title="No quiet-room reading: noise compared with the notes themselves"
-            lines={[{ at: T.buzzRelSome, name: "some" }, { at: T.buzzRelStrong, name: "strong" }]} scale={linScale(-80, -10)}
-            tone={r.clarity.buzz === "unknown" ? "unsure" : m.noiseRelDb >= T.buzzRelSome ? "fix" : "good"} />
+          <p className="text-xs text-muted-foreground">Buzz not judged — another strum or sound came within half a second (in quick rhythm playing the hiss is the playing itself).</p>
         )}
+        {above !== null ? (
+          <Meter label="Over room" value={above} text={`${above >= 0 ? "+" : ""}${above.toFixed(1)} dB`} title="How far the hiss is above the quiet room's hiss"
+            lines={[{ at: T.buzzAboveRoom, name: "counts" }]} scale={linScale(-10, 30)} tone="plain" />
+        ) : null}
         <Meter label="Level" value={m.peakDb} text={`${m.peakDb.toFixed(0)} dB`} title="How loud the strum was (first 250 ms)"
           lines={[{ at: T.tooQuietDb, name: "too quiet" }]} scale={linScale(-80, 0)} tone={r.level.tooQuiet ? "unsure" : "plain"} />
-        {rise === null ? <p className="text-[11px] text-muted-foreground">* No quiet moment before this strum — start each take with a second of silence.</p> : null}
       </div>
 
       <div className="space-y-1.5">
@@ -94,8 +96,8 @@ export function StrumDetail({ m, r, target, T }: { m: StrumMeasure; r: StrumRepo
         {[...notesByPc.entries()].map(([pc, ns]) => {
           const secs = Math.max(...ns.map((n) => n.seconds));
           const still = ns.some((n) => n.stillRinging);
-          // Same rule as the scoring: every octave of the note faded early, while the chord rang on.
-          const dead = ns.every((n) => !n.stillRinging && n.seconds < T.deadNoteSeconds) && m.ring.seconds >= T.deadNoteSeconds + 0.3;
+          // Same rule as the scoring.
+          const dead = deadPcs.has(pc);
           return (
             <Meter key={pc} label={PC[pc]!} value={secs} text={`${secs.toFixed(2)} s${still ? "+" : ""}`}
               lines={[{ at: T.deadNoteSeconds, name: "dead" }]} scale={linScale(0, 3)} tone={dead ? "fix" : "good"} />

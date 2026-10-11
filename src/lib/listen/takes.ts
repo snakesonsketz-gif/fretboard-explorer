@@ -7,7 +7,7 @@
  * the scorecard shows straight away whether clean strums come out clean and mistakes get caught.
  * Takes stay on this device (IndexedDB) until exported.
  */
-import { bandFloor, rms, spectrumOf } from "./dsp";
+import { hfFloor, rms, spectrumOf } from "./dsp";
 import { judgeStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
 import { ListenSession, type AudioSource } from "./session";
 import { PLAN } from "./collectPlan";
@@ -36,8 +36,13 @@ export interface Take {
   /** Where it was recorded (browser/phone), to compare devices. */
   device: string;
   fileName?: string;
-  /** Room noise measured on the quiet lead-in before silence was trimmed (see trimSilence). */
+  /**
+   * Old room-noise reading (1.5–6 kHz band, before Oct 2026). Kept so old exports round-trip;
+   * not used for analysis — it doesn't match today's buzz band.
+   */
   roomFloor?: number;
+  /** Room noise in the buzz band (hfFloor), measured on the quiet lead-in before silence was trimmed. */
+  roomHf?: number;
   /** Length before trimming (seconds). */
   originalSeconds?: number;
   /** Guided recording: which plan step, the tab played, and how many strums were asked for. */
@@ -120,14 +125,17 @@ const MIN_GAP = 0.6; // s: only silences longer than this are cut (short dips al
  * The room-noise reading for the buzz measure is taken from the lead-in before anything is cut.
  * Returns null if there is no sound at all; `kept` lists the original sample ranges kept.
  */
-export function trimSilence(x: Float32Array, sr: number): { audio: Float32Array; roomFloor?: number; kept: [number, number][] } | null {
+export function trimSilence(x: Float32Array, sr: number): { audio: Float32Array; roomHf?: number; kept: [number, number][] } | null {
   const hop = Math.round(0.01 * sr);
   const env: number[] = [];
   for (let i = 0; i + hop <= x.length; i += hop) env.push(rms(x, i, i + hop));
   if (!env.length) return null;
-  const sorted = [...env].sort((a, b) => a - b);
+  // Phones can start a recording with exact digital silence (zeros) before the mic is live; that
+  // isn't the room, so it's left out of the room reading.
+  const live = env.filter((v) => v > 1e-7);
+  const sorted = (live.length ? live : env).sort((a, b) => a - b);
   const tenth = sorted[Math.floor(sorted.length * 0.1)]!;
-  const lead = env.slice(0, Math.round(0.8 / 0.01)).sort((a, b) => a - b);
+  const lead = env.slice(0, Math.round(0.8 / 0.01)).filter((v) => v > 1e-7).sort((a, b) => a - b);
   const leadMedian = lead.length >= 20 ? lead[Math.floor(lead.length / 2)]! : Infinity;
   const room = Math.max(1e-5, Math.min(tenth, leadMedian));
   const loud = room * 2; // ~6 dB above the room
@@ -145,21 +153,27 @@ export function trimSilence(x: Float32Array, sr: number): { audio: Float32Array;
     f = g;
   }
   if (!spans.length) return null;
-  // Spectral room reference for the buzz measure: quietest 16384-sample stretch before the first sound.
-  let roomFloor: number | undefined;
+  // Spectral room reference for the buzz measure: quietest 16384-sample stretch before the first
+  // sound that has no digital silence in it.
+  let roomHf: number | undefined;
   const leadEnd = spans[0]![0];
   if (leadEnd >= 16384) {
     let best = 0, bestRms = Infinity;
     for (let from = 0; from + 16384 <= leadEnd; from += 4096) {
       const r = rms(x, from, from + 16384);
+      let zeros = 0;
+      for (let i = from; i < from + 16384 && zeros < 64; i++) if (x[i] === 0) zeros++;
+      if (zeros >= 64) continue;
       if (r < bestRms) {
         bestRms = r;
         best = from;
       }
     }
-    const w = new Float32Array(16384);
-    w.set(x.subarray(best, best + 16384));
-    roomFloor = bandFloor(spectrumOf(w, sr));
+    if (bestRms < Infinity) {
+      const w = new Float32Array(16384);
+      w.set(x.subarray(best, best + 16384));
+      roomHf = hfFloor(spectrumOf(w, sr));
+    }
   }
   // Join with a 5 ms crossfade (inside the silent padding, so no sound is altered).
   const fade = Math.round(0.005 * sr);
@@ -175,7 +189,7 @@ export function trimSilence(x: Float32Array, sr: number): { audio: Float32Array;
     }
     pos += e - s0 - fade;
   });
-  return { audio: out, ...(roomFloor !== undefined ? { roomFloor } : {}), kept: spans };
+  return { audio: out, ...(roomHf !== undefined ? { roomHf } : {}), kept: spans };
 }
 
 // ---------------------------------------------------------------- analysis
@@ -185,7 +199,7 @@ export function trimSilence(x: Float32Array, sr: number): { audio: Float32Array;
  * fed in 2048-sample blocks through a ListenSession (onsets, room reference, ring-out until the
  * next strum). Thresholds don't affect the measurements, so this runs once per take.
  */
-export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomFloor" | "step">): TakeStrum[] {
+export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomHf" | "step">): TakeStrum[] {
   const audio = toFloat(take.pcm);
   let n = 0;
   const src: AudioSource = {
@@ -199,8 +213,12 @@ export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "
   const session = new ListenSession(src, () => ({ target: take.target }));
   session.mergeWindow = TAKE_MERGE_WINDOW;
   if (isSpacedStep(take.step)) session.minRise = SPACED_MIN_RISE;
-  if (take.roomFloor !== undefined) {
-    session.roomFloor = take.roomFloor; // measured before the silence was trimmed
+  // Room reference: measured on the lead-in before the silence was trimmed. Takes from before
+  // Oct 2026 have none in today's buzz band, so use the quietest moment left in the take (it
+  // reads at or above the true room, which only makes buzz less likely to be reported).
+  const room = take.roomHf ?? quietestHf(audio, take.sampleRate);
+  if (room !== undefined) {
+    session.roomFloor = room;
     session.lockRoom = true;
   }
   for (n = 2048; n <= audio.length; n += 2048) if ((n / 2048) % 2 === 0) session.tick();
@@ -209,8 +227,20 @@ export function analyseTake(take: Pick<Take, "pcm" | "sampleRate" | "target" | "
   return session.strums.filter((s) => s.measure).map((s) => ({ time: s.frame / take.sampleRate, measure: s.measure! }));
 }
 
+function quietestHf(x: Float32Array, sr: number): number | undefined {
+  let best = -1, bestRms = Infinity;
+  for (let from = 0; from + 16384 <= x.length; from += 4096) {
+    const r = rms(x, from, from + 16384);
+    if (r > 1e-7 && r < bestRms) {
+      bestRms = r;
+      best = from;
+    }
+  }
+  return best < 0 ? undefined : hfFloor(spectrumOf(x.slice(best, best + 16384), sr));
+}
+
 /** analyseTake that never throws: a recording must never be lost because its analysis failed. */
-export function safeAnalyse(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomFloor" | "step">): { strums: TakeStrum[]; error?: string } {
+export function safeAnalyse(take: Pick<Take, "pcm" | "sampleRate" | "target" | "roomHf" | "step">): { strums: TakeStrum[]; error?: string } {
   try {
     return { strums: analyseTake(take) };
   } catch (e) {
@@ -389,16 +419,17 @@ export function exportTakes(takes: Take[], measured: Map<string, TakeStrum[]>, t
       strumsFound: (measured.get(t.id) ?? []).length,
       ...(t.confirmedStrums !== undefined ? { strumsConfirmedByPlayer: t.confirmedStrums, confirmedAt: new Date(t.confirmedAt ?? t.at).toISOString() } : {}),
       ...(t.originalSeconds !== undefined ? { secondsBeforeTrim: t.originalSeconds } : {}),
-      roomFloorFromLeadIn: t.roomFloor ?? null,
+      roomHfFromLeadIn: t.roomHf ?? null,
+      ...(t.roomFloor !== undefined ? { roomFloorFromLeadIn: t.roomFloor } : {}),
       ...(t.imported ? { importedFrom: t.imported } : {}),
       strums: (measured.get(t.id) ?? []).map((s) => ({
         time: +s.time.toFixed(3),
         peakDb: +s.measure.peakDb.toFixed(1),
         notes: s.measure.chord.target.map((n) => ({ pc: n.pc, strength: +n.strength.toFixed(3) })),
         extras: s.measure.chord.extras.map((e) => ({ pc: e.pc, strength: +e.strength.toFixed(3) })),
-        bandFloor: s.measure.bandFloor,
-        roomFloor: s.measure.roomFloor ?? null,
-        noiseRelDb: +s.measure.noiseRelDb.toFixed(1),
+        hfFloor: s.measure.hfFloor,
+        roomHf: s.measure.roomFloor ?? null,
+        buzzDb: s.measure.hfRelDb === null ? null : +s.measure.hfRelDb.toFixed(1),
         ringSeconds: +s.measure.ring.seconds.toFixed(2),
         noteRing: s.measure.ring.notes.filter((n) => n.separable).map((n) => ({ midi: n.midi, seconds: +n.seconds.toFixed(2), early: +n.early.toFixed(4), stillRinging: n.stillRinging })),
       })),
@@ -484,7 +515,7 @@ export async function importTakes(bytes: Uint8Array, zipName: string, existing: 
   const byName = new Map(files.map((f) => [f.name, f.data]));
   const metaFile = byName.get("takes.json");
   if (!metaFile) throw new Error("this zip has no takes.json — it isn't a Fretlab export");
-  type Meta = { file: string; recorded: string; label: TakeLabel; note?: string; target: TargetChord; source?: "mic" | "file"; device?: string; fileName?: string; step?: string; tab?: string; strumsAsked?: number; secondsBeforeTrim?: number; roomFloorFromLeadIn?: number | null; importedFrom?: string; strumsConfirmedByPlayer?: number; confirmedAt?: string };
+  type Meta = { file: string; recorded: string; label: TakeLabel; note?: string; target: TargetChord; source?: "mic" | "file"; device?: string; fileName?: string; step?: string; tab?: string; strumsAsked?: number; secondsBeforeTrim?: number; roomFloorFromLeadIn?: number | null; roomHfFromLeadIn?: number | null; importedFrom?: string; strumsConfirmedByPlayer?: number; confirmedAt?: string };
   const meta = JSON.parse(new TextDecoder().decode(metaFile)) as Meta[];
   const have = new Set(existing.map(takeKey));
   const takes: Take[] = [];
@@ -508,6 +539,7 @@ export async function importTakes(bytes: Uint8Array, zipName: string, existing: 
       device: m.device ?? "unknown",
       ...(m.fileName ? { fileName: m.fileName } : {}),
       ...(typeof m.roomFloorFromLeadIn === "number" ? { roomFloor: m.roomFloorFromLeadIn } : {}),
+      ...(typeof m.roomHfFromLeadIn === "number" ? { roomHf: m.roomHfFromLeadIn } : {}),
       ...(typeof m.secondsBeforeTrim === "number" ? { originalSeconds: m.secondsBeforeTrim } : {}),
       ...(m.step ? { step: m.step, ...(m.tab ? { tab: m.tab } : {}), ...(m.strumsAsked ? { expected: m.strumsAsked } : {}) } : {}),
       imported: m.importedFrom ?? zipName,

@@ -4,8 +4,8 @@
  * (or after a few seconds), and keeps a room-noise reference from quiet moments.
  * Pure logic over a read() source, so it is tested by streaming synthetic guitar through it.
  */
-import { bandFloor, dbfs, detectOnsets, onsetLookahead, rms, spectrumOf } from "./dsp";
-import { THRESHOLDS, judgeStrum, measureStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
+import { dbfs, hfFloor, detectOnsets, onsetLookahead, rms, spectrumOf } from "./dsp";
+import { BUZZ_MIN_RING, THRESHOLDS, judgeStrum, measureStrum, type StrumMeasure, type StrumReport, type TargetChord, type Thresholds } from "./score";
 
 export interface AudioSource {
   sampleRate: number;
@@ -37,7 +37,9 @@ export interface Strum {
 }
 
 /** Seconds of audio needed after a strum to judge its notes (analysis starts 80 ms in, 16384 samples). */
-const analysisSeconds = (sr: number) => 0.08 + 16384 / sr;
+// Enough audio for the note check (0.08 s + one 16384-sample window) and the buzz check (the
+// strum ringing on its own for BUZZ_MIN_RING).
+const analysisSeconds = (sr: number) => Math.max(0.08 + 16384 / sr, BUZZ_MIN_RING + 0.03);
 const MAX_RING = 4;
 
 export class ListenSession {
@@ -158,7 +160,7 @@ export class ListenSession {
     const opening = Math.max(this.startFrame, first);
     if (this.roomFloor === undefined && end - opening >= 16384) {
       const w = this.src.read(opening, opening + 16384);
-      if (w) this.roomFloor = bandFloor(spectrumOf(w, sr));
+      if (w) this.roomFloor = hfFloor(spectrumOf(w, sr));
     }
     const recent = this.src.read(end - Math.round(0.35 * sr), end);
     if (recent) {
@@ -166,7 +168,7 @@ export class ListenSession {
       if (!quiet) this.quietSince = end;
       else if (end - this.quietSince > 0.6 * sr) {
         const w = this.src.read(end - 16384, end);
-        if (w) this.roomFloor = this.roomFloor === undefined ? bandFloor(spectrumOf(w, sr)) : Math.min(this.roomFloor * 1.02, bandFloor(spectrumOf(w, sr)));
+        if (w) this.roomFloor = this.roomFloor === undefined ? hfFloor(spectrumOf(w, sr)) : Math.min(this.roomFloor * 1.02, hfFloor(spectrumOf(w, sr)));
       }
     }
     return [...changed];

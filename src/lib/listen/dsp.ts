@@ -165,8 +165,11 @@ export function detectNotes(s: Spectrum, opts: { maxNotes?: number; minRelative?
 }
 
 export interface ChordCheck {
-  /** Per target pitch class: strength relative to the strongest chord note (0 = not heard). */
-  target: { pc: number; strength: number; octaves: number[] }[];
+  /**
+   * Per target pitch class: strength relative to the strongest chord note (0 = not heard).
+   * weak: the note was found but far too quiet to be a sounding string (muted or deadened).
+   */
+  target: { pc: number; strength: number; octaves: number[]; weak?: boolean }[];
   /** Notes heard that are not in the chord, after the chord's own overtones were removed. */
   extras: { pc: number; midi: number; strength: number }[];
   tuningCents: number;
@@ -179,15 +182,60 @@ export interface ChordCheck {
  * first, each removing its whole overtone series), and only what is left over is searched for
  * wrong notes — so a chord note's overtones are not reported as mistakes.
  */
+/** A chord note this far under the loudest (−27 dB, raw spectrum) isn't sounding — muted or deadened. */
+const WEAK_RATIO = 10 ** (-27 / 20);
+/** Fundamental this far under its own octave (−15 dB) and under the loudest note (−24 dB) marks a sub-octave phantom. */
+const PHANTOM_RATIO = 10 ** (-15 / 20);
+const PHANTOM_ABSENT = 10 ** (-24 / 20);
+
 export function checkChord(s: Spectrum, targetPcs: number[], opts: { tolCents?: number } = {}): ChordCheck {
   const tol = opts.tolCents ?? 35;
   const tuningCents = estimateTuning(s);
   const work = whiten(s);
   const want = new Set(targetPcs.map((p) => ((p % 12) + 12) % 12));
-  const chord = explain(work, s, tuningCents, tol, (m) => want.has(m % 12), 14, 0.08);
+  const found = explain(work, s, tuningCents, tol, (m) => want.has(m % 12), 14, 0.08);
+  // A chord note "heard" an octave below where it was played (G2 for a G3) is a phantom: it takes
+  // its octave's partials as its even ones, and its odd partials are someone else's — cancelling
+  // them hid real wrong notes (a D4 played in C read as G2's 3rd partial; Bradley's iPhone, Oct
+  // 2026). A real low string's fundamental is within ~8 dB of its octave even on a phone mic;
+  // a phantom's is 19+ dB under it. So phantoms are dropped and the spectrum explained again
+  // without them (their octave-up note stands in for them).
+  // (Its fundamental must also be nearly absent overall: a played low string whose octave is
+  // also played on another string can sit 15 dB under that octave, but not 24 dB under the
+  // loudest note — phantoms sat 26–55 dB under it.)
+  const loudFund = Math.max(1e-12, ...found.notes.map((n) => peakNear(s, midiToHz(n.midi, tuningCents), tol).mag));
+  const phantom = (m: number) => {
+    const f0 = midiToHz(m, tuningCents);
+    const fund = peakNear(s, f0, tol).mag;
+    return fund < PHANTOM_RATIO * peakNear(s, 2 * f0, tol).mag && fund < PHANTOM_ABSENT * loudFund;
+  };
+  let chord = found;
+  if (found.notes.some((n) => phantom(n.midi))) {
+    const keep = found.notes.filter((n) => !phantom(n.midi)).map((n) => n.midi);
+    const ups = found.notes.filter((n) => phantom(n.midi)).map((n) => n.midi + 12);
+    work.set(whiten(s));
+    const allowed = new Set([...keep, ...ups]);
+    chord = explain(work, s, tuningCents, tol, (m) => allowed.has(m), allowed.size, 0.08, found.top);
+  }
   const W: Spectrum = { ...s, mags: work };
+  // Whitening evens out levels so a dull guitar is judged like a bright one, but it also lifts a
+  // deadened string's faint thud to look "heard". On the raw spectrum a muted string is 30–68 dB
+  // under the loudest string, a played one within ~24 dB (Bradley's iPhone, Oct 2026); such a
+  // note is dropped and, if it was its pitch's only octave, reported as not sounding.
+  const rawOf = (m: number) => peakNear(s, midiToHz(m, tuningCents), tol).mag;
+  const loudest = Math.max(1e-12, ...chord.notes.map((n) => rawOf(n.midi)));
+  const sounding = chord.notes.filter((n) => rawOf(n.midi) >= WEAK_RATIO * loudest);
   const target = [...want].map((pc) => {
-    const heard = chord.notes.filter((n) => n.pc === pc);
+    const picked = chord.notes.filter((n) => n.pc === pc);
+    const heard = sounding.filter((n) => n.pc === pc);
+    if (picked.length && !heard.length) return { pc, strength: 0, octaves: [], weak: true };
+    // Not found at all: if no octave of it is anywhere near sounding level on the raw spectrum
+    // either, it isn't faint — it isn't there (a muted string, not a quiet one).
+    if (!picked.length) {
+      let raw = 0;
+      for (let m = LOWEST_MIDI; m <= HIGHEST_MIDI; m++) if (m % 12 === pc) raw = Math.max(raw, rawOf(m));
+      if (raw < WEAK_RATIO * loudest) return { pc, strength: 0, octaves: [], weak: true };
+    }
     // Faint evidence left in the residual (a weak or half-muted string) still counts as "some".
     let faint = 0;
     if (!heard.length && chord.top)
@@ -197,7 +245,16 @@ export function checkChord(s: Spectrum, targetPcs: number[], opts: { tolCents?: 
     return { pc, strength: heard.length ? Math.max(...heard.map((n) => n.strength)) : Math.min(faint, 0.079), octaves: heard.map((n) => n.midi) };
   });
   const rest = chord.top ? explain(work, s, tuningCents, tol, (m) => !want.has(m % 12), 4, 0.04, chord.top) : { notes: [] };
-  const extras = rest.notes.map((n) => ({ pc: n.pc, midi: n.midi, strength: n.strength }));
+  // A wrong note's own overtones aren't more wrong notes: an extra that sits on a partial (2nd–6th)
+  // of a lower extra is folded into it (a slipped F#3 was reported as C#5, its 3rd partial).
+  const found2 = rest.notes.map((n) => ({ pc: n.pc, midi: n.midi, strength: n.strength })).sort((a, b) => a.midi - b.midi);
+  const extras: typeof found2 = [];
+  for (const e of found2) {
+    const base = extras.find((o) => [2, 3, 4, 5, 6].some((h) => Math.abs(e.midi - o.midi - 12 * Math.log2(h)) < 0.2));
+    if (base) base.strength = Math.max(base.strength, e.strength);
+    else extras.push({ ...e });
+  }
+  extras.sort((a, b) => b.strength - a.strength);
   return { target, extras, tuningCents, topSalience: chord.top };
 }
 
@@ -261,14 +318,33 @@ export function harmonicRatio(s: Spectrum, midis: number[], tuningCents = 0, tol
   return total > 0 ? explained / total : 0;
 }
 
-/** Absolute noise floor (median power, 1.5–6 kHz). Compare a strum's sustain against the room. */
-export function bandFloor(s: Spectrum): number {
+/** Band where fret buzz shows (measured on a real guitar through a phone mic, Oct 2026). */
+export const BUZZ_BAND: [number, number] = [3000, 10000];
+
+/**
+ * Absolute noise floor in the buzz band: the median power between 3 and 10 kHz. A clean chord
+ * there is a few sharp overtone peaks over a low floor; fret buzz fills in between them.
+ * Compare a strum's floor with the room's (same function) to tell buzz from room noise.
+ */
+export function hfFloor(s: Spectrum): number {
   const binHz = s.sr / s.n;
-  const lo = Math.ceil(1500 / binHz), hi = Math.min(s.mags.length - 1, Math.floor(6000 / binHz));
+  const lo = Math.ceil(BUZZ_BAND[0] / binHz), hi = Math.min(s.mags.length - 1, Math.floor(BUZZ_BAND[1] / binHz));
   const p: number[] = [];
   for (let k = lo; k <= hi; k++) p.push(s.mags[k]! * s.mags[k]!);
   p.sort((a, b) => a - b);
-  return p[Math.floor(p.length / 2)]! + 1e-20;
+  return (p[Math.floor(p.length / 2)] ?? 0) + 1e-20;
+}
+
+/**
+ * Buzz measure that doesn't depend on how hard the strum was: the buzz-band floor (hfFloor)
+ * relative to the strongest note (peak power between 70 Hz and 1 kHz), in dB. Bradley's guitar,
+ * iPhone: clean strums -87 to -70 dB, buzzing strums -71 to -63 dB.
+ */
+export function hfRelDb(s: Spectrum): number {
+  const binHz = s.sr / s.n;
+  let peak = 0;
+  for (let k = Math.ceil(70 / binHz); k <= Math.min(s.mags.length - 1, Math.floor(1000 / binHz)); k++) peak = Math.max(peak, s.mags[k]! * s.mags[k]!);
+  return 10 * Math.log10(hfFloor(s) / (peak + 1e-20));
 }
 
 /**
@@ -428,7 +504,7 @@ export interface RingProfile {
   peakDb: number;
   /** Per note: seconds until that note fell 20 dB below its own early level. */
   /** separable=false: the note shares all its partials with another chord note (e.g. an octave double). */
-  notes: { midi: number; seconds: number; stillRinging: boolean; separable: boolean; early: number }[];
+  notes: { midi: number; seconds: number; stillRinging: boolean; separable: boolean; early: number; lateDb: number }[];
 }
 
 /** How long the strum starting at `onset` keeps sounding, overall and per note, up to `end`. */
@@ -456,7 +532,9 @@ export function ringProfile(x: Float32Array, sr: number, onset: number, end: num
   const first = spectrumOf(firstWin, sr);
   const fund = midis.map((m) => peakNear(first, midiToHz(m, tuningCents), 25).mag);
   const loud = Math.max(1e-12, ...fund);
-  const sounding = new Set(midis.filter((_, j) => fund[j]! >= 0.08 * loud));
+  // A sub-octave phantom (fundamental far under its own octave, see checkChord) would claim every
+  // partial of the note above it as its own, leaving that note impossible to follow.
+  const sounding = new Set(midis.filter((m, j) => fund[j]! >= 0.08 * loud && fund[j]! >= PHANTOM_RATIO * peakNear(first, 2 * midiToHz(m, tuningCents), 25).mag));
   const own = midis.map((m) => {
     if (!sounding.has(m)) return [];
     const f0 = midiToHz(m, tuningCents);
@@ -473,6 +551,15 @@ export function ringProfile(x: Float32Array, sr: number, onset: number, end: num
     }
     return hs;
   });
+  // Each note's own level 0.3 s in, against the loudest note then (raw spectrum): a deadened
+  // string is 23–57 dB down by then, a ringing one within ~20 dB (Bradley's iPhone).
+  const lateWin = new Float32Array(N);
+  const l0 = onset + Math.round(0.3 * sr);
+  if (l0 < Math.min(end, x.length)) lateWin.set(x.subarray(l0, Math.min(end, x.length, l0 + N)));
+  const late = spectrumOf(lateWin, sr);
+  const lateFund = midis.map((m) => peakNear(late, midiToHz(m, tuningCents), 25).mag);
+  const lateLoud = Math.max(1e-12, ...midis.filter((m) => sounding.has(m)).map((m) => lateFund[midis.indexOf(m)]!));
+  const lateDb = (j: number) => 20 * Math.log10(Math.max(1e-12, lateFund[j]!) / lateLoud);
   const track = midis.map(() => [] as number[]);
   for (let i = onset + Math.round(0.03 * sr); i + N <= Math.min(end, x.length); i += step) {
     const s = spectrumOf(x.slice(i, i + N), sr);
@@ -482,11 +569,11 @@ export function ringProfile(x: Float32Array, sr: number, onset: number, end: num
     });
   }
   const notes = midis.map((midi, j) => {
-    if (!own[j]!.length) return { midi, seconds: NaN, stillRinging: false, separable: false, early: 0 };
+    if (!own[j]!.length) return { midi, seconds: NaN, stillRinging: false, separable: false, early: 0, lateDb: lateDb(j) };
     const t = track[j]!;
     const early = Math.max(1e-9, ...t.slice(0, 3));
     const d = t.findIndex((v, i) => i >= 1 && v < early * 0.1);
-    return { midi, seconds: d < 0 ? (t.length * step) / sr : (d * step) / sr + 0.03, stillRinging: d < 0, separable: true, early };
+    return { midi, seconds: d < 0 ? (t.length * step) / sr : (d * step) / sr + 0.03, stillRinging: d < 0, separable: true, early, lateDb: lateDb(j) };
   });
   return { seconds: (dropAt * hop) / sr, stillRinging, peakDb: dbfs(peak), notes };
 }

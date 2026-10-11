@@ -65,6 +65,28 @@ describe("Listen: accuracy", () => {
   });
 });
 
+describe("Listen: lessons from Bradley's real recordings (iPhone, Oct 2026)", () => {
+  test("a D played on the B string in a C chord is called out (not hidden as a low G's overtone)", () => {
+    const r = attempt("x32030", C);
+    expect(r.accuracy.extras).toContainEqual({ name: "D", status: "wrong" });
+  });
+  test("a wrong note's own overtones are not reported as more wrong notes", () => {
+    const r = attempt("024000", { rootName: "E", degrees: ["1", "b3", "5"], label: "Em" });
+    const wrong = r.accuracy.extras.filter((e) => e.status === "wrong").map((e) => e.name);
+    expect(wrong).toContain("F#");
+    expect(wrong.length).toBe(1);
+  });
+  test("a string that barely sounds (muted) is not counted as heard", () => {
+    const r = attempt("x32010", C, { strings: { 3: { amp: 0.004 } } });
+    expect(r.accuracy.notes.find((n) => n.name === "G")!.status).not.toBe("heard");
+  });
+  test("quick rhythm strumming: buzz isn't judged on the hiss between strums", () => {
+    const { audio } = take([0.6, 0.85, 1.1, 1.35].map((at) => ({ tab: "320003", at, opts: { spread: 0.01 } })), 3, 0.002);
+    const r = analyseStrum({ audio, sr: SR, onset: Math.round(0.6 * SR), end: Math.round(0.85 * SR), target: G, roomFloor: roomFloorOf(audio, SR, 0) });
+    expect(r.clarity.buzz).toBe("unknown");
+  });
+});
+
 describe("Listen: clarity and ring-out", () => {
   test("clean strum: no buzz, rings", () => {
     const r = attempt("320003", G);
@@ -189,7 +211,9 @@ describe("Listen: live session", () => {
     };
     const fresh = live(0), late = live(5 * SR);
     expect(late.strums.length).toBe(1);
-    expect(late.roomFloor).toBeCloseTo(fresh.roomFloor!, 6);
+    // Same audio, read at different block boundaries: within a few percent (not from silence).
+    expect(late.roomFloor! / fresh.roomFloor!).toBeGreaterThan(0.95);
+    expect(late.roomFloor! / fresh.roomFloor!).toBeLessThan(1.05);
     expect(late.strums[0]!.report!.clarity.verdict).toBe(fresh.strums[0]!.report!.clarity.verdict);
     expect(late.strums[0]!.report!.clarity.verdict).toBe("good");
   });

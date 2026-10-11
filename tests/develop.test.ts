@@ -129,7 +129,7 @@ describe("Develop: silence is trimmed, ring-out is kept", () => {
   const { audio } = take([1.5, 5.5, 9.5, 13.5].map((at) => ({ tab: "320003", at, opts: { spread: 0.012, letRing: true } })), 17, 0.002);
   const trimmed = trimSilence(audio, SR)!;
   const full = analyseTake({ pcm: toPcm(audio), sampleRate: SR, target: G });
-  const cut = analyseTake({ pcm: toPcm(trimmed.audio), sampleRate: SR, target: G, ...(trimmed.roomFloor !== undefined ? { roomFloor: trimmed.roomFloor } : {}) });
+  const cut = analyseTake({ pcm: toPcm(trimmed.audio), sampleRate: SR, target: G, ...(trimmed.roomHf !== undefined ? { roomHf: trimmed.roomHf } : {}) });
 
   test("the quiet lead-in and the gaps go; every strum stays", () => {
     expect(trimmed.audio.length / SR).toBeLessThan(17 - 1.3);
@@ -140,8 +140,8 @@ describe("Develop: silence is trimmed, ring-out is kept", () => {
     full.forEach((f, i) => expect(Math.abs(cut[i]!.measure.ring.seconds - f.measure.ring.seconds)).toBeLessThan(0.15));
   });
   test("the room-noise reading comes from the lead-in, so verdicts don't change", () => {
-    expect(trimmed.roomFloor).toBeDefined();
-    const ratio = trimmed.roomFloor! / full[0]!.measure.roomFloor!;
+    expect(trimmed.roomHf).toBeDefined();
+    const ratio = trimmed.roomHf! / full[0]!.measure.roomFloor!;
     expect(ratio).toBeGreaterThan(0.5);
     expect(ratio).toBeLessThan(2);
     const v = (s: typeof full) => judgeTake(s, G, THRESHOLDS).map((r) => [r.accuracy.verdict, r.clarity.verdict, r.ringOut.verdict]);
@@ -151,14 +151,14 @@ describe("Develop: silence is trimmed, ring-out is kept", () => {
     const { audio: stopped } = take([1.5, 5.5, 9.5, 13.5].map((at) => ({ tab: "320003", at, opts: { spread: 0.012, muteAfter: 1.0, letRing: true } })), 17, 0.002);
     const t = trimSilence(stopped, SR)!;
     expect(t.audio.length / SR).toBeLessThan(4 * 2); // ~1.5 s kept per strum instead of 4 s
-    const strums = analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) });
+    const strums = analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomHf !== undefined ? { roomHf: t.roomHf } : {}) });
     expect(strums.length).toBe(4);
     strums.forEach((s) => expect(s.measure.ring.seconds).toBeGreaterThan(0.8)); // each still rings until it was stopped
   });
   test("fast strumming: nothing is cut between strums", () => {
     const { audio: fast } = take(Array.from({ length: 8 }, (_, i) => ({ tab: "320003", at: 1.2 + 0.5 * i, opts: { spread: 0.01 } })), 7.5, 0.002);
     const t = trimSilence(fast, SR)!;
-    expect(analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length).toBe(8);
+    expect(analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomHf !== undefined ? { roomHf: t.roomHf } : {}) }).length).toBe(8);
   });
   test("a recording with no strums gives nothing to keep", () => {
     const quiet = new Float32Array(SR * 3).map(() => 0.002 * (Math.random() * 2 - 1));
@@ -196,7 +196,7 @@ describe("Develop: importing Bradley's export on another device", () => {
   const t = trimSilence(audio, SR)!;
   const mine: Take = {
     id: "a1", at: Date.parse("2026-10-10T20:00:00Z"), target: G, label: "clean", note: "Open G", sampleRate: SR, pcm: toPcm(t.audio),
-    roomFloor: t.roomFloor!, originalSeconds: 5, source: "mic", device: "iPhone · Safari", step: "clean-g", tab: "320003", expected: 4,
+    roomHf: t.roomHf!, roomFloor: 2.5e-5, originalSeconds: 5, source: "mic", device: "iPhone · Safari", step: "clean-g", tab: "320003", expected: 4,
   };
   const zip = exportTakes([mine], new Map([["a1", analyseTake(mine)]]), THRESHOLDS);
 
@@ -206,7 +206,8 @@ describe("Develop: importing Bradley's export on another device", () => {
     expect(r.takes.length).toBe(1);
     const got = r.takes[0]!;
     expect([got.label, got.target.label, got.step, got.tab, got.expected, got.device, got.at, got.sampleRate]).toEqual(["clean", "G", "clean-g", "320003", 4, "iPhone · Safari", mine.at, SR]);
-    expect(got.roomFloor).toBeCloseTo(mine.roomFloor!, 12);
+    expect(got.roomHf).toBeCloseTo(mine.roomHf!, 12);
+    expect(got.roomFloor).toBeCloseTo(mine.roomFloor!, 12); // an old-band reading still round-trips
     expect(got.pcm).toEqual(mine.pcm);
     expect(got.imported).toBe("fretlab-takes.zip");
     // Analysed on the PC exactly as on the phone.
@@ -248,7 +249,7 @@ describe("Develop: strum counting on a real phone (taps, slow strums, the Done t
   const click = (i: number) => (i < 0.002 * SR ? 0.3 * (i % 2 ? 1 : -1) : 0);
   const count = (a: Float32Array) => {
     const t = trimSilence(a, SR);
-    return t ? analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length : 0;
+    return t ? analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomHf !== undefined ? { roomHf: t.roomHf } : {}) }).length : 0;
   };
 
   test("taps on the phone, button clicks and the mic switching on are not strums", () => {
@@ -282,7 +283,7 @@ describe("Develop: the live count and the saved count agree", () => {
   test("a strum played right before Done is counted in the saved take too", () => {
     const { audio } = take([1.2, 3.2, 5.2, 7.0].map((at) => ({ tab: "320003", at, opts: { spread: 0.012 } })), 7.3, 0.002);
     const t = trimSilence(audio, SR)!;
-    expect(analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length).toBe(4);
+    expect(analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(t.roomHf !== undefined ? { roomHf: t.roomHf } : {}) }).length).toBe(4);
   });
 });
 
@@ -290,7 +291,7 @@ describe("Develop: the live count and the saved count agree", () => {
 describe("Develop: knocks between let-ring strums are not strums (guided steps)", () => {
   const counted = (audio: Float32Array, step?: string) => {
     const t = trimSilence(audio, SR)!;
-    return analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(step ? { step } : {}), ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}) }).length;
+    return analyseTake({ pcm: toPcm(t.audio), sampleRate: SR, target: G, ...(step ? { step } : {}), ...(t.roomHf !== undefined ? { roomHf: t.roomHf } : {}) }).length;
   };
   test("40 takes of 3 strums + 3 knocks or bumps while the chord rings: exactly 3 every time", () => {
     const TABS = ["320003", "x32010", "xx0232", "022000", "x02210", "133211"];

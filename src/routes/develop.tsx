@@ -136,7 +136,7 @@ function DevelopPage() {
   /** Keep only the sound (each strum until it has rung out); room noise measured first. */
   const trimmed = (audio: Float32Array, sampleRate: number) => {
     const t = trimSilence(audio, sampleRate);
-    return t ? { pcm: toPcm(t.audio), sampleRate, ...(t.roomFloor !== undefined ? { roomFloor: t.roomFloor } : {}), originalSeconds: +(audio.length / sampleRate).toFixed(2) } : null;
+    return t ? { pcm: toPcm(t.audio), sampleRate, ...(t.roomHf !== undefined ? { roomHf: t.roomHf } : {}), originalSeconds: +(audio.length / sampleRate).toFixed(2) } : null;
   };
 
   const record = () => {
