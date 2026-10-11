@@ -8,6 +8,7 @@ import { CHORDS, RUSH_LEVELS, RUSH_LIVES, fallSeconds, loadBests, nextChord, rus
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
 import { useGameMic, type HeardStrum } from "./useGameMic";
+import { NEON_BAD, NEON_GOOD, NEON_INFO, neonCard, neonLane, neonOf, neonText } from "./neon";
 
 interface Drop {
   id: number;
@@ -186,35 +187,37 @@ export function ChordRush() {
       ) : null}
 
       <div className="grid grid-cols-4 gap-2 text-center" data-testid="rush-stats">
-        <Stat label="Score" value={score} testId="rush-score" />
-        <Stat label="Combo" value={combo ? `×${combo}` : "—"} />
-        <div className="rounded-md bg-secondary/60 p-1.5">
+        <Stat label="Score" value={score} testId="rush-score" color={NEON_INFO} />
+        <Stat label="Combo" value={combo ? `×${combo}` : "—"} color="#ffe600" />
+        <div className="rounded-md border p-1.5" style={{ background: "#0b0b16", borderColor: `${NEON_BAD}55` }}>
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Lives</p>
           <p className="flex h-7 items-center justify-center gap-0.5" data-testid="rush-lives" data-lives={lives}>
-            {Array.from({ length: RUSH_LIVES }, (_, i) => <Heart key={i} className={cn("h-4 w-4", i < lives ? "fill-root text-root" : "text-muted-foreground/40")} />)}
+            {Array.from({ length: RUSH_LIVES }, (_, i) => (
+              <Heart key={i} className={cn("h-5 w-5", i < lives ? "" : "text-muted-foreground/30")} style={i < lives ? { color: NEON_BAD, fill: NEON_BAD, filter: `drop-shadow(0 0 4px ${NEON_BAD})` } : undefined} />
+            ))}
           </p>
         </div>
-        <Stat label="Best" value={best} />
+        <Stat label="Best" value={best} color="#ff2bd6" />
       </div>
 
       {/* the lane */}
-      <div className={cn("relative h-72 overflow-hidden rounded-lg border bg-background/60 sm:h-80", danger && phase === "playing" ? "border-root/70" : "border-border")} data-testid="rush-lane">
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-root/70" aria-hidden />
+      <div className="relative h-[27rem] overflow-hidden rounded-xl border-2 sm:h-[32rem]" style={{ ...neonLane, borderColor: danger && phase === "playing" ? NEON_BAD : "#2a1f4d", boxShadow: danger && phase === "playing" ? `0 0 18px ${NEON_BAD}66` : undefined }} data-testid="rush-lane">
+        <div className="absolute inset-x-0 bottom-0 h-1.5" style={{ background: NEON_BAD, boxShadow: `0 0 12px ${NEON_BAD}, 0 0 28px ${NEON_BAD}` }} aria-hidden />
         {phase === "countdown" ? (
           <div className="absolute inset-0 grid place-items-center">
-            <span className="font-display text-7xl font-black text-primary" aria-live="assertive">{mic.state === "on" ? count : "…"}</span>
+            <span className="font-display text-9xl font-black" style={neonText(NEON_INFO)} aria-live="assertive">{mic.state === "on" ? count : "…"}</span>
           </div>
         ) : null}
         {phase === "playing" && drop ? (
           <div
             key={drop.id}
-            className={cn("absolute left-1/2 flex items-center gap-3 rounded-xl border-2 px-4 py-2 shadow-lg", danger ? "border-root bg-root/15" : "border-primary bg-card")}
-            style={{ top: `${progress * 100}%`, transform: `translate(-50%, -${progress * 100}%)` }}
+            className={cn("absolute left-1/2 flex w-[88%] max-w-md items-center justify-center gap-4 rounded-2xl border-[3px] px-4 py-4 sm:gap-6", danger && "animate-pulse")}
+            style={{ ...neonCard(neonOf(drop.name)), top: `${progress * 100}%`, transform: `translate(-50%, -${progress * 100}%)` }}
             data-testid="rush-chord"
             data-chord={drop.name}
           >
-            <span className="font-display text-5xl font-black leading-none">{pretty(drop.name)}</span>
-            {hints && tab ? <ChordBox tab={tab} size={70} /> : null}
+            <span className="font-display text-[5.5rem] font-black leading-none sm:text-[7rem]" style={neonText(neonOf(drop.name))}>{pretty(drop.name)}</span>
+            {hints && tab ? <ChordBox tab={tab} size={112} /> : null}
           </div>
         ) : null}
         {phase === "ready" ? (
@@ -228,9 +231,9 @@ export function ChordRush() {
         {phase === "over" ? (
           <div className="absolute inset-0 grid place-items-center bg-background/70 p-4 text-center" data-testid="rush-over">
             <div className="space-y-2">
-              <p className="font-display text-3xl font-black">Game over</p>
-              <p className="text-lg"><b data-testid="rush-final">{score}</b> points · {cleared} chord{cleared === 1 ? "" : "s"} cleared</p>
-              {newBest ? <p className="flex items-center justify-center gap-1.5 font-semibold text-primary"><Trophy className="h-5 w-5" /> New best!</p> : <p className="text-sm text-muted-foreground">Best: {best}</p>}
+              <p className="font-display text-5xl font-black" style={neonText(NEON_BAD)}>Game over</p>
+              <p className="text-lg"><b className="text-2xl" style={neonText(NEON_INFO)} data-testid="rush-final">{score}</b> points · {cleared} chord{cleared === 1 ? "" : "s"} cleared</p>
+              {newBest ? <p className="flex items-center justify-center gap-1.5 text-xl font-black" style={neonText("#ffe600")}><Trophy className="h-6 w-6" /> New best!</p> : <p className="text-sm text-muted-foreground">Best: {best}</p>}
               <Button size="lg" className="h-11 gap-2" onClick={() => void start()}><Zap className="h-4 w-4" /> Play again</Button>
             </div>
           </div>
@@ -239,14 +242,14 @@ export function ChordRush() {
 
       <div className="flex min-h-9 flex-wrap items-center gap-2">
         {feedback ? (
-          <p key={feedback.id} className={cn("text-sm font-semibold", feedback.tone === "good" ? "text-extension" : feedback.tone === "bad" ? "text-root" : "text-muted-foreground")} role="status" data-testid="rush-feedback">
+          <p key={feedback.id} className="text-base font-black" style={neonText(feedback.tone === "good" ? NEON_GOOD : feedback.tone === "bad" ? NEON_BAD : NEON_INFO)} role="status" data-testid="rush-feedback">
             {feedback.text}
           </p>
         ) : null}
         {phase === "playing" || phase === "countdown" ? (
           <>
             <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground"><Mic className="h-3.5 w-3.5" /><MicMeter db={mic.level} /></span>
-            <Button size="sm" variant="ghost" className="gap-1" onClick={quit}><Square className="h-3.5 w-3.5 fill-current" /> Stop</Button>
+            <Button size="sm" variant="ghost" className="gap-1.5 border font-bold" style={{ borderColor: NEON_BAD, color: NEON_BAD, boxShadow: `0 0 8px ${NEON_BAD}66` }} onClick={quit}><Square className="h-3 w-3" style={{ fill: NEON_BAD }} /> Stop</Button>
           </>
         ) : null}
       </div>
@@ -256,11 +259,11 @@ export function ChordRush() {
   );
 }
 
-export function Stat({ label, value, testId }: { label: string; value: string | number; testId?: string }) {
+export function Stat({ label, value, testId, color }: { label: string; value: string | number; testId?: string; color?: string }) {
   return (
-    <div className="rounded-md bg-secondary/60 p-1.5">
+    <div className="rounded-md border p-1.5" style={{ background: "#0b0b16", borderColor: color ? `${color}55` : "#2a1f4d" }}>
       <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className="font-mono text-xl font-black leading-7" data-testid={testId}>{value}</p>
+      <p className="font-mono text-xl font-black leading-7" style={color ? neonText(color) : undefined} data-testid={testId}>{value}</p>
     </div>
   );
 }
@@ -268,7 +271,7 @@ export function Stat({ label, value, testId }: { label: string; value: string | 
 export function MicMeter({ db }: { db: number }) {
   return (
     <span className="inline-block h-1.5 w-16 overflow-hidden rounded-full bg-secondary" aria-hidden>
-      <span className="block h-full rounded-full bg-primary transition-[width] duration-100" style={{ width: `${Math.max(0, Math.min(100, ((db + 70) / 70) * 100))}%` }} />
+      <span className="block h-full rounded-full transition-[width] duration-100" style={{ width: `${Math.max(0, Math.min(100, ((db + 70) / 70) * 100))}%`, background: NEON_GOOD, boxShadow: `0 0 6px ${NEON_GOOD}` }} />
     </span>
   );
 }
