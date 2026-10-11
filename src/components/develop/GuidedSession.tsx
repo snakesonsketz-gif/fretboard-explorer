@@ -7,6 +7,7 @@ import { deviceKind, deviceLabel, deviceName, encodeWav, newTakeId, safeAnalyse,
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
 import { ChordBox } from "./ChordBox";
+import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
 import type { Player } from "./usePlayer";
 import { MAX_SECONDS, QUIET_SECONDS, type useRecorder } from "./useRecorder";
 import { Waveform } from "./Waveform";
@@ -66,9 +67,24 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
     }
   }, []);
 
+  // Steps whose chord was marked "Impossible chord" are skipped (and listed at the top of Develop).
+  const [impossible, setImpossible] = useState<ImpossibleShape[]>([]);
+  useEffect(() => {
+    const load = () => setImpossible(loadImpossible());
+    load();
+    window.addEventListener("fretlab-impossible", load);
+    return () => window.removeEventListener("fretlab-impossible", load);
+  }, []);
+  const [impNote, setImpNote] = useState<string | null>(null);
+  const tabShape = (tab: string) => [...tab].map((c) => (c === "x" ? null : Number(c)));
+  const skipped = (s: PlanStep) => !!s.tab && isMarkedImpossible(impossible, tabShape(s.tab), "standard");
+  const canMark = (s: PlanStep) => !!s.tab && /[1-9]/.test(s.tab);
+
   // Only takes recorded on this device count here (imported ones are someone else's).
   const takeFor = (id: string) => takes.find((t) => t.step === id && !t.imported);
-  const confirmed = (id: string) => takeFor(id)?.confirmedStrums !== undefined;
+  const recordedOk = (id: string) => takeFor(id)?.confirmedStrums !== undefined;
+  /** Done: recorded and checked — or skipped because the chord can't be played. */
+  const confirmed = (id: string) => recordedOk(id) || ROUNDS.some((r) => r.steps.some((s) => s.id === id && skipped(s)));
   // Rounds: open on the first one that isn't finished (or the one picked).
   const roundDone = (i: number) => ROUNDS[i]!.steps.every((s) => confirmed(s.id));
   const firstOpenRound = ROUNDS.findIndex((_, i) => !roundDone(i));
@@ -83,6 +99,7 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
     setListOpen(false);
   };
   const done = PLAN.filter((s) => confirmed(s.id)).length;
+  const nSkipped = PLAN.filter((s) => skipped(s) && !recordedOk(s.id)).length;
   const toCheck = PLAN.filter((s) => takeFor(s.id) && !confirmed(s.id)).length;
   // Next: the first step not yet recorded AND confirmed (old recordings get checked too).
   const firstOpen = PLAN.findIndex((s) => !confirmed(s.id));
@@ -91,6 +108,15 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
   const take = step ? takeFor(step.id) : undefined;
   const recording = rec.state !== "idle";
   const playingRec = rec.state === "recording";
+  const markStep = (s: PlanStep) => {
+    setImpossible(markImpossible(tabShape(s.tab), "standard", `${s.target.label} (${s.title})`, s.target.rootName, s.target.degrees));
+    const others = ROUNDS.flatMap((r) => r.steps).filter((x) => x.id !== s.id && x.tab === s.tab).length;
+    setImpNote(`Marked "${s.title}" (${[...s.tab].join(" ")}) as impossible — skipped${others ? `, with ${others} other step${others === 1 ? "" : "s"} using the same shape` : ""}. It's listed under Impossible chords at the top of Develop (Undo there or on the step).`);
+    window.setTimeout(() => setImpNote(null), 5000);
+    setPick(null);
+    setSave(null);
+  };
+  const unmarkStep = (s: PlanStep) => setImpossible(unmarkImpossible(tabShape(s.tab), "standard"));
 
   const begin = (s: PlanStep) => {
     setSave(null);
@@ -164,7 +190,7 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 className="font-display text-lg font-black">Guided recording</h2>
           <span className="text-sm text-muted-foreground" data-testid="guided-progress">
-            {ROUND.title}: {done} of {PLAN.length} steps recorded and checked{toCheck ? ` · ${toCheck} to check` : ""}
+            {ROUND.title}: {done - nSkipped} of {PLAN.length} steps recorded and checked{nSkipped ? ` · ${nSkipped} skipped (impossible)` : ""}{toCheck ? ` · ${toCheck} to check` : ""}
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Recording rounds">
@@ -206,12 +232,26 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
         </div>
       ) : null}
 
+      {impNote ? <p role="status" className="rounded-md bg-red-500/15 px-2 py-1.5 text-sm font-semibold text-red-300" data-testid="guided-impossible-note">{impNote}</p> : null}
       {ready && step ? (
         <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-3" data-testid="guided-step" data-step={step.id}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs uppercase tracking-widest text-muted-foreground">Step {idx! + 1} of {PLAN.length}</span>
             <span className={cn("rounded px-2 py-0.5 text-xs font-semibold", KIND[step.label].cls)}>{KIND[step.label].name}</span>
             {take?.confirmedStrums !== undefined ? <span className="text-xs text-extension">✓ recorded and checked</span> : null}
+            {canMark(step) && !recording ? (
+              skipped(step) ? (
+                <span className="ml-auto flex items-center gap-2 text-xs font-semibold text-red-300" data-testid="guided-skipped">
+                  Marked impossible — skipped
+                  <button type="button" className="text-muted-foreground underline hover:text-foreground" onClick={() => unmarkStep(step)}>Undo</button>
+                </span>
+              ) : (
+                <Button size="sm" variant="ghost" className="ml-auto h-8 border-2 font-bold hover:bg-red-500/15" style={{ borderColor: "#ef4444", color: "#fca5a5" }}
+                  onClick={() => markStep(step)} data-testid="guided-impossible" title="This chord can't actually be played — skip it and add it to the Impossible chords list">
+                  Impossible chord
+                </Button>
+              )
+            ) : null}
           </div>
           <div className="flex gap-3">
             <ChordBox tab={step.tab} wrong={step.wrong} muted={step.muted} />
@@ -329,15 +369,16 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
                 const t = takeFor(s.id);
                 const n = t ? measured.get(t.id)?.length : undefined;
                 const ok = t?.confirmedStrums !== undefined;
+                const skip = skipped(s);
                 return (
                   <li key={s.id} className={cn("flex items-center gap-1 rounded-md", i === idx && "bg-secondary/60")}>
                     <button type="button" disabled={recording} onClick={() => { setPick(i); setSave(null); setListOpen(false); }}
                       className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-secondary/60">
-                      <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold", ok ? "bg-extension/80 text-background" : t ? "bg-root text-root-foreground" : "bg-secondary text-muted-foreground")} title={ok ? "Recorded and checked" : t ? "Recorded — needs checking" : "Not recorded yet"}>
-                        {ok ? "✓" : t ? "?" : i + 1}
+                      <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold", skip ? "bg-red-500/30 text-red-200" : ok ? "bg-extension/80 text-background" : t ? "bg-root text-root-foreground" : "bg-secondary text-muted-foreground")} title={skip ? "Marked impossible — skipped" : ok ? "Recorded and checked" : t ? "Recorded — needs checking" : "Not recorded yet"}>
+                        {skip ? "✕" : ok ? "✓" : t ? "?" : i + 1}
                       </span>
-                      <span className="min-w-0 flex-1 truncate">{s.title}</span>
-                      <span className="shrink-0 text-xs text-muted-foreground">{t ? (ok ? `${t.confirmedStrums} strums ✓` : `check (${n ?? "…"} heard)`) : KIND[s.label].name.replace(" — on purpose", "")}</span>
+                      <span className={cn("min-w-0 flex-1 truncate", skip && "line-through opacity-60")}>{s.title}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{skip ? <span className="text-red-300">impossible — skipped</span> : t ? (ok ? `${t.confirmedStrums} strums ✓` : `check (${n ?? "…"} heard)`) : KIND[s.label].name.replace(" — on purpose", "")}</span>
                     </button>
                     {t ? (
                       player.playingId === t.id ? (
