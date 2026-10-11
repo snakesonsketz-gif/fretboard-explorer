@@ -23,7 +23,7 @@ import { AdvancedTheory } from "@/components/TheoryPanels";
 import { SongWorkspace } from "@/components/SongWorkspace";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { analyzeShape, findVoicings, shapeMidis, shapeToTab, type Shape } from "@/lib/voicings";
-import { isMarkedImpossible, loadImpossible, markImpossible, type ImpossibleShape } from "@/lib/impossible";
+import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
 import { useDevMode } from "@/lib/devMode";
 import { voicingTab, type SlotVoicing } from "@/lib/song";
 
@@ -907,8 +907,8 @@ function Workstation() {
                     data-testid="impossible-chord"
                     title="Developer mode: this shape can't actually be played — never suggest it again (listed in Develop)"
                     onClick={() => {
-                      markImpossible(shape, tuning.id, title);
-                      setImpNote(`Marked ${shapeToTab(shape)} (${pretty(title)}) as impossible — it won't be suggested again. It's listed in the Develop tab.`);
+                      markImpossible(shape, tuning.id, title, root.name, degrees);
+                      setImpNote(`Marked ${shapeToTab(shape)} (${pretty(title)}) as impossible — it won't be suggested again. It's kept at the bottom of this list, under Marked impossible.`);
                       window.setTimeout(() => setImpNote(null), 4000);
                       setShapeIdx(null);
                       setPin(null);
@@ -928,19 +928,62 @@ function Workstation() {
                       key={i}
                       size="sm"
                       variant={(pinned ? sameShape(v.shape, pinned) : i === shapeIdx) ? "default" : "secondary"}
-                      className="font-mono"
+                      className={cn("font-mono", v.doubtful && "border border-dashed border-red-500/60")}
+                      title={v.doubtful ? "Probably not playable: it needs a barre that would also lie across an open or muted string. You decide — mark it Impossible chord in developer mode if so." : undefined}
+                      data-doubtful={v.doubtful || undefined}
                       onClick={() => {
                         setPin(null);
                         setShapeIdx(i);
                         playSequence(shapeMidis(v.shape, tuning), 0.05);
                       }}
                     >
+                      {v.doubtful ? <span aria-hidden className="mr-1 text-red-400">⚠</span> : null}
                       {shapeToTab(v.shape)}
                       {v.omitted.length ? " (no 5)" : ""}
                     </Button>
                   ))
                 )}
               </div>
+              {voicings.some((v) => v.doubtful) ? (
+                <p className="text-[11px] text-muted-foreground">
+                  <span className="text-red-400">⚠</span> = probably can't be held: a barre would have to lie across an open or muted string. They're listed last — your call.
+                </p>
+              ) : null}
+              {impossible.length ? (
+                <details className="rounded-md border border-red-500/30 bg-red-500/5 px-2 py-1" data-testid="impossible-hidden">
+                  <summary className="cursor-pointer text-[11px] uppercase tracking-widest text-red-300/90">
+                    Marked impossible ({impossible.length}) — hidden from the shapes above
+                  </summary>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Tap one to look at it on the fretboard. Undo if it's playable after all.</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5 pb-1">
+                    {impossible.map((x) => (
+                      <span key={`${x.tuningId}:${x.shape.join(",")}`} className="flex items-center gap-1 rounded-md border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-xs">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 font-mono disabled:cursor-default"
+                          disabled={!x.rootName || !x.degrees || x.tuningId !== tuning.id}
+                          title={x.tuningId !== tuning.id ? `Marked in another tuning (${x.tuningId})` : "Show it on the fretboard"}
+                          onClick={() => {
+                            if (!x.rootName || !x.degrees) return;
+                            setRootName(x.rootName);
+                            setMode("chord");
+                            setCustom(x.degrees as Degree[]);
+                            setHistory([]);
+                            setSel(null);
+                            restoreShape(x.rootName, x.degrees, { shape: x.shape, tuningId: x.tuningId });
+                          }}
+                        >
+                          <span className="font-display font-bold">{pretty(x.chord)}</span>
+                          <span className="text-red-300">{shapeToTab(x.shape)}</span>
+                        </button>
+                        <button type="button" className="ml-1 text-[11px] text-muted-foreground underline hover:text-foreground" onClick={() => setImpossible(unmarkImpossible(x.shape, x.tuningId))}>
+                          Undo
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </div>
           ) : null}
           <DegreeAlter root={root} degrees={degrees} original={baseDegrees} onChange={(d) => commit(d)} />

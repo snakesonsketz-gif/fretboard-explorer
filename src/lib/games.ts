@@ -67,7 +67,7 @@ export const CHORDS: Record<string, GameChord> = {
   C9: ch("C9", "C", D("1 3 5 b7 9"), "x32333"),
   E9: ch("E9", "E", D("1 3 5 b7 9"), "020132"),
   A9: ch("A9", "A", D("1 3 5 b7 9"), "x02423"),
-  Em9: ch("Em9", "E", D("1 b3 5 b7 9"), "022032"),
+  Em9: ch("Em9", "E", D("1 b3 5 b7 9"), "020002"),
   "E7#9": ch("E7#9", "E", D("1 3 b7 #9"), "0x678x"),
 };
 

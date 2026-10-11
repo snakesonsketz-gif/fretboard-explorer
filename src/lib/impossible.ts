@@ -9,6 +9,9 @@ export interface ImpossibleShape {
   tuningId: string;
   /** What the chord was when it was marked, e.g. "Fmaj7". */
   chord: string;
+  /** The chord itself, so it can be opened again to look at the shape. */
+  rootName?: string;
+  degrees?: string[];
   at: number;
 }
 
@@ -30,9 +33,9 @@ function store(list: ImpossibleShape[]) {
   }
   window.dispatchEvent(new Event("fretlab-impossible"));
 }
-export function markImpossible(shape: (number | null)[], tuningId: string, chord: string): ImpossibleShape[] {
+export function markImpossible(shape: (number | null)[], tuningId: string, chord: string, rootName?: string, degrees?: string[]): ImpossibleShape[] {
   const list = loadImpossible().filter((x) => !(x.tuningId === tuningId && same(x.shape, shape)));
-  const next = [{ shape: [...shape], tuningId, chord, at: Date.now() }, ...list];
+  const next: ImpossibleShape[] = [{ shape: [...shape], tuningId, chord, at: Date.now(), ...(rootName && degrees ? { rootName, degrees: [...degrees] } : {}) }, ...list];
   store(next);
   return next;
 }

@@ -19,6 +19,12 @@ export interface Voicing {
   sounding: number;
   /** Pitch classes of the set that the shape leaves out. */
   omitted: number[];
+  /**
+   * Probably not playable: the lowest-fret notes would need a barre that also lies across an open
+   * or muted string (or the fingers can't be placed). Still shown on Explore so the player can judge
+   * it; never used where the app asks someone to play a chord (games, recordings).
+   */
+  doubtful: boolean;
 }
 
 export interface VoicingOptions {
@@ -82,7 +88,7 @@ export function findVoicings(o: VoicingOptions): Voicing[] {
   }
 
   const score = (v: Voicing) =>
-    v.span * 1.2 + v.minFret * 0.15 - v.sounding * 0.8 + v.omitted.length * 1.5;
+    v.span * 1.2 + v.minFret * 0.15 - v.sounding * 0.8 + v.omitted.length * 1.5 + (v.doubtful ? 100 : 0);
   return [...results.values()].sort((a, b) => score(a) - score(b)).slice(0, o.limit ?? 40);
 }
 
@@ -117,7 +123,9 @@ function evaluate(
   const span = fretted.length ? maxFret - minFret : 0;
   if (span > o.maxSpan) return null;
 
-  if (fingersNeeded(cur) > 4) return null;
+  // Lenient count (notes on the lowest fret as one barre); the strict check only flags.
+  const atMin = fretted.filter((f) => f === minFret).length;
+  if ((atMin >= 2 ? fretted.length - atMin + 1 : fretted.length) > 4) return null;
 
   return {
     shape: [...cur],
@@ -126,34 +134,72 @@ function evaluate(
     span,
     sounding: sounding.length,
     omitted: [...set].filter((p) => !present.has(p)),
+    doubtful: fingersNeeded(cur) > 4,
   };
 }
 
 /**
- * How many fretting fingers a shape needs (Infinity when it can't be held). One finger may barre
- * the lowest fret across a run of strings — but a barre presses every string it lies across, so
- * the run can't include an open or muted string (an F barre can't leave the B string open).
- * Strings fretted higher inside the run are fine: those fingers sit above the barre.
+ * How many fretting fingers a shape needs (Infinity when a hand can't hold it). The fingers are
+ * placed in order — index on the lowest fret, pinky on the highest — and one finger may lie across
+ * several strings at the same fret (a barre) only if every string under it is pressed at that fret
+ * or higher: a barre presses all of them, so it can't leave an open or muted string in the middle
+ * (an F barre can't let the B string ring open). Two separate fingers on the lowest fret that are
+ * far apart, with other fingers pressing strings between them, can't both reach — that needs a barre.
  */
 export function fingersNeeded(shape: readonly (number | null)[]): number {
-  const fretted = shape.map((f, i) => ({ f, i })).filter((x): x is { f: number; i: number } => x.f !== null && x.f > 0);
-  if (!fretted.length) return 0;
-  let best = fretted.length; // no barre: one finger per fretted note
-  const minFret = Math.min(...fretted.map((x) => x.f));
-  const atMin = fretted.filter((x) => x.f === minFret).map((x) => x.i);
-  // Try every barre from one lowest-fret string to another.
-  for (let a = 0; a < atMin.length; a++)
-    for (let b = a + 1; b < atMin.length; b++) {
-      const lo = atMin[a]!, hi = atMin[b]!;
-      let ok = true;
-      for (let s = lo; s <= hi; s++) {
-        const f = shape[s];
-        if (f === null || f === undefined || f < minFret) ok = false; // open or muted under the barre
-      }
-      if (!ok) continue;
-      const underBarre = fretted.filter((x) => x.i >= lo && x.i <= hi && x.f === minFret).length;
-      best = Math.min(best, 1 + fretted.length - underBarre);
+  const notes = shape
+    .map((f, i) => ({ f, i }))
+    .filter((x): x is { f: number; i: number } => x.f !== null && x.f > 0)
+    .sort((a, b) => a.f - b.f || a.i - b.i);
+  if (!notes.length) return 0;
+  const minFret = notes[0]!.f;
+  const barreOk = (fret: number, lo: number, hi: number) => {
+    for (let s = lo; s <= hi; s++) {
+      const f = shape[s];
+      if (f === null || f === undefined || f < fret || f === 0) return false;
     }
+    return true;
+  };
+  // finger -> { fret, strings }
+  const used: { fret: number; lo: number; hi: number }[] = [];
+  let best = Infinity;
+  const place = (k: number) => {
+    if (used.length >= best) return;
+    if (k === notes.length) {
+      best = used.length;
+      return;
+    }
+    const n = notes[k]!;
+    const last = used[used.length - 1];
+    // Same finger as the last note: a barre at the same fret.
+    if (last && last.fret === n.f) {
+      const lo = Math.min(last.lo, n.i), hi = Math.max(last.hi, n.i);
+      if (barreOk(n.f, lo, hi)) {
+        const prev = { ...last };
+        last.lo = lo;
+        last.hi = hi;
+        place(k + 1);
+        Object.assign(last, prev);
+      }
+    }
+    // The next finger.
+    if (used.length < 4) {
+      // Two separate fingers on the lowest fret, far apart with other fingers pressing strings in
+      // between them, can't both reach — that takes a barre.
+      const between = (a: number, b: number) => notes.some((m) => m.f > minFret && m.i > Math.min(a, b) && m.i < Math.max(a, b));
+      const clash = n.f === minFret && used.some((u) => {
+        if (u.fret !== n.f) return false;
+        const near = Math.abs(u.lo - n.i) < Math.abs(u.hi - n.i) ? u.lo : u.hi;
+        return Math.abs(near - n.i) > 2 && between(near, n.i);
+      });
+      if (!clash) {
+        used.push({ fret: n.f, lo: n.i, hi: n.i });
+        place(k + 1);
+        used.pop();
+      }
+    }
+  };
+  place(0);
   return best;
 }
 

@@ -119,7 +119,7 @@ const ROUND_3 = [
   { id: "r3-bm", label: "clean", target: Bm, tab: "x24432", strums: 4, title: "B minor barre (2nd fret)", how: `A-shape barre at the 2nd fret, from the A string down. Check every string rings first. ${RING}` },
   { id: "r3-g5", label: "clean", target: G5, tab: "355xxx", strums: 4, title: "G5 power chord", how: `Power chord on the low three strings (3rd fret low E, 5th fret A and D). Strum only those three. ${RING}` },
   // ---------------- real beginner mistakes
-  { id: "r3-wrong-f-b", label: "wrong-note", target: F, tab: "133201", wrong: [4], strums: 4, title: "F with the B string not pressed", how: `F barre, but let the barre miss the B string so it rings open (B instead of C) — the most common F-chord problem. ${RING}` },
+  { id: "r3-wrong-f-e", label: "wrong-note", target: F, tab: "xx3210", wrong: [5], strums: 4, title: "Small F with the high E string not pressed", how: `The small F (D string 3rd fret, G 2nd, B 1st), but leave the high E string open so it rings E instead of F — what happens when the first finger doesn't reach. ${RING}` },
   { id: "r3-wrong-em-gs", label: "wrong-note", target: Em, tab: "022100", wrong: [3], strums: 4, title: "E minor with a finger on the G string", how: `Play E minor, but put a finger on the 1st fret of the G string (G♯) — so it's really E major. ${RING}` },
   { id: "r3-wrong-am-cs", label: "wrong-note", target: Am, tab: "x02220", wrong: [4], strums: 4, title: "A minor played as A major", how: `Asked for A minor, but play open A major (2nd fret on the B string: C♯ instead of C). ${RING}` },
   // ---------------- how he strums
