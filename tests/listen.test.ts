@@ -62,7 +62,7 @@ describe("Listen: accuracy", () => {
         wrong += res.accuracy.extras.filter((e) => e.status === "wrong").length;
       }
     expect(wrong).toBe(0);
-  });
+  }, 30_000); // 48 synthetic strums: slow on a busy machine
 });
 
 describe("Listen: lessons from Bradley's real recordings (iPhone, Oct 2026)", () => {

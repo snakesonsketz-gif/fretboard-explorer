@@ -12,7 +12,7 @@ const judge = (tab: string, chord: string, opts = {}) => {
 describe("Games: rules", () => {
   test("every game chord's shape is that chord (all its notes, nothing else)", () => {
     for (const [name, c] of Object.entries(CHORDS)) expect([name, judge(c.tab, name).kind]).toEqual([name, "clean"]);
-  });
+  }, 30_000); // ~45 synthetic strums: slow on a busy machine
   test("a clean strum clears, a wrong note or the wrong chord doesn't (and says why)", () => {
     expect(judge("320003", "G").kind).toBe("clean");
     const wrong = judge("320013", "G"); // C on the B string

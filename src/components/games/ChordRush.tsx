@@ -9,7 +9,7 @@ import { TIERS } from "@/lib/levels";
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
 import { useGameMic, type HeardStrum } from "./useGameMic";
-import { MineToggle, TierPicker, useRemembered, useSavedChords, useTier } from "./TierPicker";
+import { ChordToggles, MineToggle, TierPicker, useRemembered, useSavedChords, useSwitchedOff, useTier } from "./TierPicker";
 import { NEON_BAD, NEON_GOOD, NEON_INFO, neonCard, neonLane, neonOf, neonText } from "./neon";
 
 interface Drop {
@@ -33,7 +33,10 @@ export function ChordRush() {
   const favs = useSavedChords();
   const mine = savedGameChords(favs, levelId);
   const pool: Record<string, GameChord> = mineOn ? { ...CHORDS, ...mine } : CHORDS;
-  const names: string[] = [...level.chords, ...(mineOn ? Object.keys(mine) : [])];
+  const allNames: string[] = [...level.chords, ...(mineOn ? Object.keys(mine) : [])];
+  const [off, toggleOff, allOn] = useSwitchedOff(`rush:${levelId}`);
+  const onNames = allNames.filter((n) => !off.has(n));
+  const names = onNames.length >= 2 ? onNames : allNames;
   const [bests, setBests] = useState<Record<string, number>>({});
   const [hints, setHints] = useState(true);
   const [phase, setPhase] = useState<Phase>("ready");
@@ -190,7 +193,7 @@ export function ChordRush() {
         <div className="space-y-2">
           <TierPicker value={levelId} onChange={setLevelId} bests={Object.fromEntries(TIERS.map((t) => [t.id, bests[`rush:${t.id}`] ?? 0]))}
             note={(t) => RUSH_LEVELS.find((l) => l.id === t)!.chords.slice(0, 5).map(pretty).join(" ") + "…"} />
-          <p className="text-xs text-muted-foreground" data-testid="rush-pool">{names.map((n) => pretty(chordLabel(pool, n))).join(" · ")}</p>
+          <ChordToggles names={allNames} off={off} onToggle={(n) => toggleOff(n, allNames)} onAll={allOn} label={(n) => pretty(chordLabel(pool, n))} colorOf={(n) => neonOf(chordLabel(pool, n))} testId="rush-toggle" />
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <MineToggle checked={mineOn} onChange={setMineOn} count={Object.keys(mine).length} tier={levelId} />
             <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">

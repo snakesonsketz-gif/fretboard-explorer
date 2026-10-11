@@ -12,11 +12,33 @@ export interface Favorite {
 
 const KEY = "fretlab.favorites.v1";
 
+const LETTER_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const rootPc = (name: string) =>
+  ((LETTER_PC[name[0]?.toUpperCase() ?? "C"] ?? 0) + [...name.slice(1)].reduce((a, c) => a + (c === "#" || c === "♯" ? 1 : c === "b" || c === "♭" ? -1 : 0), 0) + 120) % 12;
+
+/** What makes a saved item "the same": the same kind, on the same root note, with the same notes (shape and label don't count). */
+export const favoriteKey = (f: Pick<Favorite, "mode" | "rootName" | "degrees">) => `${f.mode}:${rootPc(f.rootName)}:${[...f.degrees].sort().join(",")}`;
+
+/** One entry per chord/scale/arpeggio: later copies of something already in the list are dropped. */
+export function dedupeFavorites(list: Favorite[]): Favorite[] {
+  const seen = new Set<string>();
+  return list.filter((f) => {
+    const k = favoriteKey(f);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 export function loadFavorites(): Favorite[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as Favorite[]) : [];
+    const list = raw ? (JSON.parse(raw) as Favorite[]) : [];
+    const clean = dedupeFavorites(list);
+    // Copies saved before saving became one-per-chord are cleaned out for good.
+    if (clean.length !== list.length) saveFavorites(clean);
+    return clean;
   } catch {
     return [];
   }

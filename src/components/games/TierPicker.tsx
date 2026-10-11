@@ -80,3 +80,67 @@ export function MineToggle({ checked, onChange, count, tier, what = "chords" }: 
     </label>
   );
 }
+
+// ---------------------------------------------------------------- picking which chords play
+
+const OFF_KEY = "fretlab.games.off.v1";
+/** The chords switched off for one game and level (remembered on this device). */
+export function useSwitchedOff(scope: string): [Set<string>, (name: string, all: readonly string[]) => void, () => void] {
+  const [off, setOff] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const all = JSON.parse(window.localStorage.getItem(OFF_KEY) ?? "{}") as Record<string, string[]>;
+      setOff(new Set(all[scope] ?? []));
+    } catch {
+      setOff(new Set());
+    }
+  }, [scope]);
+  const store = (next: Set<string>) => {
+    setOff(next);
+    try {
+      const all = JSON.parse(window.localStorage.getItem(OFF_KEY) ?? "{}") as Record<string, string[]>;
+      if (next.size) all[scope] = [...next];
+      else delete all[scope];
+      window.localStorage.setItem(OFF_KEY, JSON.stringify(all));
+    } catch {
+      /* not remembered */
+    }
+  };
+  /** Switch one on or off; at least two always stay on. */
+  const toggle = (name: string, all: readonly string[]) => {
+    const next = new Set(off);
+    if (next.has(name)) next.delete(name);
+    else if (all.filter((n) => !next.has(n)).length > 2) next.add(name);
+    else return;
+    store(next);
+  };
+  return [off, toggle, () => store(new Set())];
+}
+
+/** Tap a chord to switch it on or off for this game. On = lit in its colour; off = dark and crossed out. */
+export function ChordToggles({ names, off, onToggle, onAll, label, colorOf, title = "Chords in this game", testId = "chord-toggle" }: {
+  names: readonly string[]; off: Set<string>; onToggle: (n: string) => void; onAll: () => void; label: (n: string) => string; colorOf: (n: string) => string; title?: string; testId?: string;
+}) {
+  const on = names.filter((n) => !off.has(n)).length;
+  return (
+    <div className="space-y-1.5 rounded-md border p-2" style={{ borderColor: "#2a1f4d", background: "#0b0b16" }}>
+      <p className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+        {title} <span className="font-mono normal-case tracking-normal" style={{ color: "#ffe600" }}>{on} of {names.length} on</span>
+        <span className="normal-case tracking-normal">· tap to switch on/off</span>
+        {off.size ? <button type="button" className="ml-auto normal-case tracking-normal underline" onClick={onAll}>All on</button> : null}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {names.map((n) => {
+          const isOn = !off.has(n), c = colorOf(n);
+          return (
+            <button key={n} type="button" aria-pressed={isOn} onClick={() => onToggle(n)} data-testid={testId} data-id={n}
+              className={cn("rounded-md border-2 px-2 py-0.5 font-display text-xs font-black transition-all active:scale-95", !isOn && "line-through")}
+              style={isOn ? { borderColor: c, color: c, background: `${c}1a`, textShadow: `0 0 6px ${c}` } : { borderColor: "#2a1f4d", color: "#55556e" }}>
+              {n.startsWith("my:") ? "★ " : ""}{label(n)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

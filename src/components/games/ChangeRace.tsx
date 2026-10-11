@@ -29,10 +29,11 @@ export function ChangeRace() {
   const [own, setOwn] = useState<string[]>([]);
   const setTier = (t: typeof tier) => (setTierRaw(t), setPairIdx(0), setOwn([]));
   const pairs = CHANGE_PAIRS[tier];
-  const usingOwn = mineOn && own.length === 2;
-  const pair = (usingOwn ? own : pairs[Math.min(pairIdx, pairs.length - 1)]!) as [string, string];
+  const ownOk = own.filter((k) => !k.startsWith("my:") || (mineOn && mine[k]));
+  const usingOwn = ownOk.length === 2;
+  const pair = (usingOwn ? ownOk : pairs[Math.min(pairIdx, pairs.length - 1)]!) as [string, string];
   const name = (k: string) => pretty(chordLabel(pool, k));
-  const ownChoices = [...Object.keys(mine), ...RUSH_LEVELS.find((l) => l.id === tier)!.chords];
+  const ownChoices = [...(mineOn ? Object.keys(mine) : []), ...RUSH_LEVELS.find((l) => l.id === tier)!.chords];
   const pickOwn = (k: string) => setOwn((o) => (o.includes(k) ? o.filter((x) => x !== k) : [...o, k].slice(-2)));
   const key = `race:${pair[0]}-${pair[1]}`;
   const [hints, setHints] = useState(true);
@@ -133,18 +134,18 @@ export function ChangeRace() {
             ))}
           </div>
           <MineToggle checked={mineOn} onChange={setMineOn} count={Object.keys(mine).length} tier={tier} />
-          {mineOn && Object.keys(mine).length ? (
+          {(
             <div className="space-y-1 rounded-md border p-2" style={{ borderColor: "#ffe60055", background: "#0b0b16" }}>
-              <p className="text-[11px] text-muted-foreground">Make your own pair — tap two (your saved chords are starred):</p>
+              <p className="text-[11px] text-muted-foreground">Or make your own pair — tap two chords to switch them on{mineOn && Object.keys(mine).length ? " (your saved chords are starred)" : ""}{usingOwn ? "" : ` · ${ownOk.length}/2 picked`}:</p>
               <div className="flex flex-wrap gap-1.5">
                 {ownChoices.map((k) => (
-                  <Button key={k} size="sm" variant={own.includes(k) ? "default" : "secondary"} className="h-7 px-2 font-display text-xs font-bold" onClick={() => pickOwn(k)} data-testid="race-own">
+                  <Button key={k} size="sm" variant={ownOk.includes(k) ? "default" : "secondary"} aria-pressed={ownOk.includes(k)} className="h-7 px-2 font-display text-xs font-bold" onClick={() => pickOwn(k)} data-testid="race-own">
                     {k.startsWith("my:") ? "★ " : ""}{name(k)}
                   </Button>
                 ))}
               </div>
             </div>
-          ) : null}
+          )}
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch checked={hints} onCheckedChange={setHints} aria-label="Show chord shapes" /> Show shapes
           </label>

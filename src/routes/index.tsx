@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { useEffect, useMemo, useState } from "react";
-import { Heart, Star, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Heart, HeartOff, Star, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,7 @@ import { moveDegreeInSet, pcOf, togglePc, sortDegrees, CANONICAL } from "@/lib/e
 import { pluck } from "@/lib/audio";
 import type { FretPos } from "@/components/Fretboard";
 import { playSequence, playChord } from "@/lib/audio";
-import { loadFavorites, saveFavorites, type Favorite } from "@/lib/favorites";
+import { dedupeFavorites, favoriteKey, loadFavorites, saveFavorites, type Favorite } from "@/lib/favorites";
 import { chordTier, scaleTier, arpeggioTier, type Tier } from "@/lib/levels";
 import { TierTabs, atOrBelow, inPick, loadTierPick, saveTierPick, type TierPick } from "@/components/TierTabs";
 import {
@@ -396,8 +396,20 @@ function Workstation() {
   /** The shape picked for the current chord, kept when the chord is saved or added to a song. */
   const currentVoicing = shape && mode !== "scale" ? { shape: [...shape], tuningId: tuning.id, midis: shapeMidis(shape, tuning) } : undefined;
 
+  /** The saved copy of what's on screen, if it's saved (one per chord/scale/arpeggio). */
+  const savedNow = favorites.find((f) => favoriteKey(f) === favoriteKey({ mode, rootName: root.name, degrees }));
+  /** A short "Saved ✓" / "Removed" message by the button, so it's obvious what happened. */
+  const [saveNote, setSaveNote] = useState<{ text: string; saved: boolean; id: number } | null>(null);
+  const noteId = useRef(0);
+  const sayFav = (text: string, saved: boolean) => {
+    const id = ++noteId.current;
+    setSaveNote({ text, saved, id });
+    window.setTimeout(() => setSaveNote((n) => (n?.id === id ? null : n)), 2600);
+  };
+  const shapeDiffers = !!savedNow && mode === "chord" && !!currentVoicing && savedNow.shape?.join() !== currentVoicing.shape.join();
+
   const addFavorite = () => {
-    const next: Favorite[] = [
+    const next: Favorite[] = dedupeFavorites([
       {
         id: `${Date.now()}`,
         label: title,
@@ -407,17 +419,21 @@ function Workstation() {
         createdAt: Date.now(),
         ...(currentVoicing && mode === "chord" ? { shape: currentVoicing.shape, tuningId: currentVoicing.tuningId } : {}),
       },
-      ...favorites,
-    ].slice(0, 60);
+      ...favorites.filter((f) => favoriteKey(f) !== favoriteKey({ mode, rootName: root.name, degrees })),
+    ]).slice(0, 60);
     setFavorites(next);
     saveFavorites(next);
+    sayFav(savedNow ? `Updated ${pretty(title)} with this shape` : `Saved ${pretty(title)} ✓`, true);
   };
 
   const removeFavorite = (id: string) => {
+    const gone = favorites.find((f) => f.id === id);
     const next = favorites.filter((f) => f.id !== id);
     setFavorites(next);
     saveFavorites(next);
+    if (gone) sayFav(`Removed ${pretty(gone.label)} from saved`, false);
   };
+  const toggleSaved = () => (savedNow ? removeFavorite(savedNow.id) : addFavorite());
 
   return (
     <AppShell
@@ -450,10 +466,38 @@ function Workstation() {
               <Button size="sm" variant="secondary" onClick={() => playSequence(midis)}>
                 Play ascending
               </Button>
-              <Button size="sm" onClick={addFavorite}>
-                <Heart className="mr-1 h-4 w-4" /> Save
+              <Button
+                size="sm"
+                variant={savedNow ? "outline" : "default"}
+                onClick={toggleSaved}
+                aria-pressed={!!savedNow}
+                data-testid="save-toggle"
+                title={savedNow ? "Saved — tap to remove it from your saved list" : "Save this to your list (one copy per chord)"}
+                className={cn("group", savedNow && "border-emerald-500/70 bg-emerald-500/15 text-emerald-300 hover:bg-destructive/15 hover:text-red-300")}
+              >
+                {savedNow ? (
+                  <>
+                    <Check className="mr-1 h-4 w-4 group-hover:hidden" /><HeartOff className="mr-1 hidden h-4 w-4 group-hover:block" />
+                    <span className="group-hover:hidden">Saved</span><span className="hidden group-hover:inline">Unsave</span>
+                  </>
+                ) : (
+                  <>
+                    <Heart className="mr-1 h-4 w-4" /> Save
+                  </>
+                )}
               </Button>
+              {shapeDiffers ? (
+                <Button size="sm" variant="secondary" onClick={addFavorite} data-testid="save-shape" title="Keep this chord saved, with the shape you're looking at now">
+                  Save this shape
+                </Button>
+              ) : null}
             </div>
+            {saveNote ? (
+              <p key={saveNote.id} role="status" data-testid="save-note"
+                className={cn("col-span-2 animate-in fade-in-0 slide-in-from-top-1 rounded-md px-2 py-1 text-xs font-semibold sm:order-last sm:w-full", saveNote.saved ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300")}>
+                {saveNote.text}
+              </p>
+            ) : null}
           </div>
           {/* quick controls: everything needed while writing, without scrolling */}
           <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
@@ -1222,9 +1266,16 @@ function Workstation() {
 
         {/* ------------------------------------------------ favorites */}
         <section className="panel p-4">
-          <h3 className="font-display text-sm font-semibold uppercase tracking-widest">
-            Saved on this device
-          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-display text-sm font-semibold uppercase tracking-widest">
+              Saved on this device <span className="font-mono text-xs text-muted-foreground">({favorites.length})</span>
+            </h3>
+            {saveNote ? (
+              <span key={saveNote.id} role="status" className={cn("animate-in fade-in-0 rounded-md px-2 py-0.5 text-xs font-semibold", saveNote.saved ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300")}>
+                {saveNote.text}
+              </span>
+            ) : null}
+          </div>
           {favorites.length === 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">
               Nothing saved yet. Use Save to keep a chord, scale or arpeggio you are working on.
@@ -1255,10 +1306,13 @@ function Workstation() {
                   </button>
                   <button
                     type="button"
-                    aria-label={`Remove ${f.label}`}
+                    aria-label={`Unsave ${f.label}`}
+                    title="Unsave"
+                    className="ml-0.5 grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-red-500/20 hover:text-red-300"
                     onClick={() => removeFavorite(f.id)}
+                    data-testid="unsave"
                   >
-                    <Trash2 className="h-3 w-3 text-muted-foreground" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </span>
               ))}

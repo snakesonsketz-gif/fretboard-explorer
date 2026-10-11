@@ -7,7 +7,7 @@ import { EAR_ANSWERS, EAR_READY, EAR_ROUND, earLevel, earPoints, earQuestion, lo
 import { TIERS, tierIndex } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 import { Stat } from "./ChordRush";
-import { MineToggle, TierPicker, useRemembered, useSavedChords, useTier } from "./TierPicker";
+import { ChordToggles, MineToggle, TierPicker, useRemembered, useSavedChords, useSwitchedOff, useTier } from "./TierPicker";
 import { NEON_BAD, NEON_GOOD, NEON_INFO, neonCard, neonLane, neonText } from "./neon";
 
 type Phase = "ready" | "playing" | "over";
@@ -46,7 +46,11 @@ export function EarTrainer() {
   const builtIn = earLevel(kind, tier);
   const mine = kind === "chord" ? savedEarAnswers(favs, tier, builtIn.answers) : {};
   const answers: Record<string, EarAnswer> = { ...EAR_ANSWERS, ...mine };
-  const level = mineOn && kind === "chord" ? earLevel(kind, tier, Object.keys(mine)) : builtIn;
+  const full = mineOn && kind === "chord" ? earLevel(kind, tier, Object.keys(mine)) : builtIn;
+  // The ones switched on are the sounds you'll hear and the answers you choose from.
+  const [off, toggleOff, allOn] = useSwitchedOff(`ear:${kind}:${tier}`);
+  const onAnswers = full.answers.filter((a) => !off.has(a));
+  const level = { ...full, answers: onAnswers.length >= 2 ? onAnswers : full.answers };
   const setKind = (k: EarMode) => setKindRaw(k);
   const [phase, setPhase] = useState<Phase>("ready");
   const [r, setR] = useState<Round>(fresh());
@@ -154,7 +158,8 @@ export function EarTrainer() {
             ))}
           </div>
           <TierPicker value={tier} onChange={setTier} bests={Object.fromEntries(TIERS.map((t) => [t.id, bests[`ear:${kind}:${t.id}`] ?? 0]))} note={(t) => earLevel(kind, t).name} />
-          <p className="text-xs text-muted-foreground" data-testid="ear-pool">{level.answers.map((a) => answers[a]?.label).join(" · ")}</p>
+          <ChordToggles names={full.answers} off={off} onToggle={(n) => toggleOff(n, full.answers)} onAll={allOn} label={(n) => answers[n]?.label ?? n} colorOf={(n) => answers[n]?.color ?? NEON_INFO}
+            title={kind === "chord" ? "Chords you'll hear" : "Intervals you'll hear"} testId="ear-toggle" />
           {kind === "chord" ? <MineToggle checked={mineOn} onChange={setMineOn} count={Object.keys(mine).length} tier={tier} what="chord types" /> : null}
           <InstrumentPicker />
         </div>
