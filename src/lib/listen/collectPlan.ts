@@ -23,15 +23,17 @@ export interface PlanStep {
   how: string;
   /** The player lets each strum ring out before the next (so knocks between strums can be told apart). */
   spaced: boolean;
+  /** Recording round (1 = the first full set; 2 = follow-up aimed at what round 1 showed). */
+  round: number;
 }
 
 const tri = (rootName: string, minor = false): TargetChord => ({ rootName, degrees: minor ? ["1", "b3", "5"] : ["1", "3", "5"], label: minor ? `${rootName}m` : rootName });
-const G = tri("G"), C = tri("C"), D = tri("D"), Em = tri("E", true), Am = tri("A", true), F = tri("F"), A = tri("A");
+const G = tri("G"), C = tri("C"), D = tri("D"), Em = tri("E", true), Am = tri("A", true), F = tri("F"), A = tri("A"), E = tri("E");
 const G7: TargetChord = { rootName: "G", degrees: ["1", "3", "5", "b7"], label: "G7" };
 
 const RING = "Let each strum ring until it has faded away completely (about 3 seconds) before the next one.";
 
-export const PLAN: PlanStep[] = ([
+const ROUND_1 = [
   // ---------------- clean
   { id: "clean-g", label: "clean", target: G, tab: "320003", strums: 4, title: "Open G", how: `Down-strum all six strings at a normal strength. ${RING}` },
   { id: "clean-c", label: "clean", target: C, tab: "x32010", strums: 4, title: "Open C", how: `Strum from the A string down (skip the low E). ${RING}` },
@@ -57,7 +59,45 @@ export const PLAN: PlanStep[] = ([
   { id: "buzz-g", label: "buzz", target: G, tab: "320003", strums: 4, title: "G — light pressure (buzz)", how: `Play G pressing the fretted notes very lightly, so they buzz instead of ringing clearly. ${RING}` },
   { id: "buzz-f", label: "buzz", target: F, tab: "133211", strums: 4, title: "F — weak barre (buzz)", how: `Play the F barre with a weak 1st finger so some strings buzz. ${RING}` },
   { id: "buzz-c-far", label: "buzz", target: C, tab: "x32010", strums: 4, title: "C — far from the frets (buzz)", how: `Play C with your fingers far back from the fret wires and light pressure, so the notes buzz. ${RING}` },
-] as Omit<PlanStep, "spaced">[]).map((s) => ({ ...s, spaced: s.how.includes(RING) }));
+] as Omit<PlanStep, "spaced" | "round">[];
+
+/** How to make real buzz (round 1 showed "light pressure" often came out clean or dead instead). */
+const BUZZ = "Press just enough that the notes still sound, but buzz or rattle against the frets. Listen before you start: if a note goes silent or rings clean, change the pressure until you hear the rattle.";
+
+/**
+ * Round 2 (Oct 2026), aimed at what Bradley's first 21 takes showed: buzz was only really in the
+ * recording on 7 strums, muting is only detectable on a note no other string doubles, and soft,
+ * quick and slow strumming need more examples.
+ */
+const ROUND_2 = [
+  // ---------------- real buzz, on more chords
+  { id: "r2-buzz-c", label: "buzz", target: C, tab: "x32010", strums: 4, title: "C — buzzing (redo)", how: `Play C with your fingers well behind the fret wires. ${BUZZ} ${RING}` },
+  { id: "r2-buzz-em", label: "buzz", target: Em, tab: "022000", strums: 4, title: "E minor — buzzing", how: `Play E minor. ${BUZZ} ${RING}` },
+  { id: "r2-buzz-d", label: "buzz", target: D, tab: "xx0232", strums: 4, title: "D — buzzing", how: `Play D, top four strings. ${BUZZ} ${RING}` },
+  { id: "r2-buzz-am", label: "buzz", target: Am, tab: "x02210", strums: 4, title: "A minor — buzzing", how: `Play A minor. ${BUZZ} ${RING}` },
+  { id: "r2-buzz-g", label: "buzz", target: G, tab: "320003", strums: 4, title: "G — buzzing (redo)", how: `Play G. ${BUZZ} Make every strum buzz, including the first. ${RING}` },
+  // ---------------- muted: a note no other string doubles, so the mute can be heard
+  { id: "r2-muted-am-b", label: "muted", target: Am, tab: "x02210", muted: [4], strums: 4, title: "A minor with the B string muted", how: `Play A minor, but let a finger touch the B string so its C doesn't ring. ${RING}` },
+  { id: "r2-muted-d-g", label: "muted", target: D, tab: "xx0232", muted: [3], strums: 4, title: "D with the G string muted", how: `Play D, but let a finger lean on the G string so its A doesn't ring. ${RING}` },
+  { id: "r2-muted-a-b", label: "muted", target: A, tab: "x02220", muted: [4], strums: 4, title: "A with the B string muted", how: `Open A (three fingers on the 2nd fret), but let a finger touch the B string so its C♯ doesn't ring. ${RING}` },
+  { id: "r2-muted-e-g", label: "muted", target: E, tab: "022100", muted: [3], strums: 4, title: "E with the G string muted", how: `Open E major, but let a finger rest on the G string so its G♯ thuds instead of ringing. ${RING}` },
+  // ---------------- soft, quick, slow
+  { id: "r2-soft-g", label: "clean", target: G, tab: "320003", strums: 4, title: "Open G — softly", how: `Clean G, strummed softly — the quietest you'd normally play. ${RING}` },
+  { id: "r2-soft-am", label: "clean", target: Am, tab: "x02210", strums: 4, title: "A minor — softly", how: `Clean A minor, strummed softly. ${RING}` },
+  { id: "r2-fast-c", label: "clean", target: C, tab: "x32010", strums: 8, title: "Open C — steady rhythm", how: "Clean C, 8 down-strums in a steady rhythm, about two per second, with a light, relaxed strumming hand. Let the last one ring out." },
+  { id: "r2-fast-em", label: "clean", target: Em, tab: "022000", strums: 8, title: "E minor — down and up", how: "Clean E minor, 8 strums alternating down and up (down-up-down-up…), about two per second. Each down and each up counts as one strum. Let the last one ring out." },
+  { id: "r2-slow-g", label: "clean", target: G, tab: "320003", strums: 4, title: "Open G — slow strums", how: `Clean G, but strum slowly so the strings sound one after another (about half a second from the low string to the high one). ${RING}` },
+] as Omit<PlanStep, "spaced" | "round">[];
+
+const withMeta = (steps: Omit<PlanStep, "spaced" | "round">[], round: number): PlanStep[] => steps.map((s) => ({ ...s, spaced: s.how.includes(RING), round }));
+
+export const ROUNDS: { round: number; title: string; steps: PlanStep[] }[] = [
+  { round: 1, title: "Round 1", steps: withMeta(ROUND_1, 1) },
+  { round: 2, title: "Round 2", steps: withMeta(ROUND_2, 2) },
+];
+
+/** Every step of every round. */
+export const PLAN: PlanStep[] = ROUNDS.flatMap((r) => r.steps);
 
 export const SETUP_TIPS = [
   "Tune your guitar first.",

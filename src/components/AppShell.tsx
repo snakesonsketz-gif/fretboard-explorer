@@ -1,7 +1,8 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Ear, FlaskConical, Music2, Search, SlidersHorizontal } from "lucide-react";
 import { setDevMode, useDevMode } from "@/lib/devMode";
+import { engine } from "@/lib/engine";
 import { cn } from "@/lib/utils";
 import { InstallTip } from "./InstallTip";
 
@@ -15,6 +16,11 @@ const DEV_TAB = { to: "/develop", label: "Develop", icon: FlaskConical } as cons
 /** Dark app frame shared by every page: logo, the Explore / Sequencer / Listen tabs, and the page body. */
 export function AppShell({ children, headerRight }: { children: ReactNode; headerRight?: ReactNode }) {
   const dev = useDevMode();
+  // Load the sound library while the page is idle, so the first tap plays straight away.
+  useEffect(() => {
+    const id = window.setTimeout(() => engine.preload(), 1500);
+    return () => window.clearTimeout(id);
+  }, []);
   const taps = useRef<number[]>([]);
   const [devNote, setDevNote] = useState<string | null>(null);
   // Five quick taps on the logo switch developer mode (the Develop tab) on or off.

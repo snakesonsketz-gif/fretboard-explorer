@@ -25,8 +25,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { playChord } from "@/lib/audio";
+import { engine } from "@/lib/engine";
+import { beatTicks } from "@/lib/timeline";
+import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { CopyPlus as Dup, ListOrdered, X } from "lucide-react";
-import { click } from "@/lib/metronome";
 import {
   ROOTS,
   degreeToSemitones,
@@ -48,8 +50,13 @@ import {
   orderedSections,
   saveDraft,
   saveSongs,
+  slotIdOfChord,
   slotLabel,
+  slotMidis,
+  songToArrangement,
   songToText,
+  voicingTab,
+  type SlotVoicing,
   type Song,
   type SongSection,
   type SongSlot,
@@ -58,20 +65,19 @@ import {
 interface Props {
   currentRootName: string;
   currentDegrees: Degree[];
-  onLoadChord: (rootName: string, degrees: Degree[]) => void;
+  /** The shape picked on the fretboard for the current chord, if any (kept with added chords). */
+  currentVoicing?: SlotVoicing;
+  onLoadChord: (rootName: string, degrees: Degree[], voicing?: SlotVoicing) => void;
   onPickScale: (id: string, rootName: string) => void;
 }
 
-const midisFor = (s: { rootName: string; degrees: Degree[] }) =>
-  s.degrees.map((d) => 48 + rootByName(s.rootName).pc + degreeToSemitones(d));
-
-function makeSlot(rootName: string, degrees: Degree[]): SongSlot {
+function makeSlot(rootName: string, degrees: Degree[], voicing?: SlotVoicing): SongSlot {
   const det = identify(rootByName(rootName), degreesToPitchClasses(degrees), "chord");
   const suffix = det.known?.kind === "chord" ? (det.known.suffix ?? "") : "custom";
-  return { id: newId(), rootName, suffix, degrees: [...degrees], bars: 1 };
+  return { id: newId(), rootName, suffix, degrees: [...degrees], bars: 1, ...(voicing ? { voicing } : {}) };
 }
 
-export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, onPickScale }: Props) {
+export function SongWorkspace({ currentRootName, currentDegrees, currentVoicing, onLoadChord, onPickScale }: Props) {
   const [song, setSong] = useState<Song>(() => emptySong());
   const [saved, setSaved] = useState<Song[]>([]);
   const [activeSec, setActiveSec] = useState<string | null>(null);
@@ -80,14 +86,14 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
   const [ready, setReady] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Metronome / play-through
-  const [running, setRunning] = useState(false);
+  // Play-through and section audition run on the shared engine (one audio clock for chords and
+  // click, the chosen instrument, the picked voicings).
+  const [playing, setPlaying] = useState<null | "all" | { section: string }>(null);
   const [playChords, setPlayChords] = useState(true);
+  const [clickOn, setClickOn] = useState(true);
   const [follow, setFollow] = useState(false);
   const [beat, setBeat] = useState(0);
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const tick = useRef(0);
-
   useEffect(() => {
     setSaved(loadSongs());
     const d = loadDraft();
@@ -142,7 +148,7 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
   const keyScale = KEY_SCALES.find((s) => s.id === song.keyScaleId) ?? KEY_SCALES[0]!;
   const palette = useMemo(() => harmonize(keyRoot, keyScale, palette7), [keyRoot, keyScale, palette7]);
 
-  // Flattened playback order honouring section repeats and bar lengths.
+  // Flattened playback order honouring section repeats and bar lengths (for the bar count).
   const timeline = useMemo(() => {
     const out: SongSlot[] = [];
     for (const sec of orderedSections(song))
@@ -151,59 +157,77 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
     return out;
   }, [song]);
 
-  useEffect(() => {
-    if (!running) return;
-    tick.current = 0;
-    const iv = window.setInterval(() => {
-      const t = tick.current;
-      const b = t % song.beatsPerBar;
-      click(b === 0);
-      if (b === 0 && timeline.length) {
-        const bar = Math.floor(t / song.beatsPerBar) % timeline.length;
-        const sl = timeline[bar]!;
-        const prev = bar > 0 ? timeline[bar - 1] : timeline[timeline.length - 1];
-        setPlayingId(sl.id);
-        if (playChords) playChord(midisFor(sl));
-        if (follow && (prev?.id !== sl.id || timeline.length === 1 || bar === 0))
-          onLoadChord(sl.rootName, sl.degrees);
-      }
-      tick.current += 1;
-      setBeat(t);
-    }, (60 / song.bpm) * 1000);
-    return () => {
-      window.clearInterval(iv);
-      setPlayingId(null);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, song.bpm, song.beatsPerBar, timeline, playChords, follow]);
+  // Latest values for the engine's callbacks (they outlive renders).
+  const live = useRef({ song, follow, onLoadChord });
+  live.current = { song, follow, onLoadChord };
+  const lastFollowed = useRef<string | null>(null);
 
-  const auditionRef = useRef<number[]>([]);
-  const [auditioning, setAuditioning] = useState<string | null>(null);
-  const stopAudition = () => {
-    auditionRef.current.forEach((t) => window.clearTimeout(t));
-    auditionRef.current = [];
-    setAuditioning(null);
+  const stopPlayback = () => {
+    engine.stop();
+    engine.setListener({});
+    engine.setChordsMuted(false);
+    setPlaying(null);
     setPlayingId(null);
   };
-  /** Plays a section's chords in order, one bar each at the song tempo. */
-  const auditionSection = (sec: SongSection) => {
-    stopAudition();
-    if (!sec.slots.length) return;
-    const barMs = (60 / song.bpm) * 1000 * song.beatsPerBar;
-    let t = 0;
-    setAuditioning(sec.id);
-    for (const sl of sec.slots) {
-      auditionRef.current.push(
-        window.setTimeout(() => {
-          setPlayingId(sl.id);
-          playChord(midisFor(sl));
-        }, t),
-      );
-      t += barMs * Math.max(1, sl.bars);
-    }
-    auditionRef.current.push(window.setTimeout(stopAudition, t));
+  const start = (which: "all" | { section: string }) => {
+    const sectionId = which === "all" ? undefined : which.section;
+    const a = songToArrangement(song, { ...(sectionId ? { sectionId } : {}), click: which === "all" ? clickOn : false });
+    lastFollowed.current = null;
+    engine.setListener({
+      onChord: (id) => {
+        const slotId = id ? slotIdOfChord(id) : null;
+        setPlayingId(slotId);
+        if (!slotId || !live.current.follow || slotId === lastFollowed.current) return;
+        lastFollowed.current = slotId;
+        const sl = live.current.song.sections.flatMap((x) => x.slots).find((x) => x.id === slotId);
+        if (sl) live.current.onLoadChord(sl.rootName, sl.degrees, sl.voicing);
+      },
+      onEnded: () => {
+        engine.setListener({});
+        setPlaying(null);
+        setPlayingId(null);
+      },
+    });
+    engine.setChordsMuted(which === "all" && !playChords);
+    void engine.play(a);
+    setPlaying(which);
   };
-  useEffect(() => () => auditionRef.current.forEach((t) => window.clearTimeout(t)), []);
+
+  // Edits, tempo and switches are heard on the next pass while the whole song plays.
+  useEffect(() => {
+    if (playing !== "all") return;
+    engine.setChordsMuted(!playChords);
+    void engine.load(songToArrangement(song, { click: clickOn }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [song, playChords, clickOn]);
+
+  // Beat lights follow the audible beat.
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const bt = beatTicks({ beats: song.beatsPerBar, unit: 4 });
+    const loop = () => {
+      const b = Math.max(0, Math.floor(engine.positionTicks() / bt));
+      setBeat((old) => (old === b ? old : b));
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, song.beatsPerBar]);
+
+  // Leaving the page stops the music.
+  useEffect(() => () => {
+    if (engine.playing) stopPlayback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const running = playing === "all";
+  const auditioning = playing && playing !== "all" ? playing.section : null;
+  /** Plays a section's chords in order once, at the song tempo. */
+  const auditionSection = (sec: SongSection) => {
+    if (sec.slots.length) start({ section: sec.id });
+  };
+  const stopAudition = stopPlayback;
 
   const persist = () => {
     const next = [song, ...saved.filter((s) => s.id !== song.id)].slice(0, 50);
@@ -329,7 +353,7 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                       type="button"
                       className="px-2 py-1 text-left"
                       onClick={() => {
-                        playChord(midisFor({ rootName, degrees: chordDegrees }));
+                        playChord(slotMidis({ rootName, degrees: chordDegrees }));
                         onLoadChord(rootName, chordDegrees);
                       }}
                     >
@@ -414,7 +438,7 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                     variant={isActive ? "default" : "secondary"}
                     onClick={(e) => {
                       e.stopPropagation();
-                      addSlot(makeSlot(currentRootName, currentDegrees), sec.id);
+                      addSlot(makeSlot(currentRootName, currentDegrees, currentVoicing), sec.id);
                     }}
                   >
                     <Plus className="mr-1 h-3.5 w-3.5" /> Fretboard chord
@@ -490,7 +514,7 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                           className="block w-full text-left"
                           onClick={() => {
                             setSelSlot(s.id);
-                            playChord(midisFor(s));
+                            playChord(slotMidis(s));
                           }}
                         >
                           <span className={"block font-mono text-[11px] " + (a.inKey ? "text-primary" : "text-tension")}>
@@ -505,6 +529,11 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                           <span className="block font-mono text-[10px] text-muted-foreground">
                             {pretty(s.degrees.join(" "))}
                           </span>
+                          {s.voicing ? (
+                            <span className="block font-mono text-[10px] text-primary" title="The shape you picked on the fretboard (low string first)" data-testid="slot-shape">
+                              {voicingTab(s.voicing)}
+                            </span>
+                          ) : null}
                           <span className="block text-[10px] text-muted-foreground">
                             {a.keyMode
                               ? `${pretty(s.rootName)} ${a.keyMode.name}`
@@ -540,7 +569,7 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
                             variant="ghost"
                             className="h-6 w-6"
                             aria-label="Show on fretboard"
-                            onClick={() => onLoadChord(s.rootName, s.degrees)}
+                            onClick={() => onLoadChord(s.rootName, s.degrees, s.voicing)}
                           >
                             <Upload className="h-3 w-3" />
                           </Button>
@@ -642,14 +671,14 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
               <span className="font-mono text-sm text-primary">{pretty(selAnalysis.roman)}</span>
             </h4>
             <div className="flex flex-wrap gap-1.5">
-              <Button size="sm" variant="secondary" onClick={() => onLoadChord(selected.rootName, selected.degrees)}>
+              <Button size="sm" variant="secondary" onClick={() => onLoadChord(selected.rootName, selected.degrees, selected.voicing)}>
                 Edit on fretboard
               </Button>
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={() => {
-                  const fresh = makeSlot(currentRootName, currentDegrees);
+                  const fresh = makeSlot(currentRootName, currentDegrees, currentVoicing);
                   updateSlot(selected.id, (x) => ({ ...fresh, id: x.id, bars: x.bars, ...(x.note ? { note: x.note } : {}) }));
                 }}
               >
@@ -725,7 +754,7 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
           <h4 className="font-display text-sm font-semibold uppercase tracking-widest">
             Play-through & metronome
           </h4>
-          <Button size="sm" onClick={() => setRunning((r) => !r)}>
+          <Button size="sm" onClick={() => (running ? stopPlayback() : start("all"))} data-testid="song-play">
             {running ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}
             {running ? "Stop" : totalBars ? `Play (${totalBars} bars)` : "Start click"}
           </Button>
@@ -765,9 +794,14 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
             <Label className="text-xs">Sound chords</Label>
           </div>
           <div className="flex items-center gap-2">
+            <Switch checked={clickOn} onCheckedChange={setClickOn} />
+            <Label className="text-xs">Click</Label>
+          </div>
+          <div className="flex items-center gap-2">
             <Switch checked={follow} onCheckedChange={setFollow} />
             <Label className="text-xs">Follow on fretboard</Label>
           </div>
+          <InstrumentPicker />
         </div>
         <div className="flex gap-1.5">
           {Array.from({ length: song.beatsPerBar }, (_, i) => (
@@ -775,7 +809,7 @@ export function SongWorkspace({ currentRootName, currentDegrees, onLoadChord, on
               key={i}
               className={
                 "h-2.5 w-8 rounded-full " +
-                (running && beat % song.beatsPerBar === i ? "bg-primary" : "bg-muted")
+                (playing && beat % song.beatsPerBar === i ? "bg-primary" : "bg-muted")
               }
             />
           ))}

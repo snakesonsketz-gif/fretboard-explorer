@@ -1,3 +1,4 @@
+import { measureTicks, type Arrangement, type ChordEvent } from "./timeline";
 import {
   CHORDS,
   LETTERS,
@@ -11,6 +12,14 @@ import {
   type ScaleDef,
 } from "./theory";
 
+/** The exact fretboard shape a chord was picked with (fret per string, low string first; null = not played). */
+export interface SlotVoicing {
+  shape: (number | null)[];
+  tuningId: string;
+  /** Its pitches, so playback sounds the shape that was picked. */
+  midis: number[];
+}
+
 export interface SongSlot {
   id: string;
   rootName: string;
@@ -18,6 +27,7 @@ export interface SongSlot {
   degrees: Degree[];
   bars: number;
   note?: string;
+  voicing?: SlotVoicing;
 }
 
 export interface SongSection {
@@ -235,7 +245,7 @@ export function songToText(song: Song): string {
       sec.slots
         .map((s) => {
           const a = analyzeSlot(song, s);
-          return `${slotLabel(s)} (${a.roman})${s.bars > 1 ? ` ×${s.bars} bars` : ""}${s.note ? ` — ${s.note}` : ""}`;
+          return `${slotLabel(s)} (${a.roman})${s.voicing ? ` [${voicingTab(s.voicing)}]` : ""}${s.bars > 1 ? ` ×${s.bars} bars` : ""}${s.note ? ` — ${s.note}` : ""}`;
         })
         .join(" | ") || "(empty)",
     );
@@ -244,3 +254,50 @@ export function songToText(song: Song): string {
   if (song.notes.trim()) lines.push("Notes:", song.notes);
   return lines.join("\n");
 }
+
+/** Tab of a picked shape, low string first ("x32010"; dashes when a fret is 10 or higher). */
+export function voicingTab(v: Pick<SlotVoicing, "shape">): string {
+  const wide = v.shape.some((f) => f !== null && f > 9);
+  return v.shape.map((f) => (f === null ? "x" : String(f))).join(wide ? "-" : "");
+}
+
+/** Chord pitches for playback: the picked shape if there is one, else a close voicing from C3. */
+export function slotMidis(s: Pick<SongSlot, "rootName" | "degrees" | "voicing">): number[] {
+  if (s.voicing?.midis.length) return [...s.voicing.midis];
+  const base = 48 + rootByName(s.rootName).pc;
+  return [...new Set(s.degrees.map((d) => base + degreeToSemitones(d)))].sort((a, b) => a - b);
+}
+
+/**
+ * The song (or one section of it, played once) as an Arrangement for the shared playback engine:
+ * one chord per bar — a chord lasting several bars is strummed again each bar, as the play-along
+ * always did — in arrangement order with section repeats. Chord ids are `${slotId}#${n}`.
+ */
+export function songToArrangement(song: Song, opts: { sectionId?: string; click?: boolean } = {}): Arrangement {
+  const ts = { beats: Math.max(1, song.beatsPerBar), unit: 4 as const };
+  const bar = measureTicks(ts);
+  const secs = opts.sectionId ? song.sections.filter((x) => x.id === opts.sectionId) : orderedSections(song);
+  const chords: ChordEvent[] = [];
+  let n = 0;
+  for (const sec of secs)
+    for (let r = 0; r < (opts.sectionId ? 1 : Math.max(1, sec.repeats)); r++)
+      for (const sl of sec.slots)
+        for (let b = 0; b < Math.max(1, sl.bars); b++) {
+          chords.push({ id: `${sl.id}#${n}`, start: n * bar, duration: bar, rootName: sl.rootName, degrees: sl.degrees, label: slotLabel(sl), midis: slotMidis(sl) });
+          n++;
+        }
+  return {
+    bpm: song.bpm,
+    ts,
+    measures: Math.max(1, n),
+    chords,
+    drums: { measures: 1, stepsPerBeat: 4, lanes: [] },
+    countIn: 0,
+    metronome: opts.click ?? true,
+    loop: !opts.sectionId,
+    strumMs: 25,
+  };
+}
+
+/** The song slot a playing chord event belongs to. */
+export const slotIdOfChord = (chordId: string) => chordId.split("#")[0]!;

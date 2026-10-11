@@ -210,3 +210,43 @@ describe("resizePattern", () => {
     expect(steps(resizePattern(pat([0, 12], 4, 1), sig, { measures: 2 }))).toEqual([0, 12]);
   });
 });
+
+import { emptySong, newId as songId, slotIdOfChord, slotMidis, songToArrangement, songToText, type Song } from "../src/lib/song";
+import { scheduleArrangement as sched } from "../src/lib/timeline";
+
+describe("Song play-through on the shared engine", () => {
+  const song = (): Song => {
+    const s = emptySong();
+    const v = { id: songId(), label: "Verse", repeats: 2, slots: [
+      { id: "g", rootName: "G", suffix: "", degrees: ["1", "3", "5"] as never, bars: 2, voicing: { shape: [3, 2, 0, 0, 0, 3], tuningId: "standard", midis: [43, 47, 50, 55, 59, 67] } },
+      { id: "c", rootName: "C", suffix: "", degrees: ["1", "3", "5"] as never, bars: 1 },
+    ] };
+    const ch = { id: songId(), label: "Chorus", repeats: 1, slots: [{ id: "d", rootName: "D", suffix: "", degrees: ["1", "3", "5"] as never, bars: 1 }] };
+    return { ...s, bpm: 100, beatsPerBar: 3, sections: [v, ch], arrangement: [] };
+  };
+  test("one chord per bar, in order, with repeats, in the song's bars", () => {
+    const a = songToArrangement(song());
+    expect(a.ts).toEqual({ beats: 3, unit: 4 });
+    expect(a.measures).toBe(7); // (2 + 1) × 2 + 1
+    expect(a.chords.map((c) => slotIdOfChord(c.id))).toEqual(["g", "g", "c", "g", "g", "c", "d"]);
+    expect(a.chords.map((c) => c.start / measureTicks(a.ts))).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(a.loop).toBe(true);
+    expect(a.metronome).toBe(true);
+  });
+  test("the shape picked on the fretboard is what plays", () => {
+    const a = songToArrangement(song());
+    const ev = sched(a).filter((e) => e.kind === "chord");
+    expect(ev[0]!.kind === "chord" && ev[0]!.midis).toEqual([43, 47, 50, 55, 59, 67]);
+    expect(slotMidis({ rootName: "C", degrees: ["1", "3", "5"] as never })).toEqual([48, 52, 55]);
+  });
+  test("playing one section: once, no repeats, no click", () => {
+    const s = song();
+    const a = songToArrangement(s, { sectionId: s.sections[0]!.id, click: false });
+    expect(a.chords.map((c) => slotIdOfChord(c.id))).toEqual(["g", "g", "c"]);
+    expect(a.loop).toBe(false);
+    expect(sched(a).some((e) => e.kind === "click")).toBe(false);
+  });
+  test("the chart text shows the picked shape", () => {
+    expect(songToText(song())).toContain("G (V) [320003] ×2 bars");
+  });
+});

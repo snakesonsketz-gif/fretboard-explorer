@@ -21,7 +21,13 @@ import { Fretboard, type LabelMode } from "@/components/Fretboard";
 import { ChordLab } from "@/components/ChordLab";
 import { AdvancedTheory } from "@/components/TheoryPanels";
 import { SongWorkspace } from "@/components/SongWorkspace";
-import { analyzeShape, findVoicings, shapeMidis, shapeToTab } from "@/lib/voicings";
+import { InstrumentPicker } from "@/components/InstrumentPicker";
+import { analyzeShape, findVoicings, shapeMidis, shapeToTab, type Shape } from "@/lib/voicings";
+import { voicingTab, type SlotVoicing } from "@/lib/song";
+
+/** Identity of a chord independent of how its degrees are ordered (for re-showing a saved shape). */
+const chordKey = (rootName: string, degrees: readonly string[]) => `${rootByName(rootName).pc}|${[...degrees].sort().join(",")}`;
+const sameShape = (a: Shape, b: Shape) => a.length === b.length && a.every((f, i) => f === b[i]);
 import { TUNINGS, degreeMap } from "@/lib/fretboard";
 import { NoteEditor } from "@/components/NoteEditor";
 import { DegreeAlter } from "@/components/DegreeAlter";
@@ -311,7 +317,18 @@ function Workstation() {
     if (newRoot) setRootName(newRoot);
   };
 
-  const loadChord = (r: string, d: Degree[]) => {
+  /** Show a saved shape again: pin it to its chord and make sure the fret range shows it. */
+  const restoreShape = (r: string, d: readonly string[], v?: { shape: (number | null)[]; tuningId: string }) => {
+    if (!v || v.tuningId !== tuning.id) return setPin(null);
+    setPin({ key: chordKey(r, d), shape: [...v.shape], tuningId: v.tuningId });
+    const frets = v.shape.filter((f): f is number => f !== null);
+    if (frets.length) {
+      setFretFrom((f) => Math.min(f, Math.min(...frets)));
+      setFretTo((t) => Math.max(t, Math.max(...frets)));
+    }
+  };
+
+  const loadChord = (r: string, d: Degree[], voicing?: SlotVoicing) => {
     const key = [...d].sort().join(",");
     const match = CHORDS.find((c) => [...c.degrees].sort().join(",") === key);
     setMode("chord");
@@ -322,6 +339,7 @@ function Workstation() {
     } else setCustom([...d]);
     setHistory([]);
     setSel(null);
+    restoreShape(r, d, voicing);
   };
 
   const [bassMode, setBassMode] = useState<"root" | "any">("root");
@@ -343,7 +361,13 @@ function Workstation() {
     [tuning, root.pc, degrees, fretFrom, fretTo, bassMode],
   );
   useEffect(() => setShapeIdx(null), [voicings]);
-  const shape = shapeIdx !== null ? voicings[shapeIdx]?.shape : undefined;
+  // A shape brought back from a saved chord or a song chord stays shown while that chord is on
+  // (it needn't be in the list of suggested shapes).
+  const [pin, setPin] = useState<{ key: string; shape: Shape; tuningId: string } | null>(null);
+  const pinned = pin && mode !== "scale" && pin.tuningId === tuning.id && pin.key === chordKey(root.name, degrees) ? pin.shape : null;
+  const shape = pinned ?? (shapeIdx !== null ? voicings[shapeIdx]?.shape : undefined);
+  /** The shape picked for the current chord, kept when the chord is saved or added to a song. */
+  const currentVoicing = shape && mode !== "scale" ? { shape: [...shape], tuningId: tuning.id, midis: shapeMidis(shape, tuning) } : undefined;
 
   const addFavorite = () => {
     const next: Favorite[] = [
@@ -354,6 +378,7 @@ function Workstation() {
         rootName: root.name,
         degrees,
         createdAt: Date.now(),
+        ...(currentVoicing && mode === "chord" ? { shape: currentVoicing.shape, tuningId: currentVoicing.tuningId } : {}),
       },
       ...favorites,
     ].slice(0, 60);
@@ -789,7 +814,7 @@ function Workstation() {
                 </p>
                 <Button size="sm" variant={bassMode === "root" ? "default" : "secondary"} onClick={() => setBassMode("root")}>Root in bass</Button>
                 <Button size="sm" variant={bassMode === "any" ? "default" : "secondary"} onClick={() => setBassMode("any")}>Inversions too</Button>
-                {shape ? <Button size="sm" variant="ghost" onClick={() => setShapeIdx(null)}>Show all notes</Button> : null}
+                {shape ? <Button size="sm" variant="ghost" onClick={() => { setShapeIdx(null); setPin(null); }}>Show all notes</Button> : null}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {voicings.length === 0 ? (
@@ -799,9 +824,10 @@ function Workstation() {
                     <Button
                       key={i}
                       size="sm"
-                      variant={i === shapeIdx ? "default" : "secondary"}
+                      variant={(pinned ? sameShape(v.shape, pinned) : i === shapeIdx) ? "default" : "secondary"}
                       className="font-mono"
                       onClick={() => {
+                        setPin(null);
                         setShapeIdx(i);
                         playSequence(shapeMidis(v.shape, tuning), 0.05);
                       }}
@@ -910,9 +936,12 @@ function Workstation() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="maj7, dorian, altered, pentatonic…"
               />
-              <div className="flex items-center gap-2 pt-1">
-                <Switch id="soundpick" checked={soundOnPick} onCheckedChange={setSoundOnPick} />
-                <Label htmlFor="soundpick" className="text-xs text-muted-foreground">Sound on select</Label>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
+                <div className="flex items-center gap-2">
+                  <Switch id="soundpick" checked={soundOnPick} onCheckedChange={setSoundOnPick} />
+                  <Label htmlFor="soundpick" className="text-xs text-muted-foreground">Sound on select</Label>
+                </div>
+                <InstrumentPicker />
               </div>
             </div>
           </div>
@@ -1168,10 +1197,13 @@ function Workstation() {
                       setCustom(f.degrees as Degree[]);
                       setHistory([]);
                       setSel(null);
+                      restoreShape(f.rootName, f.degrees, f.shape && f.tuningId ? { shape: f.shape, tuningId: f.tuningId } : undefined);
                     }}
+                    title={f.shape ? "Opens with the shape you saved" : undefined}
                   >
                     <Star className="h-3 w-3 text-primary" />
                     {pretty(f.label)}
+                    {f.shape ? <span className="text-primary" data-testid="favorite-shape">{voicingTab({ shape: f.shape })}</span> : null}
                   </button>
                   <button
                     type="button"
@@ -1194,6 +1226,7 @@ function Workstation() {
           <SongWorkspace
             currentRootName={root.name}
             currentDegrees={degrees}
+            {...(currentVoicing ? { currentVoicing } : {})}
             onLoadChord={loadChord}
             onPickScale={(id, r) => {
               pickScale(id, r);
@@ -1206,6 +1239,7 @@ function Workstation() {
         <p className="pb-8 text-xs text-muted-foreground">
           Fretlab never writes music for you. It names, spells and maps what you choose so you can
           judge it yourself.
+          <span className="mt-1 block">Piano sound: Salamander Grand Piano by Alexander Holm (CC BY 3.0).</span>
         </p>
       </main>
     </AppShell>

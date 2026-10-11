@@ -92,7 +92,7 @@ describe("Develop: export files", () => {
   });
 });
 
-import { PLAN, tabMidis } from "../src/lib/listen/collectPlan";
+import { PLAN, ROUNDS, tabMidis } from "../src/lib/listen/collectPlan";
 import { degreeToSemitones, rootByName } from "../src/lib/theory";
 
 describe("Develop: the guided recording plan is musically right", () => {
@@ -114,6 +114,20 @@ describe("Develop: the guided recording plan is musically right", () => {
       }
       expect(step.strums).toBeGreaterThanOrEqual(4);
     });
+  test("round 2 mutes only notes no other string doubles (so the mute can be heard)", () => {
+    for (const step of PLAN.filter((s) => s.round === 2 && s.label === "muted")) {
+      const midis = tabMidis(step.tab);
+      for (const m of step.muted!) {
+        const pc = midis[m]! % 12;
+        expect(midis.filter((x, i) => i !== m && x !== null && x % 12 === pc)).toEqual([]);
+      }
+    }
+  });
+  test("rounds: every step in exactly one round, ids unique across rounds", () => {
+    expect(ROUNDS.map((r) => r.round)).toEqual([1, 2]);
+    expect(ROUNDS[0]!.steps.length).toBe(21); // round 1 unchanged: Bradley's recordings still match it
+    expect(ROUNDS.reduce((a, r) => a + r.steps.length, 0)).toBe(PLAN.length);
+  });
   test("covers every kind of mistake, and clean chords outnumber each", () => {
     const n = (l: string) => PLAN.filter((s) => s.label === l).length;
     expect(n("clean")).toBeGreaterThanOrEqual(8);

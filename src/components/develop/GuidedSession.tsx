@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, ChevronDown, CircleAlert, Download, Mic, Play, RotateCcw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MIC_HELP } from "@/components/listen/micHelp";
-import { PLAN, SETUP_TIPS, type PlanStep } from "@/lib/listen/collectPlan";
+import { ROUNDS, SETUP_TIPS, type PlanStep } from "@/lib/listen/collectPlan";
 import { deviceLabel, encodeWav, newTakeId, safeAnalyse, toPcm, trimSilence, type Take, type TakeStrum } from "@/lib/listen/takes";
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
@@ -43,6 +43,7 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
 }) {
   const [ready, setReady] = useState(true);
   const [pick, setPick] = useState<number | null>(null);
+  const [roundPick, setRoundPick] = useState<number | null>(null);
   const [save, setSave] = useState<SaveState | null>(null);
   const [listOpen, setListOpen] = useState(false);
   /** The last recording exactly as captured (nothing trimmed), so it can always be sent to Vix. */
@@ -58,6 +59,19 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
   // Only takes recorded on this device count here (imported ones are someone else's).
   const takeFor = (id: string) => takes.find((t) => t.step === id && !t.imported);
   const confirmed = (id: string) => takeFor(id)?.confirmedStrums !== undefined;
+  // Rounds: open on the first one that isn't finished (or the one picked).
+  const roundDone = (i: number) => ROUNDS[i]!.steps.every((s) => confirmed(s.id));
+  const firstOpenRound = ROUNDS.findIndex((_, i) => !roundDone(i));
+  const roundIdx = roundPick ?? (firstOpenRound < 0 ? ROUNDS.length - 1 : firstOpenRound);
+  const ROUND = ROUNDS[roundIdx]!;
+  const PLAN = ROUND.steps;
+  const nextRound = ROUNDS.findIndex((_, i) => i !== roundIdx && !roundDone(i));
+  const goRound = (i: number) => {
+    setRoundPick(i);
+    setPick(null);
+    setSave(null);
+    setListOpen(false);
+  };
   const done = PLAN.filter((s) => confirmed(s.id)).length;
   const toCheck = PLAN.filter((s) => takeFor(s.id) && !confirmed(s.id)).length;
   // Next: the first step not yet recorded AND confirmed (old recordings get checked too).
@@ -140,8 +154,19 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 className="font-display text-lg font-black">Guided recording</h2>
           <span className="text-sm text-muted-foreground" data-testid="guided-progress">
-            {done} of {PLAN.length} steps recorded and checked{toCheck ? ` · ${toCheck} to check` : ""}
+            {ROUND.title}: {done} of {PLAN.length} steps recorded and checked{toCheck ? ` · ${toCheck} to check` : ""}
           </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Recording rounds">
+          {ROUNDS.map((rd, i) => {
+            const n = rd.steps.filter((st) => confirmed(st.id)).length;
+            return (
+              <button key={rd.round} type="button" role="tab" aria-selected={i === roundIdx} disabled={recording} onClick={() => goRound(i)} data-testid="guided-round"
+                className={cn("rounded-md px-2.5 py-1 text-xs font-semibold ring-1 transition-colors", i === roundIdx ? "bg-primary text-primary-foreground ring-primary" : "bg-secondary text-muted-foreground ring-border hover:text-foreground")}>
+                {rd.title} · {n === rd.steps.length ? "done ✓" : `${n}/${rd.steps.length}`}
+              </button>
+            );
+          })}
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
           <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${(100 * done) / PLAN.length}%` }} />
@@ -260,9 +285,16 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
 
       {ready && !step ? (
         <div className="space-y-2 rounded-lg border border-extension/50 bg-extension/10 p-3" data-testid="guided-finished">
-          <p className="font-display text-lg font-black">All {PLAN.length} steps recorded and checked — thank you!</p>
+          <p className="font-display text-lg font-black">{ROUND.title}: all {PLAN.length} steps recorded and checked — thank you!</p>
           <p className="text-sm">Tap <b>Export & send</b>, then send the .zip file to Vix (text, email, AirDrop or Google Drive). On the PC he opens Develop → <b>Import takes</b>.</p>
-          <Button size="lg" className="h-12 gap-2" onClick={onExport}><Download className="h-4 w-4" /> Export & send</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button size="lg" className="h-12 gap-2" onClick={onExport}><Download className="h-4 w-4" /> Export & send</Button>
+            {nextRound >= 0 ? (
+              <Button size="lg" variant="secondary" className="h-12 gap-2" onClick={() => goRound(nextRound)} data-testid="guided-next-round">
+                <Mic className="h-4 w-4" /> Start {ROUNDS[nextRound]!.title}
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

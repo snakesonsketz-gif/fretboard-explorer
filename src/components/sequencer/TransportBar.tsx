@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { Play, Square, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,6 +156,7 @@ export function TransportBar({ arr, playing, canUndo, grid, onGrid, onPlay, onSt
         <label className="flex items-center gap-2">
           <Switch checked={arr.metronome} onCheckedChange={(v) => update((a) => ({ ...a, metronome: v }))} /> Click
         </label>
+        <InstrumentPicker />
       </div>
     </section>
   );

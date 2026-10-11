@@ -21,6 +21,19 @@ import { loadSampleBuffer } from "./sampleStore";
 type ToneNS = typeof import("tone");
 type Trigger = (time: number, velocity: number, durationSec: number) => void;
 
+/** The sound chords and notes are played with, everywhere in the app (one setting). */
+export type Instrument = "guitar" | "piano" | "synth";
+export const INSTRUMENTS: { id: Instrument; name: string }[] = [
+  { id: "guitar", name: "Guitar" },
+  { id: "piano", name: "Piano" },
+  { id: "synth", name: "Synth pad" },
+];
+const INSTRUMENT_KEY = "fretlab.instrument.v1";
+/** Piano samples (Salamander Grand Piano, CC BY 3.0 — see public/samples/piano/CREDITS.txt), a tritone apart. */
+const PIANO_URLS: Record<string, string> = Object.fromEntries(
+  [2, 3, 4, 5, 6].flatMap((o) => [[`C${o}`, `C${o}.mp3`], [`F#${o}`, `Fs${o}.mp3`]]),
+);
+
 let toneMod: ToneNS | null = null;
 async function loadTone(): Promise<ToneNS> {
   if (!toneMod) toneMod = await import("tone");
@@ -56,7 +69,55 @@ class Engine {
   private initP: Promise<ToneNS> | null = null;
   private chordsMuted = false;
   private clickMuted = false;
+  /** Everything chord/note-shaped goes through here (muted for Listen play-along). */
+  private chordBus: InstanceType<ToneNS["Volume"]> | null = null;
+  private guitarIn: GainNode | null = null;
+  private plucks = new Set<{ g: GainNode; oscs: OscillatorNode[] }>();
+  private piano: InstanceType<ToneNS["Sampler"]> | null = null;
+  private instrument: Instrument = "guitar";
+  private instrumentListeners = new Set<() => void>();
   playing = false;
+
+  constructor() {
+    try {
+      const v = typeof window !== "undefined" ? window.localStorage.getItem(INSTRUMENT_KEY) : null;
+      if (v && INSTRUMENTS.some((i) => i.id === v)) this.instrument = v as Instrument;
+    } catch {
+      /* storage unavailable: default */
+    }
+  }
+
+  getInstrument(): Instrument {
+    return this.instrument;
+  }
+
+  /** Choose the sound for chords and notes (remembered on this device). */
+  setInstrument(i: Instrument) {
+    this.instrument = i;
+    try {
+      window.localStorage.setItem(INSTRUMENT_KEY, i);
+    } catch {
+      /* not remembered: fine */
+    }
+    if (i === "piano") void this.init().then(() => this.loadPiano());
+    this.instrumentListeners.forEach((f) => f());
+  }
+
+  /** For React's useSyncExternalStore. */
+  subscribeInstrument = (f: () => void) => {
+    this.instrumentListeners.add(f);
+    return () => void this.instrumentListeners.delete(f);
+  };
+
+  /** True once the piano samples are ready (until then the guitar sound stands in). */
+  pianoReady(): boolean {
+    return !!this.piano?.loaded;
+  }
+
+  /** Fetch the sound library in the background, so the first tap plays without a wait. */
+  preload() {
+    if (typeof window !== "undefined") void loadTone().catch(() => undefined);
+  }
 
   /** The AudioContext everything plays on (created on first use). */
   async audioContext(): Promise<AudioContext | null> {
@@ -90,10 +151,10 @@ class Engine {
     if (this.click) this.click.volume.value = muted ? -Infinity : -14;
   }
 
-  /** Silence the chord synth (Listen play-along: so the mic hears you, not the app). */
+  /** Silence chords and notes (Listen play-along: so the mic hears you, not the app). */
   setChordsMuted(muted: boolean) {
     this.chordsMuted = muted;
-    if (this.chordSynth) this.chordSynth.volume.value = muted ? -Infinity : -9;
+    if (this.chordBus) this.chordBus.mute = muted;
   }
 
   init(): Promise<ToneNS> {
@@ -112,13 +173,21 @@ class Engine {
     T.getContext().lookAhead = 0.06;
     T.getTransport().PPQ = PPQ;
     this.master = new T.Volume(-4).toDestination();
-    const chordFilter = new T.Filter(3200, "lowpass").connect(this.master);
+    this.chordBus = new T.Volume(0).connect(this.master);
+    this.chordBus.mute = this.chordsMuted;
+    const chordFilter = new T.Filter(3200, "lowpass").connect(this.chordBus);
     this.chordSynth = new T.PolySynth(T.Synth, {
       oscillator: { type: "fattriangle", count: 2, spread: 12 },
       envelope: { attack: 0.004, decay: 0.7, sustain: 0.28, release: 0.9 },
     }).connect(chordFilter);
     this.chordSynth.maxPolyphony = 48;
-    this.chordSynth.volume.value = this.chordsMuted ? -Infinity : -9;
+    this.chordSynth.volume.value = -9;
+    if (this.native) {
+      this.guitarIn = this.native.createGain();
+      this.guitarIn.gain.value = 1.6;
+      T.connect(this.guitarIn, this.chordBus);
+    }
+    if (this.instrument === "piano") this.loadPiano();
     this.click = new T.Synth({ oscillator: { type: "square" }, envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.01 } }).connect(this.master);
     this.click.volume.value = this.clickMuted ? -Infinity : -14;
     return T;
@@ -161,7 +230,17 @@ class Engine {
     this.unlock();
     const T = await this.init();
     await T.start();
-    this.playChord(midis, T.now(), 1.2, 0.8, strumMs);
+    this.playChord(midis, T.now(), 1.4, 0.8, strumMs);
+  }
+
+  /** Audition notes one after another (gap 0 = together), e.g. a scale or a single fret. */
+  async previewNotes(midis: number[], gapSec: number, opts: { velocity?: number; delay?: number } = {}) {
+    this.unlock();
+    const T = await this.init();
+    await T.start();
+    const t0 = T.now() + (opts.delay ?? 0);
+    const dur = Math.max(0.9, Math.min(1.6, gapSec * 3));
+    midis.forEach((m, i) => this.note(m, t0 + i * gapSec, dur, opts.velocity ?? 0.75));
   }
 
   /**
@@ -211,6 +290,8 @@ class Engine {
     tr.stop();
     tr.position = 0;
     this.chordSynth?.releaseAll();
+    this.piano?.releaseAll();
+    this.silencePlucks();
     this.playing = false;
     this.listener.onChord?.(null);
   }
@@ -242,12 +323,76 @@ class Engine {
   }
 
   private playChord(midis: number[], time: number, dur: number, velocity: number, strumMs: number) {
-    if (!this.T || !this.chordSynth) return;
-    const T = this.T;
     midis.forEach((m, i) => {
       const off = (i * strumMs) / 1000;
-      this.chordSynth!.triggerAttackRelease(T.Frequency(m, "midi").toFrequency(), Math.max(0.05, dur - off), time + off, velocity * (0.85 + 0.15 * (i / Math.max(1, midis.length - 1))));
+      this.note(m, time + off, Math.max(0.05, dur - off), velocity * (0.85 + 0.15 * (i / Math.max(1, midis.length - 1))));
     });
+  }
+
+  /** One note on the chosen instrument. */
+  private note(midi: number, time: number, dur: number, velocity: number) {
+    if (!this.T) return;
+    const freq = 440 * 2 ** ((midi - 69) / 12);
+    if (this.instrument === "synth" && this.chordSynth) this.chordSynth.triggerAttackRelease(freq, dur, time, velocity);
+    else if (this.instrument === "piano" && this.piano?.loaded) this.piano.triggerAttackRelease(freq, Math.max(dur, 0.3), time, velocity);
+    else this.pluck(freq, time, dur, velocity); // guitar (and the stand-in while the piano loads)
+  }
+
+  private loadPiano() {
+    if (this.piano || !this.T || !this.chordBus) return;
+    const T = this.T;
+    this.piano = new T.Sampler({ urls: PIANO_URLS, baseUrl: "/samples/piano/", release: 1.2, onload: () => this.instrumentListeners.forEach((f) => f()) }).connect(this.chordBus);
+    this.piano.volume.value = -3;
+  }
+
+  /** Plucked-string tone (two oscillators through a closing low-pass), as the fretboard always had. */
+  private pluck(freq: number, time: number, dur: number, velocity: number) {
+    const ac = this.native, out = this.guitarIn;
+    if (!ac || !out) return;
+    const t = Math.max(time, ac.currentTime);
+    const ring = Math.max(0.9, Math.min(2.6, dur + 0.4));
+    const osc = ac.createOscillator(), osc2 = ac.createOscillator();
+    const g = ac.createGain(), filter = ac.createBiquadFilter();
+    osc.type = "triangle";
+    osc2.type = "sawtooth";
+    osc.frequency.value = freq;
+    osc2.frequency.value = freq * 2.005;
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(Math.min(6000, freq * 8), t);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(400, freq * 2), t + 0.9);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.22 * velocity), t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + ring);
+    osc.connect(filter);
+    osc2.connect(filter);
+    filter.connect(g);
+    g.connect(out);
+    const voice = { g, oscs: [osc, osc2] };
+    this.plucks.add(voice);
+    osc.onended = () => {
+      this.plucks.delete(voice);
+      g.disconnect();
+    };
+    osc.start(t);
+    osc2.start(t);
+    osc.stop(t + ring + 0.05);
+    osc2.stop(t + ring + 0.05);
+  }
+
+  private silencePlucks() {
+    const ac = this.native;
+    if (!ac) return;
+    for (const v of this.plucks) {
+      v.g.gain.cancelScheduledValues(ac.currentTime);
+      v.g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.02);
+      v.oscs.forEach((o) => {
+        try {
+          o.stop(ac.currentTime + 0.12);
+        } catch {
+          /* already stopped */
+        }
+      });
+    }
   }
 
   /** One instrument per lane (so lanes never cut each other off), rebuilt if its sound changes. */

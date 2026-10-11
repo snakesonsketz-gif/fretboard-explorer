@@ -1,0 +1,3 @@
+Piano samples: Salamander Grand Piano V3 (Yamaha C5) by Alexander Holm.
+Licence: Creative Commons Attribution 3.0 — http://creativecommons.org/licenses/by/3.0/
+Files taken unmodified from the Tone.js audio collection (github.com/Tonejs/audio, salamander/).

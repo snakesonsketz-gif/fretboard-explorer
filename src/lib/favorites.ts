@@ -5,6 +5,9 @@ export interface Favorite {
   rootName: string;
   degrees: string[];
   createdAt: number;
+  /** Chords: the fretboard shape picked when it was saved (fret per string, low first), and its tuning. */
+  shape?: (number | null)[];
+  tuningId?: string;
 }
 
 const KEY = "fretlab.favorites.v1";
