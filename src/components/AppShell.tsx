@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Ear, FlaskConical, Gamepad2, Music2, Search, SlidersHorizontal } from "lucide-react";
+import { BookOpen, Ear, FlaskConical, Gamepad2, Music2, Search, SlidersHorizontal } from "lucide-react";
 import { setDevMode, useDevMode } from "@/lib/devMode";
 import { engine } from "@/lib/engine";
 import { cn } from "@/lib/utils";
@@ -9,14 +9,18 @@ import { WelcomeNote } from "./WelcomeNote";
 
 const TABS = [
   { to: "/", label: "Explore", icon: Search },
+  { to: "/grimoire", label: "Grimoire", icon: BookOpen },
   { to: "/sequencer", label: "Sequencer", icon: SlidersHorizontal },
   { to: "/listen", label: "Listen", icon: Ear },
   { to: "/play", label: "Play", icon: Gamepad2 },
 ] as const;
 const DEV_TAB = { to: "/develop", label: "Develop", icon: FlaskConical } as const;
 
-/** Dark app frame shared by every page: logo, the Explore / Sequencer / Listen tabs, and the page body. */
-export function AppShell({ children, headerRight }: { children: ReactNode; headerRight?: ReactNode }) {
+/** The Grimoire tab's own look: gothic red lettering on black, glowing when you're in the room. */
+const GRIMOIRE_RED = "#ff3842";
+
+/** Dark app frame shared by every page: logo, the section tabs, and the page body. `room` dresses the frame for a special room. */
+export function AppShell({ children, headerRight, room }: { children: ReactNode; headerRight?: ReactNode; room?: "grimoire" }) {
   const dev = useDevMode();
   // Load the sound library while the page is idle, so the first tap plays straight away.
   useEffect(() => {
@@ -46,10 +50,11 @@ export function AppShell({ children, headerRight }: { children: ReactNode; heade
   };
   const tabs = dev ? [...TABS, DEV_TAB] : TABS;
   return (
-    <div className="dark min-h-screen bg-background text-foreground">
+    <div className={cn("dark min-h-screen text-foreground", room === "grimoire" ? "bg-[#070404]" : "bg-background")}>
       <InstallTip />
       <WelcomeNote />
-      <header className="border-b border-border/70 bg-card/40">
+      <header className={cn("border-b", room === "grimoire" ? "border-[#5a1219] bg-[#0b0707]" : "border-border/70 bg-card/40")}
+        style={room === "grimoire" ? { boxShadow: "0 1px 18px rgba(255,48,58,0.25)" } : undefined}>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:py-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 touch-manipulation select-none place-items-center rounded-xl bg-primary text-primary-foreground" onClick={onLogoTap} data-testid="logo">
@@ -75,23 +80,35 @@ export function AppShell({ children, headerRight }: { children: ReactNode; heade
             </button>
           </div>
           {headerRight ? <div className="shrink-0 sm:order-last">{headerRight}</div> : null}
-          <nav aria-label="Sections" className="flex w-full gap-1 rounded-lg bg-secondary/60 p-1 sm:w-auto">
-            {tabs.map(({ to, label, icon: Icon }) => (
-              <Link
-                key={to}
-                to={to}
-                activeOptions={{ exact: true }}
-                className={cn(
-                  "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:flex-none sm:px-3",
-                  dev ? "px-1.5" : "px-3",
-                )}
-                activeProps={{ className: "bg-primary text-primary-foreground hover:text-primary-foreground", "aria-current": "page" }}
-              >
-                {/* Four tabs on a phone: drop the icons so the labels fit. */}
-                <Icon className={cn("h-4 w-4 shrink-0", dev && "hidden sm:block")} aria-hidden />
-                {label}
-              </Link>
-            ))}
+          <nav aria-label="Sections" className="flex w-full gap-0.5 overflow-x-auto rounded-lg bg-secondary/60 p-1 sm:w-auto sm:gap-1">
+            {tabs.map(({ to, label, icon: Icon }) =>
+              to === "/grimoire" ? (
+                <Link
+                  key={to}
+                  to={to}
+                  activeOptions={{ exact: true }}
+                  data-testid="tab-grimoire"
+                  className="font-grimoire flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-1 text-[17px] leading-none tracking-wide transition-colors sm:flex-none sm:px-3 sm:text-lg"
+                  style={{ color: GRIMOIRE_RED, textShadow: "0 0 8px rgba(255,48,58,0.55)", background: "#0b0707" }}
+                  activeProps={{ "aria-current": "page", style: { color: "#ffd9d6", background: "linear-gradient(160deg, #3a0a10, #120b0b)", borderColor: "#d42532", boxShadow: "0 0 12px rgba(255,48,58,0.55), inset 0 0 10px rgba(255,48,58,0.25)", textShadow: "0 0 10px #ff3842, 0 0 22px #ff3842" } }}
+                >
+                  <Icon className="hidden h-4 w-4 shrink-0 sm:block" aria-hidden />
+                  {label}
+                </Link>
+              ) : (
+                <Link
+                  key={to}
+                  to={to}
+                  activeOptions={{ exact: true }}
+                  className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1.5 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground sm:flex-none sm:px-3 sm:text-sm"
+                  activeProps={{ className: "bg-primary text-primary-foreground hover:text-primary-foreground", "aria-current": "page" }}
+                >
+                  {/* Five tabs on a phone: drop the icons so the labels fit. */}
+                  <Icon className="hidden h-4 w-4 shrink-0 sm:block" aria-hidden />
+                  {label}
+                </Link>
+              ),
+            )}
           </nav>
         </div>
       </header>

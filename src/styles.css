@@ -214,3 +214,15 @@
     border-radius: 999px;
   }
 }
+
+/* The Grimoire room: its gothic lettering (bundled with the room's page, so it works offline). */
+@font-face {
+  font-family: "Grenze Gotisch";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/rooms/fonts/grenze-gotisch-latin-800-normal.woff2") format("woff2");
+}
+.font-grimoire {
+  font-family: "Grenze Gotisch", "UnifrakturMaguntia", Georgia, serif;
+}

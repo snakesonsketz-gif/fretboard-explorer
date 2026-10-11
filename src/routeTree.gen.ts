@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevelopRouteImport } from './routes/develop'
+import { Route as GrimoireRouteImport } from './routes/grimoire'
 import { Route as ListenRouteImport } from './routes/listen'
 import { Route as PlayRouteImport } from './routes/play'
 import { Route as SequencerRouteImport } from './routes/sequencer'
@@ -23,6 +24,11 @@ const IndexRoute = IndexRouteImport.update({
 const DevelopRoute = DevelopRouteImport.update({
   id: '/develop',
   path: '/develop',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GrimoireRoute = GrimoireRouteImport.update({
+  id: '/grimoire',
+  path: '/grimoire',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ListenRoute = ListenRouteImport.update({
@@ -44,6 +50,7 @@ const SequencerRoute = SequencerRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/develop': typeof DevelopRoute
+  '/grimoire': typeof GrimoireRoute
   '/listen': typeof ListenRoute
   '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/develop': typeof DevelopRoute
+  '/grimoire': typeof GrimoireRoute
   '/listen': typeof ListenRoute
   '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
@@ -59,21 +67,30 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/develop': typeof DevelopRoute
+  '/grimoire': typeof GrimoireRoute
   '/listen': typeof ListenRoute
   '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/develop' | '/listen' | '/play' | '/sequencer'
+  fullPaths: '/' | '/develop' | '/grimoire' | '/listen' | '/play' | '/sequencer'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/develop' | '/listen' | '/play' | '/sequencer'
-  id: '__root__' | '/' | '/develop' | '/listen' | '/play' | '/sequencer'
+  to: '/' | '/develop' | '/grimoire' | '/listen' | '/play' | '/sequencer'
+  id:
+    | '__root__'
+    | '/'
+    | '/develop'
+    | '/grimoire'
+    | '/listen'
+    | '/play'
+    | '/sequencer'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DevelopRoute: typeof DevelopRoute
+  GrimoireRoute: typeof GrimoireRoute
   ListenRoute: typeof ListenRoute
   PlayRoute: typeof PlayRoute
   SequencerRoute: typeof SequencerRoute
@@ -93,6 +110,13 @@ declare module '@tanstack/react-router' {
       path: '/develop'
       fullPath: '/develop'
       preLoaderRoute: typeof DevelopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/grimoire': {
+      id: '/grimoire'
+      path: '/grimoire'
+      fullPath: '/grimoire'
+      preLoaderRoute: typeof GrimoireRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/listen': {
@@ -122,6 +146,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DevelopRoute: DevelopRoute,
+  GrimoireRoute: GrimoireRoute,
   ListenRoute: ListenRoute,
   PlayRoute: PlayRoute,
   SequencerRoute: SequencerRoute,
