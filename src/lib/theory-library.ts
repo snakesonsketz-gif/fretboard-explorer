@@ -46,14 +46,14 @@ export const EXTRA_SCALES: S[] = [
   // Pentatonic / hexatonic
   { id: "dominant-pentatonic", name: "Dominant pentatonic", degrees: ["1", "2", "3", "5", "b7"], family: "Pentatonic / Blues", characteristic: "Major pentatonic with b7 instead of 6.", theory: "Outlines a 9th chord; fits dominant chords." },
   { id: "minor6-pentatonic", name: "Minor 6 pentatonic", degrees: ["1", "b3", "4", "5", "6"], family: "Pentatonic / Blues", characteristic: "Minor pentatonic with 6 instead of b7.", theory: "Dorian-flavoured pentatonic." },
-  { id: "egyptian", name: "Suspended pentatonic", aliases: ["Egyptian"], degrees: ["1", "2", "4", "5", "b7"], family: "Pentatonic / Blues", characteristic: "No third.", theory: "Mode 2 of major pentatonic. Fits sus chords." },
-  { id: "blues-minor-pent", name: "Blues minor pentatonic", aliases: ["Man Gong"], degrees: ["1", "b3", "4", "b6", "b7"], family: "Pentatonic / Blues", characteristic: "Minor pentatonic with b6 instead of 5.", theory: "Mode 3 of major pentatonic." },
+  { id: "egyptian", name: "Suspended pentatonic", aliases: ["Egyptian"], degrees: ["1", "2", "4", "5", "b7"], family: "Pentatonic / Blues", characteristic: "No third.", theory: "Mode 2 of major pentatonic. Fits sus chords.", modeOf: { family: "pentatonic", index: 1 } },
+  { id: "blues-minor-pent", name: "Blues minor pentatonic", aliases: ["Man Gong"], degrees: ["1", "b3", "4", "b6", "b7"], family: "Pentatonic / Blues", characteristic: "Minor pentatonic with b6 instead of 5.", theory: "Mode 3 of major pentatonic.", modeOf: { family: "pentatonic", index: 2 } },
   { id: "lydian-pentatonic", name: "Lydian pentatonic", degrees: ["1", "3", "#4", "5", "7"], family: "Pentatonic / Blues", characteristic: "Major triad plus #4 and 7.", theory: "A maj7#11 pentatonic." },
   { id: "hirajoshi", name: "Hirajoshi", degrees: ["1", "2", "b3", "5", "b6"], family: "World", characteristic: "Two half steps in a pentatonic.", theory: "Japanese pentatonic from the koto tradition." },
   { id: "iwato", name: "Iwato", degrees: ["1", "b2", "4", "b5", "b7"], family: "World", characteristic: "b2 and b5 with no third or fifth.", theory: "Japanese pentatonic; very dark and unstable." },
   { id: "kumoi", name: "Kumoi", degrees: ["1", "2", "b3", "5", "6"], family: "World", characteristic: "Minor 3rd with major 6.", theory: "Japanese pentatonic, a subset of Dorian." },
   { id: "pelog", name: "Pelog (approx.)", degrees: ["1", "b2", "b3", "5", "b6"], family: "World", characteristic: "Semitone clusters at both ends.", theory: "12-TET approximation of the Balinese/Javanese pelog selisir." },
-  { id: "prometheus", name: "Prometheus", degrees: ["1", "2", "3", "#4", "6", "b7"], family: "Symmetric", characteristic: "Built from the mystic chord.", theory: "Scriabin's hexatonic; a subset of the whole tone and Lydian dominant." },
+  { id: "prometheus", name: "Prometheus", degrees: ["1", "2", "3", "#4", "6", "b7"], family: "Exotic", characteristic: "Built from the mystic chord.", theory: "Scriabin's hexatonic: the whole-tone scale with its #5 lowered to 6, so a subset of Lydian dominant (not itself symmetric)." },
   { id: "tritone-scale", name: "Tritone scale", degrees: ["1", "b2", "3", "b5", "5", "b7"], family: "Symmetric", characteristic: "Two major triads a tritone apart.", theory: "Combines C and Gb triads; symmetric at the tritone." },
 
   // Bebop
@@ -64,13 +64,13 @@ export const EXTRA_SCALES: S[] = [
 
   // Symmetric / octatonic+
   { id: "spanish-8", name: "Spanish 8-tone", degrees: ["1", "b2", "#2", "3", "4", "b5", "b6", "b7"], family: "World", characteristic: "Both b3 (as #2) and 3.", theory: "Phrygian dominant with added minor 3rd and b5, common in flamenco." },
-  { id: "messiaen-3", name: "Messiaen mode 3", degrees: ["1", "2", "b3", "3", "#4", "5", "#5", "6", "7"], family: "Symmetric", characteristic: "Repeats every major 3rd.", theory: "Nine-note mode of limited transposition (only four transpositions)." },
+  { id: "messiaen-3", name: "Messiaen mode 3", degrees: ["1", "2", "b3", "3", "#4", "5", "#5", "#6", "7"], family: "Symmetric", characteristic: "Repeats every major 3rd.", theory: "Nine-note mode of limited transposition (only four transpositions)." },
   { id: "messiaen-4", name: "Messiaen mode 4", degrees: ["1", "b2", "2", "4", "#4", "5", "b6", "7"], family: "Symmetric", characteristic: "Repeats every tritone.", theory: "Eight-note mode of limited transposition." },
   // Hexatonic / additional
   { id: "major-hexatonic", name: "Major hexatonic", degrees: ["1", "2", "3", "4", "5", "6"], family: "Pentatonic / Blues", characteristic: "Major scale without the 7th.", theory: "Six-note subset shared by Ionian and Mixolydian." },
   { id: "minor-hexatonic", name: "Minor hexatonic", degrees: ["1", "2", "b3", "4", "5", "b7"], family: "Pentatonic / Blues", characteristic: "Minor scale without the 6th.", theory: "Six-note subset shared by Dorian and Aeolian." },
-  { id: "oriental", name: "Oriental", degrees: ["1", "b2", "3", "4", "b5", "6", "b7"], family: "Exotic", characteristic: "b2 and b5 with a major 3rd and 6.", theory: "Two augmented 2nds; related to the double harmonic with b5 and b7." },
-  { id: "leading-whole-tone", name: "Leading whole tone", degrees: ["1", "2", "3", "#4", "#5", "#6", "7"], family: "Symmetric", characteristic: "Whole-tone scale plus a leading tone.", theory: "Six whole steps then a half step back to the root." },
+  { id: "oriental", name: "Oriental", degrees: ["1", "b2", "3", "4", "b5", "6", "b7"], family: "Exotic", characteristic: "b2 and b5 with a major 3rd and 6.", theory: "Two augmented 2nds (b2–3 and b5–6); the double harmonic with b5, natural 6 and b7." },
+  { id: "leading-whole-tone", name: "Leading whole tone", degrees: ["1", "2", "3", "#4", "#5", "#6", "7"], family: "Exotic", characteristic: "Whole-tone scale plus a leading tone.", theory: "Five whole steps, then two half steps (#6–7–1) back to the root." },
   { id: "six-tone-symmetric", name: "Six-tone symmetrical", degrees: ["1", "b2", "3", "4", "#5", "6"], family: "Symmetric", characteristic: "Alternating half and minor-3rd steps.", theory: "Union of two augmented triads a half step apart; repeats every major 3rd." },
 ];
 
@@ -121,7 +121,7 @@ export const EXTRA_CHORDS: C[] = [
   ch("m11b5", "Minor 11 flat five", "m11(b5)", ["1", "b3", "b5", "b7", "9", "11"], "Extensions", "Half-diminished stack to the 11th.", ["locrian-nat2"]),
   ch("m7add11", "Minor 7 add 11", "m7(add11)", ["1", "b3", "5", "b7", "11"], "Extensions", "Minor 7 with an 11 and no 9.", ["dorian", "aeolian"]),
   ch("7add13", "Dominant 7 add 13", "7(13)", ["1", "3", "5", "b7", "13"], "Extensions", "Dominant with 13 and no 9.", ["mixolydian"]),
-  ch("9sus4", "9 sus4", "9sus4", ["1", "4", "5", "b7", "9"], "Suspended & quartal", "Suspended dominant with a 9th; enharmonic to bVII/I.", ["mixolydian", "dorian"]),
+  ch("9sus4", "9 sus4", "9sus4", ["1", "4", "5", "b7", "9"], "Suspended & quartal", "Suspended dominant with a 9th: a bVII triad over the root, plus the 5th.", ["mixolydian", "dorian"]),
   ch("13sus4", "13 sus4", "13sus4", ["1", "4", "5", "b7", "9", "13"], "Suspended & quartal", "Suspended dominant with 9 and 13.", ["mixolydian"]),
   ch("7susb9", "7 sus4 b9", "7sus4(b9)", ["1", "4", "5", "b7", "b9"], "Suspended & quartal", "The Phrygian sus chord.", ["dorian-b2", "phrygian"]),
 
@@ -129,7 +129,7 @@ export const EXTRA_CHORDS: C[] = [
   ch("madd11", "Minor add 11", "m(add11)", ["1", "b3", "5", "11"], "Sus & add", "Minor triad with an 11 and no 7.", ["aeolian", "dorian"]),
   ch("addS11", "Major add #11", "(add#11)", ["1", "3", "5", "#11"], "Sus & add", "Major triad with a Lydian #11.", ["lydian"]),
   ch("add13", "Major add 13", "(add13)", ["1", "3", "5", "13"], "Sus & add", "Same pitch classes as a 6 chord; spelled as a 13 when voiced above the octave."),
-  ch("add9no3", "Add 9 (no 3)", "sus2(add4)", ["1", "2", "4", "5"], "Sus & add", "Both suspensions together; no third.", ["ionian", "mixolydian"]),
+  ch("add9no3", "Sus2 add 4", "sus2(add4)", ["1", "2", "4", "5"], "Sus & add", "Both suspensions together; no third.", ["ionian", "mixolydian"]),
   ch("maj7add13", "Major 7 add 13", "maj7(add13)", ["1", "3", "5", "7", "13"], "Sus & add", "maj7 with a 13 and no 9.", ["ionian"]),
 
   // Altered dominant combinations
@@ -176,7 +176,7 @@ export const EXTRA_CHORDS: C[] = [
   ch("slash-bII", "bII/I (Db/C)", "bII/I", ["1", "b2", "4", "b6"], "Upper structures & slash", "Major triad a half step above: implies Phrygian.", ["phrygian"]),
   ch("slash-IV", "IV/I (F/C)", "IV/I", ["1", "4", "6"], "Upper structures & slash", "Subdominant triad over the tonic bass (1-4-6).", ["ionian"]),
   ch("slash-V", "V/I (G/C)", "V/I", ["1", "5", "7", "9"], "Upper structures & slash", "Dominant triad over the tonic: maj9 without the 3rd.", ["ionian", "lydian"]),
-  ch("slash-bVI", "bVI/I (Ab/C)", "bVI/I", ["1", "b3", "b6"], "Upper structures & slash", "Enharmonically an Ab major triad in 1st inversion over C.", ["aeolian"]),
+  ch("slash-bVI", "bVI/I (Ab/C)", "bVI/I", ["1", "b3", "b6"], "Upper structures & slash", "An Ab major triad in 1st inversion (C in the bass).", ["aeolian"]),
 
   // Quartal / quintal / clusters
   ch("quartal3", "Quartal triad", "(4ths ×3)", ["1", "4", "b7"], "Suspended & quartal", "Two stacked perfect 4ths.", ["dorian", "mixolydian"]),
@@ -229,7 +229,7 @@ export const EXTRA_CHORDS: C[] = [
   ch("guide-maj", "Major 7 guide tones", "maj7 (3 & 7 only)", ["3", "7"], "Shell & rootless", "3rd and major 7th only."),
   ch("guide-min", "Minor 7 guide tones", "m7 (b3 & b7 only)", ["b3", "b7"], "Shell & rootless", "Minor 3rd and minor 7th only."),
   ch("ust-bII", "UST bII (Db/C7)", "7(b9,11,b13) UST bII", ["1", "3", "b7", "b9", "11", "b13"], "Upper structures & slash", "Major triad a half step above over a dominant shell: b9-11-b13."),
-  ch("ust-IIm", "UST IIm (Dm/C7)", "13 UST IIm", ["1", "3", "b7", "9", "11", "13"], "Upper structures & slash", "Minor triad on 2 over a dominant shell: 9-11-13.", ["mixolydian"]),
+  ch("ust-IIm", "UST IIm (Dm/C7)", "13(11) UST IIm", ["1", "3", "b7", "9", "11", "13"], "Upper structures & slash", "Minor triad on 2 over a dominant shell: 9-11-13. The natural 11 sits a b9 above the 3rd, so it is usually played as a 13sus4 (3rd left out).", ["mixolydian"]),
   ch("ust-bIIIm", "UST bIIIm (Ebm/C7)", "7(#9,#11) UST bIIIm", ["1", "3", "b7", "#9", "#11"], "Upper structures & slash", "Minor triad on b3 over a dominant shell: #9-#11-b7.", ["dim-half-whole", "altered"]),
   ch("slash-IIm", "IIm/I (Dm/C)", "IIm/I", ["1", "2", "4", "6"], "Upper structures & slash", "Minor triad a step above the bass: 9-11-13 with no 3rd.", ["dorian", "ionian"]),
   ch("slash-VII", "VII/I (B/C)", "VII/I", ["1", "7", "#9", "#11"], "Upper structures & slash", "Major triad a half step below the bass."),
@@ -270,16 +270,16 @@ export const EXTRA_ARPEGGIOS: ArpeggioVariant[] = [
   {
     id: "to9",
     name: "Extend to 9",
-    transform: (d) => (d.some((x) => /9$/.test(x)) ? d : [...d, "9"]),
-    theory: "Add the natural 9 unless an altered 9 is already present.",
+    transform: (d) => (d.some((x) => /9$/.test(x) || x === "2") ? d : [...d, "9"]),
+    theory: "Add the natural 9 unless an altered 9 (or a sus2's 2nd) is already present.",
   },
   {
     id: "to11",
     name: "Extend to 11",
     transform: (d) => {
       const out = [...d];
-      if (!out.some((x) => /9$/.test(x))) out.push("9");
-      if (!out.some((x) => /11$/.test(x))) out.push(d.includes("3") ? "#11" : "11");
+      if (!out.some((x) => /9$/.test(x) || x === "2")) out.push("9");
+      if (!out.some((x) => /11$/.test(x) || x === "4")) out.push(d.includes("3") ? "#11" : "11");
       return out;
     },
     theory: "Stack to the 11th. Over a major 3rd the #11 is used, since a natural 11 clashes a b9 above it.",
@@ -289,8 +289,8 @@ export const EXTRA_ARPEGGIOS: ArpeggioVariant[] = [
     name: "Extend to 13",
     transform: (d) => {
       const out = [...d];
-      if (!out.some((x) => /9$/.test(x))) out.push("9");
-      if (!out.some((x) => /13$/.test(x) || x === "6")) out.push("13");
+      if (!out.some((x) => /9$/.test(x) || x === "2")) out.push("9");
+      if (!out.some((x) => /(^|[^\d])(6|13)$/.test(x) || x === "bb7")) out.push("13");
       return out;
     },
     theory: "Stack 9 and 13; the 11 is left out as the usual avoid note.",
@@ -309,7 +309,7 @@ export const EXTRA_ARPEGGIOS: ArpeggioVariant[] = [
   {
     id: "add6",
     name: "Add the 6th",
-    transform: (d) => (d.includes("6") || d.includes("13") ? d : [...d, "6"]),
+    transform: (d) => (d.some((x) => /(^|[^\d])(6|13)$/.test(x) || x === "bb7") ? d : [...d, "6"]),
     theory: "The 6 within the octave rather than the 13 above it.",
   },
   {
@@ -367,6 +367,7 @@ function rotateTo(d: Degree[], pred: (x: Degree) => boolean): Degree[] {
   return i < 0 ? d : [...d.slice(i), ...d.slice(0, i)];
 }
 function withCore(d: Degree[], third: Degree, fifth: Degree, seventh: Degree): Degree[] {
-  const rest = d.filter((x) => !isThird(x) && !["4", "2", "5", "b5", "#5"].includes(x) && !is7(x) && x !== "6");
+  // A 6 is a tension (13) beside a b7, but the same pitch as a bb7, so only the diminished form drops it.
+  const rest = d.filter((x) => !isThird(x) && !["4", "2", "5", "b5", "#5"].includes(x) && !is7(x) && !(x === "6" && seventh === "bb7"));
   return uniq(["1", third, fifth, seventh, ...rest.filter((x) => x !== "1")]);
 }

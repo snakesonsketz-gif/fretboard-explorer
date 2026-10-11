@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  ROOTS,
   SCALES,
   degreeToSemitones,
   harmonize,
@@ -138,8 +139,11 @@ export function CircleOfFifths({ rootPc, onPickKey, onLoadChord }: Props) {
           </p>
           <div className="flex flex-wrap gap-1.5">
             {diatonic.map((h) => {
-              const r = rootByName(h.notes[0]!);
+              // The chord's root by pitch: E#dim in F# major (or D#m) is loaded on F, never on C,
+              // which rootByName falls back to for a name that isn't a selectable root.
               const first = degreeToSemitones(h.degrees[0]!);
+              const pc = (rootByName(keyName).pc + first + 120) % 12;
+              const r = ROOTS.find((x) => x.name === h.notes[0]) ?? ROOTS.find((x) => x.pc === pc)!;
               const rel = h.degrees.map((d) => degreeToSemitones(d) - first);
               return (
                 <button key={h.roman} type="button"

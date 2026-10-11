@@ -37,6 +37,7 @@ const B7: TargetChord = { rootName: "B", degrees: ["1", "3", "5", "b7"], label: 
 const Cmaj7: TargetChord = { rootName: "C", degrees: ["1", "3", "5", "7"], label: "Cmaj7" };
 const Dsus4: TargetChord = { rootName: "D", degrees: ["1", "4", "5"], label: "Dsus4" };
 const G5: TargetChord = { rootName: "G", degrees: ["1", "5"], label: "G5" };
+const E5: TargetChord = { rootName: "E", degrees: ["1", "5"], label: "E5" };
 const G7: TargetChord = { rootName: "G", degrees: ["1", "3", "5", "b7"], label: "G7" };
 
 const RING = "Let each strum ring until it has faded away completely (about 3 seconds) before the next one.";
@@ -125,7 +126,7 @@ const ROUND_3 = [
   // ---------------- how he strums
   { id: "r3-hard-g", label: "clean", target: G, tab: "320003", strums: 4, title: "Open G — strum hard", how: `Clean G, strummed as hard as you ever would (loud). ${RING}` },
   { id: "r3-refret-c", label: "clean", target: C, tab: "x32010", strums: 4, title: "Open C — lift and re-fret between strums", how: `Strum C, let it ring a second, then lift your fretting hand right off and put the chord back on (finger squeaks are fine), and strum again.` },
-  { id: "r3-palm-e5", label: "other", target: tri("E"), tab: "022xxx", strums: 8, title: "Palm-muted chugs", how: "Rest the side of your strumming hand on the strings by the bridge and strum the low three strings of E (E power chord) 8 times — short, muted chugs, about two per second." },
+  { id: "r3-palm-e5", label: "other", target: E5, tab: "022xxx", strums: 8, title: "Palm-muted chugs", how: "Rest the side of your strumming hand on the strings by the bridge and strum the low three strings of E (E power chord) 8 times — short, muted chugs, about two per second." },
   { id: "r3-scratch", label: "other", target: G, tab: "xxxxxx", strums: 4, title: "Muted scratches", how: "Lay your fretting hand lightly across all the strings (no notes) and strum 4 times — just the scratchy 'chk' sound, a second apart." },
   { id: "r3-picked-c", label: "other", target: C, tab: "x32010", strums: 5, unit: "picks", title: "C picked one string at a time", how: "Hold C and pick the five strings one at a time, slowly from the A string to the high E — about one string per second (5 picks)." },
   // ---------------- sounds that are NOT strums (Fretlab should count nothing)
@@ -141,7 +142,6 @@ const ROUND_3 = [
  * (a palm too heavy or too light; a chop that rings on or catches the low strings), with the
  * let-ring versions to compare. Plus fast chugs and a gallop for strum counting at speed.
  */
-const E5: TargetChord = { rootName: "E", degrees: ["1", "5"], label: "E5" };
 const PM = "Rest the side of your strumming hand on the strings right where they meet the bridge, and keep it there while you strum.";
 const CHOP = "Strum, then straight away loosen your fretting fingers (keep touching the strings) so the chord stops — a short “chk”.";
 const ROUND_4 = [

@@ -66,10 +66,14 @@ export function accidentalString(alter: number): string {
 
 /** Pretty accidental glyphs for display. */
 export function pretty(text: string): string {
+  // A "b" is an accidental before a degree number ("b3", "Bb7"), or right after a note letter at the
+  // end of a name ("Bb", "Bbb", "Ab/C"). Anywhere else it is a letter ("sub", "Dumb") and is kept.
   return text
     .replace(/bb(?=\d)/g, "𝄫")
+    .replace(/([A-G])bb(?=$|\)|\/|,| )/g, "$1𝄫")
     .replace(/##|x(?=\d)/g, "𝄪")
-    .replace(/b(?=\d|$|\)|\/|,| )/g, "♭")
+    .replace(/b(?=\d)/g, "♭")
+    .replace(/([A-G])b(?=$|\)|\/|,| )/g, "$1♭")
     .replace(/#/g, "♯");
 }
 
@@ -278,7 +282,8 @@ export const SCALES: ScaleDef[] = [
     characteristic: "Natural 7 over a minor 3rd; augmented 2nd from b6 to 7.",
     theory:
       "Natural minor with a raised 7th, creating a real V7 chord in minor keys. The augmented 2nd between b6 and 7 is its signature sound.",
-    chordScale: "i(maj7) iiø III+ iv7 V7 VImaj7 vii°7",
+    chordScale: "i(maj7) iiø III+maj7 iv7 V7 VImaj7 vii°7",
+    modeOf: { family: "harmonic-minor", index: 0 },
   },
   {
     id: "melodic-minor",
@@ -289,6 +294,7 @@ export const SCALES: ScaleDef[] = [
     theory:
       "Ascending melodic minor. In jazz it is used in both directions, and its modes give altered dominant sounds — the 4th mode is Lydian dominant, the 7th is the altered scale.",
     chordScale: "i(maj7) ii7 III+maj7 IV7 V7 viø viiø",
+    modeOf: { family: "melodic-minor", index: 0 },
   },
   {
     id: "phrygian-dominant",
@@ -298,6 +304,7 @@ export const SCALES: ScaleDef[] = [
     family: "Minor",
     characteristic: "b2 and major 3rd together.",
     theory: "Fifth mode of harmonic minor: the flamenco and metal dominant sound over V7 in minor.",
+    modeOf: { family: "harmonic-minor", index: 4 },
   },
   {
     id: "lydian-dominant",
@@ -307,6 +314,7 @@ export const SCALES: ScaleDef[] = [
     family: "Minor",
     characteristic: "#11 over a dominant 7th.",
     theory: "Fourth mode of melodic minor, the go-to sound for 7#11 chords.",
+    modeOf: { family: "melodic-minor", index: 3 },
   },
   {
     id: "altered",
@@ -317,6 +325,7 @@ export const SCALES: ScaleDef[] = [
     characteristic: "Every possible dominant alteration: b9 #9 b5 #5.",
     theory:
       "Seventh mode of melodic minor. Spelled from the dominant it reads 1 b9 #9 3 b5 #5 b7 — the standard vocabulary for altered dominants resolving to minor.",
+    modeOf: { family: "melodic-minor", index: 6 },
   },
 
   {
@@ -407,6 +416,7 @@ export const SCALES: ScaleDef[] = [
     family: "Exotic",
     characteristic: "Major scale with a flat 6.",
     theory: "Parent of several altered-dominant and maj7 sounds; strong for iv-chord borrowings.",
+    modeOf: { family: "harmonic-major", index: 0 },
   },
   {
     id: "hungarian-minor",
@@ -423,7 +433,7 @@ export const SCALES: ScaleDef[] = [
     degrees: ["1", "b2", "3", "4", "5", "b6", "7"],
     family: "Exotic",
     characteristic: "b2 and b6 around a major 3rd and natural 7.",
-    theory: "Byzantine/Arabic sound: two augmented seconds, symmetric around the 5th.",
+    theory: "Byzantine/Arabic sound: two augmented seconds, built from two identical tetrachords (1 b2 3 4 and 5 b6 7 8).",
   },
   {
     id: "japanese-insen",
@@ -606,8 +616,8 @@ export const CHORDS: ChordDef[] = [
     suffix: "maj7#5",
     degrees: ["1", "3", "#5", "7"],
     family: "Diminished & augmented",
-    theory: "Augmented triad plus major 7th; third mode of melodic minor.",
-    scales: ["melodic-minor"],
+    theory: "Augmented triad plus major 7th; the chord on the 3rd degree of melodic minor (Lydian augmented).",
+    scales: ["lydian-augmented", "ionian-s5", "augmented"],
   },
   {
     id: "sus2",
@@ -858,18 +868,36 @@ export const ARPEGGIO_VARIANTS: ArpeggioVariant[] = [
   {
     id: "add9",
     name: "Add the 9th",
-    transform: (d) => (d.includes("9") ? d : [...d, "9"]),
+    // Skipped when a 9th (natural or altered) or a 2nd is already there: no b9 + 9 or 2 + 9 clashes.
+    transform: (d) => (d.some((x) => [2, 9].includes(parseDegree(x).number)) ? d : [...d, "9"]),
     theory: "Extending the arpeggio to the 9th widens the shape without changing function.",
   },
   {
     id: "sixths",
     name: "Add the 6th / 13th",
-    transform: (d) => (d.includes("6") || d.includes("13") ? d : [...d, "13"]),
+    // Skipped when a 6th/13th (natural or altered) or a bb7 (the same pitch as 6) is already there.
+    transform: (d) => (d.some((x) => [6, 13].includes(parseDegree(x).number) || x === "bb7") ? d : [...d, "13"]),
     theory: "The 13th sits a whole tone above the 5th and softens dominant sounds.",
   },
 ];
 
 ARPEGGIO_VARIANTS.push(...EXTRA_ARPEGGIOS);
+
+// One name per pitch: when a transform lands on a note the chord already has (a #9 over a minor
+// 3rd, a 6 beside a 13, a #11 beside a b5, an 11 beside a sus4) the tone already there is kept
+// and the enharmonic copy dropped, so no arpeggio ever names one pitch twice.
+for (const v of ARPEGGIO_VARIANTS) {
+  const transform = v.transform;
+  v.transform = (d) => {
+    const seen = new Set<number>();
+    return transform(d).filter((x) => {
+      const pc = ((degreeToSemitones(x) % 12) + 12) % 12;
+      if (seen.has(pc)) return false;
+      seen.add(pc);
+      return true;
+    });
+  };
+}
 
 /* ------------------------------------------------------------------ naming / detection */
 
@@ -923,16 +951,25 @@ export function identify(root: Root, pcs: number[], prefer?: "chord" | "scale"):
 
   const chord = CHORD_INDEX.get(key);
   const scale = SCALE_INDEX.get(key);
+  /** Note names (by pitch class) as the recognised chord/scale spells them on this root. */
+  const spelled = new Map<number, string>();
+  for (const d of (chord ?? scale)?.degrees ?? [])
+    spelled.set((((root.pc + degreeToSemitones(d)) % 12) + 12) % 12, spellDegree(root, d));
 
   // Rotations: name the same collection from other roots.
   for (let rot = 1; rot < 12; rot++) {
     const rotated = pcKey(unique.map((p) => (p - rot + 12) % 12));
-    const other = ROOTS.find((r) => r.pc === (root.pc + rot) % 12);
-    if (!other) continue;
+    const otherPc = (root.pc + rot) % 12;
     const rc = CHORD_INDEX.get(rotated);
     const rs = SCALE_INDEX.get(rotated);
-    if (rc && unique.length <= 6) alternates.push(`${other.name}${rc.suffix} (same notes)`);
-    if (rs && unique.length >= 5) alternates.push(`${other.name} ${rs.name} (same notes)`);
+    // Each reading on that note as the set already spells it (Gb6 = Ebm7, not D#m7), or else on
+    // the root name that spells the reading best.
+    const nameFor = (degs: Degree[]) => {
+      const own = spelled.get(otherPc);
+      return own && ROOTS.some((r) => r.name === own) ? own : bestRootFor(otherPc, degs).name;
+    };
+    if (rc && unique.length <= 6) alternates.push(`${nameFor(rc.degrees)}${rc.suffix} (same notes)`);
+    if (rs && unique.length >= 5) alternates.push(`${nameFor(rs.degrees)} ${rs.name} (same notes)`);
   }
 
   const chordWins = prefer === "chord" ? true : prefer === "scale" ? !scale : !scale || unique.length <= 6;
@@ -1113,7 +1150,14 @@ export function harmonize(root: Root, scale: ScaleDef, seventh: boolean): Harmon
     if (q.roman === "aug") roman += "+";
     if (alter < 0) roman = "b".repeat(-alter) + roman;
     if (alter > 0) roman = "#".repeat(alter) + roman;
-    if (seventh && q.roman !== "lowerdim") roman += "7";
+    // Seventh-chord numerals name the 7th the way the chord symbols do (and as the scales'
+    // chordScale lines read): Imaj7 / V7 / ii7 / viiø / vii°7, i(maj7), III+maj7. A bare "I7" would
+    // read as a dominant 7th on I.
+    if (seventh && q.roman !== "lowerdim") {
+      const sev: Record<string, string> = { maj7: "maj7", "m(maj7)": "(maj7)", "maj7#5": "maj7" };
+      roman += sev[q.suffix] ?? "7";
+    }
+    if (seventh && q.suffix === "dim7") roman += "7";
 
     const notes = idxs.map((idx) => spellDegree(root, degs[idx]!));
 
@@ -1185,6 +1229,33 @@ export function parentMajorOf(root: Root, modeIndex: number): string {
   const ionian = SCALES.find((s) => s.id === "ionian")!;
   const offset = degreeToSemitones(ionian.degrees[modeIndex] ?? "1");
   const pc = ((root.pc - offset) % 12 + 12) % 12;
-  const preferFlats = preferFlatsFor(root);
-  return chromaticName(pc, preferFlats);
+  // Spelled by letter: the mode's root is degree (modeIndex + 1) of its parent, so the parent's
+  // letter is that many letters below (C Phrygian → Ab major, not G#; C Locrian → Db, not C#).
+  // A selectable root name is required, so a double accidental falls back to the plain name.
+  const letter = LETTERS[(LETTERS.indexOf(root.letter) - modeIndex + 70) % 7]!;
+  let alter = pc - (LETTER_SEMITONES[letter] ?? 0);
+  if (alter > 6) alter -= 12;
+  if (alter < -6) alter += 12;
+  const name = letter + accidentalString(alter);
+  if (ROOTS.some((r) => r.name === name)) return name;
+  return chromaticName(pc, preferFlatsFor(root));
+}
+
+/**
+ * The root name, of the enharmonic pair on this pitch class, that spells a chord or scale with the
+ * fewest accidentals (Eb major not D# major, C#m not Dbm). Ties go to the everyday name.
+ */
+const EVERYDAY = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+export function bestRootFor(pc: number, degrees: Degree[]): Root {
+  const p = ((pc % 12) + 12) % 12;
+  const cost = (r: Root) =>
+    [r.name, ...degrees.map((d) => spellDegree(r, d))].reduce((a, n) => {
+      const acc = n.length - 1;
+      return a + (acc === 0 ? 0 : acc === 1 ? 1 : 3 * acc);
+    }, 0);
+  const cands = ROOTS.filter((r) => r.pc === p);
+  return cands.reduce((best, r) => {
+    const d = cost(r) - cost(best);
+    return d < 0 || (d === 0 && r.name === EVERYDAY[p]) ? r : best;
+  });
 }

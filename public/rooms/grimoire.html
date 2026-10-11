@@ -384,7 +384,7 @@ const SCALES = [
   {id:"hirojoshi",g:"Five-tone",name:"Hirojoshi",set:[0,2,3,7,8]},
   {id:"whole",g:"Six-tone",name:"Whole Tone",set:[0,2,4,6,8,10]},
   {id:"aug",g:"Six-tone",name:"Augmented",set:[0,3,4,7,8,11]},
-  {id:"pelog",g:"Six-tone",name:"Pelog",set:[0,1,3,4,7,8]},
+  {id:"pelog",g:"Six-tone",name:"Pelog",set:[0,1,3,4,7,8],iv:["1","♭2","♭3","♭4","5","♭6"]},
   {id:"domsus",g:"Six-tone",name:"Dominant Sus",set:[0,2,5,7,9,10]},
   {id:"dim",g:"Eight-tone",name:"Diminished",set:[0,2,3,5,6,8,9,11],modes:["Diminished (Whole-Half)","Half-Whole (Dominant Diminished)","Whole-Half, mode 3","Half-Whole, mode 4","Whole-Half, mode 5","Half-Whole, mode 6","Whole-Half, mode 7","Half-Whole, mode 8"]},
   {id:"spanish8",g:"Eight-tone",name:"8 Tone Spanish",set:[0,1,3,4,5,6,8,10]},
@@ -436,10 +436,13 @@ function intervalLabels(set){
   return set.map(s=>{
     if(s===3 && has(4) && !has(2)) return "♯2";
     if(s===6 && has(4) && !has(5)) return "♯4";
-    if(s===8 && has(4) && (!has(7) || (has(3)&&!has(9)))) return "♯5";
+    /* ♯5 only while the 5 letter is free: not when a ♭5 already sits on it (8-tone Spanish: ♭5 ♭6) */
+    if(s===8 && has(4) && (!has(7) || (has(3)&&!has(9))) && !(has(6) && has(5))) return "♯5";
     return DEFAULT_INT[s];
   });
 }
+/* degree labels for mode i of P: a catalogue spelling for the parent scale where one is given (Pelog) */
+function labelsFor(P,i,set){ return (P && !P.custom && i===0 && P.iv) ? P.iv.slice() : intervalLabels(set); }
 function prefersFlats(set,tonic){
   const minorish = set.includes(3) && !set.includes(4);
   const ref = mod(tonic + (minorish?3:0));
@@ -465,6 +468,28 @@ function spell7(tonic,set){
   return best.notes;
 }
 
+/* spell any set from its degree labels (one letter per degree number), so names always agree with
+   the formula (♯4 is F♯ over C, never G♭); the tonic spelling with the fewest accidentals wins */
+function spellLabels(tonic,set,labels){
+  let best=null;
+  for(let L=0;L<7;L++){
+    for(const a of [-1,0,1]){
+      if(mod(LETTER_PC[L]+a)!==tonic) continue;
+      let score=0; const notes=[];
+      for(let k=0;k<set.length;k++){
+        const m=/(\d+)$/.exec(labels[k]||"1"), num=m?+m[1]:1;
+        const letter=(L+num-1)%7, pc=mod(tonic+set[k]);
+        let x=mod(pc-LETTER_PC[letter]); if(x>6)x-=12;
+        const ax=Math.abs(x); score += ax===0?0:ax===1?1:ax===2?3:40;
+        notes.push(LETTERS[letter]+acc(x));
+      }
+      const key=[score,Math.abs(a),a>0?1:0];
+      if(!best || key[0]<best.key[0] || (key[0]===best.key[0] && (key[1]<best.key[1] || (key[1]===best.key[1] && key[2]<best.key[2])))) best={key,notes};
+    }
+  }
+  return best.notes;
+}
+
 /* everything about the current view */
 function derive(){
   const P=state.parent, n=P.set.length, i=Math.min(state.modeIdx,n-1);
@@ -472,12 +497,17 @@ function derive(){
   const tonic=state.tonic;
   const parentTonic=mod(tonic-P.set[i]);
   const flats=prefersFlats(set,tonic);
-  const names = n===7 ? spell7(tonic,set) : set.map(s=>(flats?FLAT:SHARP)[mod(tonic+s)]);
-  const labels=intervalLabels(set);
+  const labels=labelsFor(P,i,set);
+  let names = n===7 ? spell7(tonic,set) : spellLabels(tonic,set,labels);
   let blue=null;
   if(state.blue && P.id==="minpent" && !state.build){
     const b=mod(6-P.set[i]);
-    if(!set.includes(b)) blue={semi:b, label:DEFAULT_INT[b], name:(flats?FLAT:SHARP)[mod(tonic+b)]};
+    if(!set.includes(b)){
+      /* spelled together with the scale so the blue note takes its own letter (E blues: B♭, not A♯) */
+      const all=spellLabels(tonic,set.concat([b]),labels.concat([DEFAULT_INT[b]]));
+      names=all.slice(0,n);
+      blue={semi:b, label:DEFAULT_INT[b], name:all[n]};
+    }
   }
   const pcName={}, pcLabel={};
   set.forEach((s,k)=>{ pcName[mod(tonic+s)]=names[k]; pcLabel[mod(tonic+s)]=labels[k]; });
@@ -1081,7 +1111,7 @@ function renderBuildList(){
     const meta=document.createElement("span"); meta.className="b-meta";
     const parentLabel=b.scaleId?BY_ID[b.scaleId].name:"Custom";
     meta.textContent=b.set.length+" notes · "+parentLabel+(b.modeIdx?" · mode "+(b.modeIdx+1):"")+" · root "+FLAT[b.root];
-    const fm=document.createElement("span"); fm.className="b-formula"; fm.textContent=intervalLabels(modeSet(b.set,b.modeIdx)).join(" ");
+    const fm=document.createElement("span"); fm.className="b-formula"; fm.textContent=labelsFor(b.scaleId?BY_ID[b.scaleId]:null,b.modeIdx,modeSet(b.set,b.modeIdx)).join(" ");
     main.append(nm,meta,fm);
     const act=document.createElement("div"); act.className="b-act";
     if(store.pendingDelete===b.id){

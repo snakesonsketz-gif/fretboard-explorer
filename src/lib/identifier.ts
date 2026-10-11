@@ -1,6 +1,7 @@
 import {
   CHORDS,
   SCALES,
+  bestRootFor,
   degreesToPitchClasses,
   rootByName,
   spellDegree,
@@ -33,11 +34,12 @@ export function readings(pcs: number[], bassPc?: number): Reading[] {
   const set = [...new Set(pcs.map(pc12))];
   const out: Reading[] = [];
   for (const rpc of set) {
-    const root = rootForPc(rpc);
     const key = set.map((p) => pc12(p - rpc)).sort((a, b) => a - b).join(",");
     const chords = CHORDS.filter((c) => degreesToPitchClasses(c.degrees).join(",") === key).slice(0, 2);
     const scales = set.length >= 5 ? SCALES.filter((s) => degreesToPitchClasses(s.degrees).join(",") === key).slice(0, 2) : [];
     for (const c of chords) {
+      // Each reading on the root name that spells it best (C#m, not Dbm with its Fb).
+      const root = bestRootFor(rpc, c.degrees);
       const r: Reading = {
         kind: "chord",
         root,
@@ -55,6 +57,7 @@ export function readings(pcs: number[], bassPc?: number): Reading[] {
       out.push(r);
     }
     for (const s of scales) {
+      const root = bestRootFor(rpc, s.degrees);
       out.push({
         kind: "scale",
         root,

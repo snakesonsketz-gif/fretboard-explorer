@@ -1,10 +1,12 @@
 import type { Tuning } from "./fretboard";
 import {
   ROOTS,
+  bestRootFor,
   chromaticName,
   degreeToSemitones,
   identify,
   preferFlatsFor,
+  spellDegree,
   type Degree,
 } from "./theory";
 
@@ -231,13 +233,15 @@ export function analyzeShape(shape: (number | null)[], tuning: Tuning) {
   const bassPc = played[0]!.midi % 12;
   const NAMES: Degree[] = ["1", "b2", "2", "b3", "3", "4", "b5", "5", "#5", "6", "b7", "7"];
   const readFor = (rootPc: number) => {
-    const root = ROOTS.find((r) => r.pc === rootPc)!;
     const rel = pcsAbs.map((p) => (p - rootPc + 12) % 12);
-    const det = identify(root, rel, "chord");
+    const first = identify(ROOTS.find((r) => r.pc === rootPc)!, rel, "chord");
     const degrees: Degree[] =
-      det.known?.kind === "chord"
-        ? det.known.def.degrees.filter((d) => rel.includes(((degreeToSemitones(d) % 12) + 12) % 12))
+      first.known?.kind === "chord"
+        ? first.known.def.degrees.filter((d) => rel.includes(((degreeToSemitones(d) % 12) + 12) % 12))
         : [...rel].sort((a, b) => a - b).map((p) => NAMES[p]!);
+    // Named on the enharmonic root that spells it best: Eb (Eb G Bb), not D# (D# F## A#).
+    const root = bestRootFor(rootPc, degrees);
+    const det = identify(root, rel, "chord");
     return { root, det, degrees };
   };
   // Bass note as root first; other marked notes give alternative (slash) readings.
@@ -252,7 +256,12 @@ export function analyzeShape(shape: (number | null)[], tuning: Tuning) {
     bassName,
     primary,
     alternatives,
-    notes: played.map((p) => chromaticName(p.midi % 12, preferFlatsFor(primary.root))),
+    // Spelled from the reading (C minor: C Eb G, not C D# G); a note outside it falls back to a plain name.
+    notes: played.map((p) => {
+      const rel = (p.midi - primary.root.pc + 1200) % 12;
+      const d = primary.degrees.find((x) => ((degreeToSemitones(x) % 12) + 12) % 12 === rel);
+      return d ? spellDegree(primary.root, d) : chromaticName(p.midi % 12, preferFlatsFor(primary.root));
+    }),
     midis: played.map((p) => p.midi),
   };
 }
