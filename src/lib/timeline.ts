@@ -22,12 +22,109 @@ export interface TimeSig {
 export const beatTicks = (ts: TimeSig) => (PPQ * 4) / ts.unit;
 export const measureTicks = (ts: TimeSig) => ts.beats * beatTicks(ts);
 
-/** Grid resolution as divisions of one beat: 1 = beats, 2 = halves, 3 = triplets, 4 = quarters of a beat. */
-export type Grid = 1 | 2 | 3 | 4;
+/**
+ * Drum-grid steps per beat: 1 = beats, 2 = halves (8ths in 4/4), 3 = triplets, 4 = quarters
+ * (16ths), 5 = quintuplets, 6 = sextuplets (16th triplets), 8 = 32nds, 12 = 32nd triplets.
+ */
+export type Grid = 1 | 2 | 3 | 4 | 5 | 6 | 8 | 12;
+export const GRIDS: Grid[] = [1, 2, 3, 4, 5, 6, 8, 12];
 export const gridTicks = (ts: TimeSig, grid: Grid) => beatTicks(ts) / grid;
+/** Drum-grid name in this time signature: in 4/4, 2 → "1/8 notes", 3 → "1/8 triplets", 6 → "1/16 triplets". */
+export function gridName(ts: TimeSig, grid: Grid): string {
+  if (grid === 1) return `Beats (1/${ts.unit})`;
+  if (grid === 5) return "Quintuplets (5 per beat)";
+  const triplet = grid % 3 === 0;
+  const div = triplet ? (grid / 3) * 2 : grid; // 3 in the space of 2
+  return `1/${ts.unit * div} ${triplet ? "triplets" : "notes"}`;
+}
 
-export const snap = (ticks: number, step: number) => Math.round(ticks / step) * step;
-export const snapDown = (ticks: number, step: number) => Math.floor(ticks / step) * step;
+/** Snap to a step, landing on whole ticks (a septuplet step isn't a whole number of ticks). */
+export const snap = (ticks: number, step: number) => Math.round(Math.round(ticks / step) * step);
+export const snapDown = (ticks: number, step: number) => Math.round(Math.floor(ticks / step + 1e-9) * step);
+
+/* ------------------------------------------------------------------ snap to */
+
+/** Step for buttons, arrow keys and minimum lengths: the snap, but never finer than 1/16 beat. */
+export const nudgeTicks = (ts: TimeSig, id: SnapId) => Math.max(snapTicks(ts, id), beatTicks(ts) / 16);
+
+/** The next (dir 1) or previous (dir -1) snap point from a tick, in whole ticks. */
+export function stepTo(tick: number, step: number, dir: 1 | -1): number {
+  const x = tick / step;
+  const tol = 0.5 / step;
+  const i = dir > 0 ? Math.floor(x + tol) + 1 : Math.ceil(x - tol) - 1;
+  return Math.round(i * step);
+}
+
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+/** A tick offset inside a beat as a fraction of the beat ("1/2", "2/3", "3/7"), or ticks if none fits. */
+export function beatFraction(tick: number, ts: TimeSig): string {
+  const beat = beatTicks(ts);
+  if (tick <= 0) return "";
+  for (const d of [2, 3, 4, 5, 6, 7, 8, 12, 16]) {
+    const n = Math.round((tick / beat) * d);
+    if (n > 0 && n < d && Math.abs((n * beat) / d - tick) <= 0.5) {
+      const g = gcd(n, d);
+      return `${n / g}/${d / g}`;
+    }
+  }
+  return `${tick} ticks`;
+}
+
+/**
+ * Where chords snap to on the timeline: every common note value, its dotted value and its
+ * triplet, plus quintuplets and septuplets, a whole bar, half a bar, and free (no snap).
+ * `beats` is the step in beats (the time signature's beat).
+ */
+export const SNAPS = [
+  { id: "free", kind: "free" },
+  { id: "bar", kind: "bar" },
+  { id: "half-bar", kind: "half-bar" },
+  { id: "d1", beats: 1.5, kind: "dotted" },
+  { id: "1", beats: 1, kind: "plain" },
+  { id: "t1", beats: 2 / 3, kind: "triplet" },
+  { id: "d1/2", beats: 0.75, kind: "dotted" },
+  { id: "1/2", beats: 0.5, kind: "plain" },
+  { id: "t1/2", beats: 1 / 3, kind: "triplet" },
+  { id: "d1/4", beats: 0.375, kind: "dotted" },
+  { id: "1/4", beats: 0.25, kind: "plain" },
+  { id: "q5", beats: 1 / 5, kind: "tuplet" },
+  { id: "t1/4", beats: 1 / 6, kind: "triplet" },
+  { id: "q7", beats: 1 / 7, kind: "tuplet" },
+  { id: "1/8", beats: 0.125, kind: "plain" },
+  { id: "t1/8", beats: 1 / 12, kind: "triplet" },
+  { id: "1/16", beats: 0.0625, kind: "plain" },
+] as const;
+export type SnapId = (typeof SNAPS)[number]["id"];
+export const isSnapId = (v: unknown): v is SnapId => SNAPS.some((s) => s.id === v);
+
+/** The snap step in ticks (free = 1 tick). */
+export function snapTicks(ts: TimeSig, id: SnapId): number {
+  const s = SNAPS.find((x) => x.id === id) ?? SNAPS[4];
+  if (s.kind === "free") return 1;
+  if (s.kind === "bar") return measureTicks(ts);
+  if (s.kind === "half-bar") return measureTicks(ts) / 2;
+  return beatTicks(ts) * s.beats;
+}
+
+/** The note value a step is, in this time signature: "1/8", "dotted 1/4", "1/8 triplet"… */
+export function snapName(ts: TimeSig, id: SnapId): string {
+  const s = SNAPS.find((x) => x.id === id) ?? SNAPS[4];
+  if (s.kind === "free") return "Free (no snap)";
+  if (s.kind === "bar") return "Bar";
+  if (s.kind === "half-bar") return "Half bar";
+  const note = (beats: number) => `1/${Math.round(ts.unit / beats)}`;
+  const beatsText = (b: number) => (b === 1 ? "1 beat" : b === 1.5 ? "1½ beats" : b === 0.5 ? "½ beat" : b === 0.25 ? "¼ beat" : b === 0.75 ? "¾ beat" : b === 0.125 ? "⅛ beat" : b === 0.375 ? "⅜ beat" : b === 0.0625 ? "1/16 beat" : `${+b.toFixed(3)} beat`);
+  switch (s.kind) {
+    case "plain":
+      return `${note(s.beats)} · ${beatsText(s.beats)}`;
+    case "dotted":
+      return `Dotted ${note(s.beats / 1.5)} · ${beatsText(s.beats)}`;
+    case "triplet":
+      return `${note(s.beats * 1.5)} triplet · ${s.beats > 0.5 ? "3 per 2 beats" : `${Math.round(1 / s.beats)} per beat`}`;
+    case "tuplet":
+      return `${Math.round(1 / s.beats) === 5 ? "Quintuplet" : "Septuplet"} · ${Math.round(1 / s.beats)} per beat`;
+  }
+}
 
 /** 1-based bar / beat and 0-based tick-within-beat, the way a DAW counter reads. */
 export function toBarBeat(ticks: number, ts: TimeSig) {
@@ -46,18 +143,16 @@ export const fromBarBeat = (bar: number, beat: number, ts: TimeSig, tick = 0) =>
 export function describeLength(ticks: number, ts: TimeSig): string {
   const m = measureTicks(ts);
   const b = beatTicks(ts);
-  const bars = Math.floor(ticks / m);
-  const beats = (ticks - bars * m) / b;
-  const beatStr = beats === 0 ? "" : `${Number.isInteger(beats) ? beats : fmtFraction(beats)} beat${beats === 1 ? "" : "s"}`;
+  const bars = Math.floor((ticks + 0.5) / m);
+  const rest = Math.max(0, ticks - bars * m);
+  const whole = Math.floor((rest + 0.5) / b);
+  const frac = beatFraction(Math.max(0, Math.round(rest - whole * b)), ts);
+  const pretty: Record<string, string> = { "1/4": "¼", "1/3": "⅓", "1/2": "½", "2/3": "⅔", "3/4": "¾", "1/8": "⅛", "3/8": "⅜", "5/8": "⅝", "7/8": "⅞", "1/5": "⅕", "1/6": "⅙", "5/6": "⅚" };
+  let beatStr = "";
+  if (frac.endsWith("ticks")) beatStr = whole ? `${whole} beat${whole === 1 ? "" : "s"} + ${frac}` : frac;
+  else if (whole || frac) beatStr = `${whole || ""}${frac ? (pretty[frac] ?? (whole ? ` ${frac}` : frac)) : ""} beat${whole === 1 && !frac ? "" : "s"}`;
   const barStr = bars ? `${bars} bar${bars === 1 ? "" : "s"}` : "";
   return [barStr, beatStr].filter(Boolean).join(" ") || "0 beats";
-}
-function fmtFraction(x: number): string {
-  const whole = Math.floor(x);
-  const frac = x - whole;
-  const map: [number, string][] = [[0.25, "¼"], [1 / 3, "⅓"], [0.5, "½"], [2 / 3, "⅔"], [0.75, "¾"]];
-  const hit = map.find(([v]) => Math.abs(v - frac) < 1e-6);
-  return hit ? `${whole || ""}${hit[1]}` : x.toFixed(2);
 }
 
 /* ------------------------------------------------------------------ chords */
@@ -94,17 +189,18 @@ export function normalizeChords(chords: ChordEvent[], lengthTicks: number): Chor
  * halfway through, stays on bar 3 halfway through; a 1-bar chord stays 1 bar. Results snap to
  * the new grid and never overlap or run past `newLengthTicks`.
  */
-export function retimeChords(chords: ChordEvent[], from: TimeSig, to: TimeSig, grid: Grid, newLengthTicks: number): ChordEvent[] {
+export function retimeChords(chords: ChordEvent[], from: TimeSig, to: TimeSig, snapTo: SnapId, newLengthTicks: number): ChordEvent[] {
   const mFrom = measureTicks(from);
   const mTo = measureTicks(to);
-  const step = gridTicks(to, grid);
+  // Re-timing never goes finer than a 16th of a beat (free snap would keep odd ticks).
+  const step = Math.max(snapTicks(to, snapTo), beatTicks(to) / 16);
   const out: ChordEvent[] = [];
   for (const c of [...chords].sort((a, b) => a.start - b.start)) {
     const start = snap((c.start / mFrom) * mTo, step);
     const end = snap(((c.start + c.duration) / mFrom) * mTo, step);
     const prevEnd = out.length ? out[out.length - 1]!.start + out[out.length - 1]!.duration : 0;
     const s = Math.max(start, prevEnd);
-    const e = Math.min(newLengthTicks, Math.max(end, s + step));
+    const e = Math.min(newLengthTicks, Math.max(end, Math.round(s + step)));
     if (s < newLengthTicks && e > s) out.push({ ...c, start: s, duration: e - s });
   }
   return out;

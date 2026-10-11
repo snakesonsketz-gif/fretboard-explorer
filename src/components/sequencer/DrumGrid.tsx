@@ -15,10 +15,11 @@ import {
   type Arrangement,
   type DrumLane,
   type DrumVoice,
+  GRIDS,
+  gridName,
   type Grid,
 } from "@/lib/timeline";
 import { cn } from "@/lib/utils";
-import { GRID_LABELS } from "./shared";
 import { usePlayhead } from "./useSequencer";
 
 type Tool = "hit" | "accent" | "soft" | "erase";
@@ -126,8 +127,8 @@ export function DrumGrid({ arr, playing, drumsOnly = false, onPlayDrums, onStop,
           <Button size="sm" variant="secondary" className="h-8 w-8 p-0" disabled={p.measures >= 16} onClick={() => setPattern({ measures: p.measures + 1 })} aria-label="Longer pattern">+</Button>
         </div>
         <Select value={String(p.stepsPerBeat)} onValueChange={(v) => setPattern({ stepsPerBeat: Number(v) as Grid })}>
-          <SelectTrigger className="h-8 w-32" aria-label="Drum grid"><SelectValue /></SelectTrigger>
-          <SelectContent>{([1, 2, 3, 4] as Grid[]).map((g) => <SelectItem key={g} value={String(g)}>{GRID_LABELS[g]}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="h-8 w-44" aria-label="Drum grid" data-testid="drum-grid-select"><SelectValue /></SelectTrigger>
+          <SelectContent>{GRIDS.map((g) => <SelectItem key={g} value={String(g)}>{gridName(arr.ts, g)}</SelectItem>)}</SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">{fit}</span>
       </div>

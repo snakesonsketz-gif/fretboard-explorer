@@ -12,7 +12,9 @@ import { useSequencer } from "@/components/sequencer/useSequencer";
 import { engine } from "@/lib/engine";
 import { useTabActive } from "@/lib/tabActive";
 import { loadPalette, type PaletteChord } from "@/lib/sequences";
-import { arrangementTicks, beatTicks, chordMidis, measureTicks, newId, roomAfter, type ChordEvent, type Grid } from "@/lib/timeline";
+import { arrangementTicks, beatTicks, chordMidis, measureTicks, newId, roomAfter, type ChordEvent, isSnapId, type SnapId } from "@/lib/timeline";
+
+const SNAP_KEY = "fretlab.seq.snap.v1";
 
 export const Route = createFileRoute("/sequencer")({
   head: () => ({ meta: [{ title: "Sequencer — Fretlab" }] }),
@@ -30,7 +32,24 @@ export function SequencerPage() {
     if (!tabActive && playing) seq.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabActive]);
-  const [grid, setGrid] = useState<Grid>(1);
+  // Default on the first render (matches the server), then the remembered choice.
+  const [snap, setSnapState] = useState<SnapId>("1");
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(SNAP_KEY);
+      if (isSnapId(v)) setSnapState(v);
+    } catch {
+      /* private mode */
+    }
+  }, []);
+  const setSnap = (s: SnapId) => {
+    setSnapState(s);
+    try {
+      localStorage.setItem(SNAP_KEY, s);
+    } catch {
+      /* private mode */
+    }
+  };
   const [zoom, setZoom] = useState<number | null>(null);
   const [palette, setPalette] = useState<PaletteChord[]>([]);
   const [armed, setArmed] = useState<PaletteChord | null>(null);
@@ -90,8 +109,8 @@ export function SequencerPage() {
           arr={arr}
           playing={playing}
           canUndo={seq.canUndo}
-          grid={grid}
-          onGrid={setGrid}
+          snap={snap}
+          onSnap={setSnap}
           onPlay={() => void seq.play()}
           onStop={seq.stop}
           onUndo={seq.undo}
@@ -108,7 +127,7 @@ export function SequencerPage() {
         </div>
         <ChordTimeline
           arr={arr}
-          grid={grid}
+          snap={snap}
           zoom={zoom}
           onZoom={setZoom}
           selectedId={selectedId}
@@ -123,7 +142,7 @@ export function SequencerPage() {
           snapshot={seq.snapshot}
         />
         {selected ? (
-          <ChordInspector arr={arr} chord={selected} grid={grid} armed={armed} update={seq.update} onSelect={setSelectedId} onPreview={preview} />
+          <ChordInspector arr={arr} chord={selected} snap={snap} armed={armed} update={seq.update} onSelect={setSelectedId} onPreview={preview} />
         ) : null}
         <DrumGrid arr={arr} playing={playing} drumsOnly={seq.playMode === "drums"} onPlayDrums={() => void seq.playDrums()} onStop={seq.stop} set={seq.set} update={seq.update} snapshot={seq.snapshot} />
         <SequenceLibrary arr={arr} update={seq.update} onLoaded={() => setSelectedId(null)} />

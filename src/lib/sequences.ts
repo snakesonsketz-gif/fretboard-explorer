@@ -5,7 +5,7 @@
  */
 import { loadFavorites } from "./favorites";
 import { loadSongs, orderedSections, slotLabel, type Song } from "./song";
-import { DRUM_VOICES, emptyArrangement, emptyLanes, measureTicks, newId, type Arrangement, type ChordEvent, type DrumLane, type Grid, type TimeSig } from "./timeline";
+import { DRUM_VOICES, GRIDS, emptyArrangement, emptyLanes, measureTicks, newId, type Arrangement, type ChordEvent, type DrumLane, type Grid, type TimeSig } from "./timeline";
 import type { Degree } from "./theory";
 
 export interface PaletteChord {
@@ -70,7 +70,7 @@ export function sanitizeArrangement(raw: unknown): Arrangement {
         .filter((c) => c.start < len)
     : [];
   const dr = r.drums;
-  const stepsPerBeat = ([1, 2, 3, 4] as const).find((g) => g === dr?.stepsPerBeat) ?? 4;
+  const stepsPerBeat = GRIDS.find((g) => g === dr?.stepsPerBeat) ?? 4;
   const lanes: DrumLane[] =
     dr && Array.isArray(dr.lanes) && dr.lanes.length
       ? dr.lanes

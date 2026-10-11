@@ -6,7 +6,9 @@ import {
   arrangementTicks,
   beatTicks,
   describeLength,
-  gridTicks,
+  nudgeTicks,
+  snapTicks,
+  stepTo,
   measureTicks,
   overlaps,
   roomAfter,
@@ -14,7 +16,7 @@ import {
   snapDown,
   type Arrangement,
   type ChordEvent,
-  type Grid,
+  type SnapId,
 } from "@/lib/timeline";
 import { cn } from "@/lib/utils";
 import { rootHue } from "./shared";
@@ -22,7 +24,7 @@ import { usePlayhead } from "./useSequencer";
 
 interface Props {
   arr: Arrangement;
-  grid: Grid;
+  snap: SnapId;
   /** Pixels per beat, or null to fit the arrangement to the available width. */
   zoom: number | null;
   onZoom: (px: number | null) => void;
@@ -41,7 +43,7 @@ interface Props {
 type Drag = { mode: "move" | "resize"; id: string; x0: number; orig: ChordEvent; moved: boolean };
 
 export function ChordTimeline(p: Props) {
-  const { arr, grid, selectedId, playing } = p;
+  const { arr, selectedId, playing } = p;
   const len = arrangementTicks(arr);
   const scroller = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(0);
@@ -58,7 +60,8 @@ export function ChordTimeline(p: Props) {
   const fitPx = avail ? Math.max(28, Math.min(120, Math.floor((avail - 2) / totalBeats))) : 44;
   const pxPerBeat = p.zoom ?? fitPx;
   const pxPerTick = pxPerBeat / beatTicks(arr.ts);
-  const step = gridTicks(arr.ts, grid);
+  const step = snapTicks(arr.ts, p.snap);
+  const nudge = nudgeTicks(arr.ts, p.snap);
   const barPx = measureTicks(arr.ts) * pxPerTick;
   const width = Math.ceil(len * pxPerTick);
   const arrRef = useRef(arr);
@@ -104,7 +107,7 @@ export function ChordTimeline(p: Props) {
       if (!overlaps(chords, cand, d.orig.duration, d.id)) setChord(d.id, { start: cand });
     } else {
       const room = roomAfter(chords, d.orig.start, len, d.id);
-      setChord(d.id, { duration: Math.min(room, Math.max(step, snap(d.orig.duration + dx / pxPerTick, step))) });
+      setChord(d.id, { duration: Math.min(room, Math.max(nudge, snap(d.orig.duration + dx / pxPerTick, step))) });
     }
   };
   const onBlockUp = (c: ChordEvent) => {
@@ -116,7 +119,7 @@ export function ChordTimeline(p: Props) {
   const onLaneDown = (e: RPointerEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
     const x = e.clientX - e.currentTarget.getBoundingClientRect().left;
-    const tick = Math.min(len - step, Math.max(0, snapDown(x / pxPerTick, step)));
+    const tick = Math.min(Math.round(len - nudge), Math.max(0, snapDown(x / pxPerTick, nudge)));
     if (p.armedLabel) p.onPlace(tick);
     else p.onSelect(null);
   };
@@ -133,10 +136,10 @@ export function ChordTimeline(p: Props) {
       e.preventDefault();
       const dir = e.key === "ArrowRight" ? 1 : -1;
       if (e.shiftKey) {
-        const d = Math.min(roomAfter(arr.chords, c.start, len, c.id), Math.max(step, c.duration + dir * step));
+        const d = Math.min(roomAfter(arr.chords, c.start, len, c.id), Math.max(Math.round(nudge), stepTo(c.duration, nudge, dir)));
         if (d !== c.duration) p.update((a) => ({ ...a, chords: a.chords.map((x) => (x.id === c.id ? { ...x, duration: d } : x)) }));
       } else {
-        const s = c.start + dir * step;
+        const s = stepTo(c.start, nudge, dir);
         if (s >= 0 && s + c.duration <= len && !overlaps(arr.chords, s, c.duration, c.id))
           p.update((a) => ({ ...a, chords: a.chords.map((x) => (x.id === c.id ? { ...x, start: s } : x)) }));
       }
@@ -146,7 +149,10 @@ export function ChordTimeline(p: Props) {
   const gridBg = [
     `repeating-linear-gradient(90deg, var(--color-border) 0 2px, transparent 2px ${barPx}px)`,
     `repeating-linear-gradient(90deg, color-mix(in oklab, var(--color-border) 70%, transparent) 0 1px, transparent 1px ${pxPerBeat}px)`,
-    grid > 1 ? `repeating-linear-gradient(90deg, color-mix(in oklab, var(--color-border) 30%, transparent) 0 1px, transparent 1px ${pxPerBeat / grid}px)` : "",
+    // Sub-beat lines only when the snap is finer than a beat and the lines stay at least 5 px apart.
+    p.snap !== "free" && step < beatTicks(arr.ts) && step * pxPerTick >= 5
+      ? `repeating-linear-gradient(90deg, color-mix(in oklab, var(--color-border) 30%, transparent) 0 1px, transparent 1px ${step * pxPerTick}px)`
+      : "",
   ].filter(Boolean).join(",");
 
   return (

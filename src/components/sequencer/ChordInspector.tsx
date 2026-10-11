@@ -5,7 +5,9 @@ import {
   arrangementTicks,
   beatTicks,
   describeLength,
-  gridTicks,
+  beatFraction,
+  nudgeTicks,
+  stepTo,
   measureTicks,
   newId,
   overlaps,
@@ -13,14 +15,14 @@ import {
   toBarBeat,
   type Arrangement,
   type ChordEvent,
-  type Grid,
+  type SnapId,
 } from "@/lib/timeline";
 import type { PaletteChord } from "@/lib/sequences";
 
 interface Props {
   arr: Arrangement;
   chord: ChordEvent;
-  grid: Grid;
+  snap: SnapId;
   armed: PaletteChord | null;
   update: (fn: (a: Arrangement) => Arrangement) => void;
   onSelect: (id: string | null) => void;
@@ -28,12 +30,16 @@ interface Props {
 }
 
 /** Precise editing of the selected chord — the touch-friendly alternative to dragging. */
-export function ChordInspector({ arr, chord: c, grid, armed, update, onSelect, onPreview }: Props) {
+export function ChordInspector({ arr, chord: c, snap, armed, update, onSelect, onPreview }: Props) {
   const len = arrangementTicks(arr);
-  const step = gridTicks(arr.ts, grid);
+  const step = nudgeTicks(arr.ts, snap);
   const room = roomAfter(arr.chords, c.start, len, c.id);
   const pos = toBarBeat(c.start, arr.ts);
-  const sub = pos.tick / step;
+  const sub = beatFraction(pos.tick, arr.ts);
+  const earlier = stepTo(c.start, step, -1);
+  const later = stepTo(c.start, step, 1);
+  const shorter = stepTo(c.duration, step, -1);
+  const longer = stepTo(c.duration, step, 1);
   const patch = (p: Partial<ChordEvent>) => update((a) => ({ ...a, chords: a.chords.map((x) => (x.id === c.id ? { ...x, ...p } : x)) }));
   const canMove = (s: number) => s >= 0 && s + c.duration <= len && !overlaps(arr.chords, s, c.duration, c.id);
   const lengths: [string, number][] = [
@@ -57,20 +63,20 @@ export function ChordInspector({ arr, chord: c, grid, armed, update, onSelect, o
         <div className="space-y-1.5">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Starts</p>
           <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="secondary" className="h-9 w-9 p-0" disabled={!canMove(c.start - step)} onClick={() => patch({ start: c.start - step })} aria-label="Move earlier">←</Button>
+            <Button size="sm" variant="secondary" className="h-9 w-9 p-0" disabled={!canMove(earlier)} onClick={() => patch({ start: earlier })} aria-label="Move earlier">←</Button>
             <span className="min-w-36 text-center font-mono text-sm" data-testid="chord-start">
-              Bar {pos.bar} · Beat {pos.beat}{sub ? ` +${Number.isInteger(sub) ? sub : sub.toFixed(1)}/${grid}` : ""}
+              Bar {pos.bar} · Beat {pos.beat}{sub ? ` + ${sub}` : ""}
             </span>
-            <Button size="sm" variant="secondary" className="h-9 w-9 p-0" disabled={!canMove(c.start + step)} onClick={() => patch({ start: c.start + step })} aria-label="Move later">→</Button>
+            <Button size="sm" variant="secondary" className="h-9 w-9 p-0" disabled={!canMove(later)} onClick={() => patch({ start: later })} aria-label="Move later">→</Button>
           </div>
         </div>
 
         <div className="space-y-1.5">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Rings for</p>
           <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="secondary" className="h-9 w-9 p-0" disabled={c.duration - step < step} onClick={() => patch({ duration: c.duration - step })} aria-label="Shorter">−</Button>
+            <Button size="sm" variant="secondary" className="h-9 w-9 p-0" disabled={shorter < Math.round(step)} onClick={() => patch({ duration: shorter })} aria-label="Shorter">−</Button>
             <span className="min-w-36 text-center font-mono text-sm" data-testid="chord-length">{describeLength(c.duration, arr.ts)}</span>
-            <Button size="sm" variant="secondary" className="h-9 w-9 p-0" disabled={c.duration + step > room} onClick={() => patch({ duration: c.duration + step })} aria-label="Longer">+</Button>
+            <Button size="sm" variant="secondary" className="h-9 w-9 p-0" disabled={longer > room} onClick={() => patch({ duration: longer })} aria-label="Longer">+</Button>
           </div>
           <div className="flex flex-wrap gap-1">
             {lengths.map(([label, t]) => (

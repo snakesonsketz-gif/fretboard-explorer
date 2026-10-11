@@ -103,14 +103,14 @@ describe("retimeChords (changing time signature keeps bar positions)", () => {
   test("4/4 → 6/8: one chord per bar stays one chord per bar", () => {
     const six = ts(6, 8);
     const chords = [chord("a", 0, bar4), chord("b", bar4, bar4), chord("c", bar4 * 2 + bar4 / 2, bar4 / 2)];
-    const out = retimeChords(chords, four, six, 1, measureTicks(six) * 4);
+    const out = retimeChords(chords, four, six, "1", measureTicks(six) * 4);
     const m = measureTicks(six);
     expect(out.map((c) => [c.id, c.start / m, c.duration / m])).toEqual([["a", 0, 1], ["b", 1, 1], ["c", 2.5, 0.5]]);
   });
   test("4/4 → 3/4: snaps to the new grid, never overlaps, clips at the end", () => {
     const three = ts(3, 4);
     const chords = [chord("a", 0, PPQ * 2), chord("b", PPQ * 2, PPQ * 2), chord("c", bar4 * 3, bar4)];
-    const out = retimeChords(chords, four, three, 1, measureTicks(three) * 3);
+    const out = retimeChords(chords, four, three, "1", measureTicks(three) * 3);
     for (let i = 1; i < out.length; i++) expect(out[i]!.start).toBeGreaterThanOrEqual(out[i - 1]!.start + out[i - 1]!.duration);
     for (const c of out) {
       expect(c.start % PPQ).toBe(0);
@@ -248,5 +248,117 @@ describe("Song play-through on the shared engine", () => {
   });
   test("the chart text shows the picked shape", () => {
     expect(songToText(song())).toContain("G (V) [320003] ×2 bars");
+  });
+});
+
+import { beatFraction, GRIDS, gridName, nudgeTicks, patternSteps, SNAPS, snap as snapTo, snapName, snapTicks, stepTo, stepTicks } from "../src/lib/timeline";
+
+describe("snap to: every variation", () => {
+  const t44 = { beats: 4, unit: 4 };
+  const t68 = { beats: 6, unit: 8 };
+  const t34 = { beats: 3, unit: 4 };
+  const t78 = { beats: 7, unit: 8 };
+  test("step sizes in 4/4 (a beat is 480 ticks)", () => {
+    const want: Record<string, number> = {
+      free: 1, bar: 1920, "half-bar": 960, d1: 720, "1": 480, t1: 320, "d1/2": 360, "1/2": 240, "t1/2": 160,
+      "d1/4": 180, "1/4": 120, q5: 96, "t1/4": 80, q7: 480 / 7, "1/8": 60, "t1/8": 40, "1/16": 30,
+    };
+    for (const s of SNAPS) expect(snapTicks(t44, s.id)).toBeCloseTo(want[s.id]!, 6);
+    expect(Object.keys(want).length).toBe(SNAPS.length);
+  });
+  test("note names follow the time signature", () => {
+    const names44 = Object.fromEntries(SNAPS.map((s) => [s.id, snapName(t44, s.id)]));
+    expect(names44["1"]).toBe("1/4 · 1 beat");
+    expect(names44["1/2"]).toBe("1/8 · ½ beat");
+    expect(names44["1/4"]).toBe("1/16 · ¼ beat");
+    expect(names44["1/8"]).toBe("1/32 · ⅛ beat");
+    expect(names44["1/16"]).toBe("1/64 · 1/16 beat");
+    expect(names44.d1).toBe("Dotted 1/4 · 1½ beats");
+    expect(names44["d1/2"]).toBe("Dotted 1/8 · ¾ beat");
+    expect(names44["d1/4"]).toBe("Dotted 1/16 · ⅜ beat");
+    expect(names44.t1).toBe("1/4 triplet · 3 per 2 beats");
+    expect(names44["t1/2"]).toBe("1/8 triplet · 3 per beat");
+    expect(names44["t1/4"]).toBe("1/16 triplet · 6 per beat");
+    expect(names44["t1/8"]).toBe("1/32 triplet · 12 per beat");
+    expect(names44.q5).toBe("Quintuplet · 5 per beat");
+    expect(names44.q7).toBe("Septuplet · 7 per beat");
+    // In 6/8 the counted unit is the eighth note.
+    expect(snapName(t68, "1")).toBe("1/8 · 1 beat");
+    expect(snapName(t68, "1/2")).toBe("1/16 · ½ beat");
+    expect(snapName(t68, "t1/2")).toBe("1/16 triplet · 3 per beat");
+    expect(snapName(t68, "d1")).toBe("Dotted 1/8 · 1½ beats");
+    // Names are unique so the list is never ambiguous.
+    for (const ts of [t44, t68, t34, t78]) expect(new Set(SNAPS.map((s) => snapName(ts, s.id))).size).toBe(SNAPS.length);
+  });
+  test("bar and half bar follow the meter", () => {
+    expect(snapTicks(t34, "bar")).toBe(1440);
+    expect(snapTicks(t68, "half-bar")).toBe(720); // one dotted quarter pulse
+    expect(snapTicks(t78, "bar")).toBe(1680);
+  });
+  test("snapping lands on whole ticks, even for septuplets", () => {
+    for (const s of SNAPS)
+      for (const ts of [t44, t68, t34, t78]) {
+        const step = snapTicks(ts, s.id);
+        for (const x of [0, 77, 333.3, 1000, 2047]) {
+          const v = snapTo(x, step);
+          expect(Number.isInteger(v)).toBe(true);
+          expect(Math.abs(v - x)).toBeLessThanOrEqual(step / 2 + 0.5);
+        }
+      }
+  });
+  test("stepping walks every grid point without drift", () => {
+    const step = snapTicks(t44, "q7");
+    let t = 0;
+    const seen: number[] = [];
+    for (let i = 0; i < 14; i++) seen.push((t = stepTo(t, step, 1)));
+    expect(seen[6]).toBe(480); // 7 septuplets = one beat exactly
+    expect(seen[13]).toBe(960);
+    for (let i = 0; i < 14; i++) t = stepTo(t, step, -1);
+    expect(t).toBe(0);
+    // An off-grid position steps to the neighbouring grid points.
+    expect(stepTo(130, 120, 1)).toBe(240);
+    expect(stepTo(130, 120, -1)).toBe(120);
+    expect(nudgeTicks(t44, "free")).toBe(30);
+    expect(nudgeTicks(t44, "bar")).toBe(1920);
+  });
+  test("position text inside a beat", () => {
+    expect(beatFraction(0, t44)).toBe("");
+    expect(beatFraction(240, t44)).toBe("1/2");
+    expect(beatFraction(160, t44)).toBe("1/3");
+    expect(beatFraction(320, t44)).toBe("2/3");
+    expect(beatFraction(206, t44)).toBe("3/7");
+    expect(beatFraction(96, t44)).toBe("1/5");
+    expect(beatFraction(7, t44)).toBe("7 ticks");
+  });
+  test("re-timing with a triplet snap keeps chords on triplet points", () => {
+    const four = t44;
+    const chords = [{ id: "a", start: 0, duration: 320, rootName: "C", degrees: ["1", "3", "5"], label: "C" }];
+    const out = retimeChords(chords as never, four, t34, "t1", measureTicks(t34) * 2);
+    expect(out[0]!.start % 320).toBe(0);
+    expect(Number.isInteger(out[0]!.duration)).toBe(true);
+  });
+  test("drum grids: every subdivision is whole ticks and named", () => {
+    expect(GRIDS).toEqual([1, 2, 3, 4, 5, 6, 8, 12]);
+    for (const ts of [t44, t68, t34, t78, { beats: 2, unit: 2 }, { beats: 5, unit: 16 }])
+      for (const g of GRIDS) {
+        expect(Number.isInteger(stepTicks(ts, { stepsPerBeat: g }))).toBe(true);
+        expect(patternSteps(ts, { measures: 1, stepsPerBeat: g })).toBe(ts.beats * g);
+      }
+    expect(GRIDS.map((g) => gridName(t44, g))).toEqual([
+      "Beats (1/4)", "1/8 notes", "1/8 triplets", "1/16 notes", "Quintuplets (5 per beat)", "1/16 triplets", "1/32 notes", "1/32 triplets",
+    ]);
+    expect(gridName(t68, 2)).toBe("1/16 notes");
+  });
+});
+
+describe("lengths read in any subdivision", () => {
+  const t44 = { beats: 4, unit: 4 };
+  test("septuplets, quintuplets and odd ticks", () => {
+    expect(describeLength(206, t44)).toBe("3/7 beats");
+    expect(describeLength(549, t44)).toBe("1 1/7 beats");
+    expect(describeLength(96, t44)).toBe("⅕ beats");
+    expect(describeLength(30, t44)).toBe("1/16 beats");
+    expect(describeLength(487, t44)).toBe("1 beat + 7 ticks");
+    expect(describeLength(180, t44)).toBe("⅜ beats");
   });
 });

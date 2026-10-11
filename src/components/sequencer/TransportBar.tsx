@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { measureTicks, retimeChords, toBarBeat, type Arrangement, type Grid, type TimeSig } from "@/lib/timeline";
-import { GRID_LABELS } from "./shared";
+import { isSnapId, measureTicks, retimeChords, SNAPS, snapName, toBarBeat, type Arrangement, type SnapId, type TimeSig } from "@/lib/timeline";
 import { usePlayhead } from "./useSequencer";
 
 
@@ -15,8 +14,8 @@ interface Props {
   arr: Arrangement;
   playing: boolean;
   canUndo: boolean;
-  grid: Grid;
-  onGrid: (g: Grid) => void;
+  snap: SnapId;
+  onSnap: (s: SnapId) => void;
   onPlay: () => void;
   onStop: () => void;
   onUndo: () => void;
@@ -31,7 +30,7 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
   </label>
 );
 
-export function TransportBar({ arr, playing, canUndo, grid, onGrid, onPlay, onStop, onUndo, onBpm, update }: Props) {
+export function TransportBar({ arr, playing, canUndo, snap, onSnap, onPlay, onStop, onUndo, onBpm, update }: Props) {
   const counter = useRef<HTMLSpanElement>(null);
   usePlayhead(playing, (t) => {
     if (!counter.current) return;
@@ -58,7 +57,7 @@ export function TransportBar({ arr, playing, canUndo, grid, onGrid, onPlay, onSt
   const setTs = (ts: TimeSig) =>
     update((a) => {
       const len = a.measures * measureTicks(ts);
-      return { ...a, ts, chords: retimeChords(a.chords, a.ts, ts, grid, len) };
+      return { ...a, ts, chords: retimeChords(a.chords, a.ts, ts, snap, len) };
     });
   const setMeasures = (m: number) =>
     update((a) => {
@@ -127,9 +126,13 @@ export function TransportBar({ arr, playing, canUndo, grid, onGrid, onPlay, onSt
         </Field>
 
         <Field label="Snap to">
-          <Select value={String(grid)} onValueChange={(v) => onGrid(Number(v) as Grid)}>
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>{([1, 2, 3, 4] as Grid[]).map((g) => <SelectItem key={g} value={String(g)}>{GRID_LABELS[g]}</SelectItem>)}</SelectContent>
+          <Select value={snap} onValueChange={(v) => isSnapId(v) && onSnap(v)}>
+            <SelectTrigger className="h-9 text-xs" aria-label="Snap to" data-testid="snap-select"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-80">
+              {SNAPS.map((s) => (
+                <SelectItem key={s.id} value={s.id} data-testid={`snap-${s.id}`}>{snapName(arr.ts, s.id)}</SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </Field>
 
