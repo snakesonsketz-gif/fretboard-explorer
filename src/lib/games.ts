@@ -120,3 +120,89 @@ export function saveBest(key: string, score: number): boolean {
   }
   return true;
 }
+
+// ---------------------------------------------------------------- ear trainer
+
+/** One possible answer: a chord quality (steps above the root) or an interval (semitones). */
+export interface EarAnswer {
+  id: string;
+  label: string;
+  /** What it sounds like — shown under the answer. */
+  hint: string;
+  color: string;
+  /** Chords: semitones above the root, low to high. Intervals: [0, size]. */
+  steps: number[];
+}
+
+const chordQ = (id: string, label: string, hint: string, color: string, steps: number[]): EarAnswer => ({ id, label, hint, color, steps });
+const iv = (id: string, label: string, hint: string, color: string, semis: number): EarAnswer => ({ id, label, hint, color, steps: [0, semis] });
+
+export const EAR_ANSWERS: Record<string, EarAnswer> = {
+  maj: chordQ("maj", "Major", "bright, happy", "#ffe600", [0, 7, 12, 16, 19]),
+  min: chordQ("min", "Minor", "dark, sad", "#b44dff", [0, 7, 12, 15, 19]),
+  dom7: chordQ("dom7", "7th", "bluesy, wants to move", "#ff7a00", [0, 7, 10, 16, 19]),
+  maj7: chordQ("maj7", "Major 7", "dreamy, jazzy", "#00e5ff", [0, 7, 11, 16, 19]),
+  min7: chordQ("min7", "Minor 7", "smooth, mellow", "#ff2bd6", [0, 7, 10, 15, 19]),
+  m2: iv("m2", "Minor 2nd", "Jaws", "#ff1f5a", 1),
+  M2: iv("M2", "Major 2nd", "Happy Birthday", "#ff7a00", 2),
+  m3: iv("m3", "Minor 3rd", "Smoke on the Water", "#b44dff", 3),
+  M3: iv("M3", "Major 3rd", "When the Saints", "#ffe600", 4),
+  P4: iv("P4", "4th", "Here Comes the Bride", "#00ffa3", 5),
+  TT: iv("TT", "Tritone", "The Simpsons", "#ff4d8d", 6),
+  P5: iv("P5", "5th", "Star Wars", "#39ff14", 7),
+  m6: iv("m6", "Minor 6th", "The Entertainer", "#ff8cf0", 8),
+  M6: iv("M6", "Major 6th", "My Bonnie", "#18c8ff", 9),
+  m7: iv("m7", "Minor 7th", "Star Trek theme", "#ccff00", 10),
+  M7: iv("M7", "Major 7th", "Take On Me", "#7df9ff", 11),
+  P8: iv("P8", "Octave", "Somewhere Over the Rainbow", "#00e5ff", 12),
+};
+
+export const EAR_LEVELS = [
+  { id: "majmin", name: "Major or Minor", kind: "chord", answers: ["maj", "min"], down: false },
+  { id: "colours", name: "Chord Colours", kind: "chord", answers: ["maj", "min", "dom7", "maj7", "min7"], down: false },
+  { id: "intervals", name: "Intervals", kind: "interval", answers: ["M2", "M3", "P4", "P5", "P8"], down: false },
+  { id: "allint", name: "All Intervals", kind: "interval", answers: ["m2", "M2", "m3", "M3", "P4", "TT", "P5", "m6", "M6", "m7", "M7", "P8"], down: true },
+] as const;
+export type EarLevel = (typeof EAR_LEVELS)[number];
+
+/** Questions in a round, and how many right on a level unlocks the next one. */
+export const EAR_ROUND = 10;
+export const EAR_UNLOCK = 8;
+
+export interface EarQuestion {
+  answer: string;
+  /** The notes to play (MIDI), in order. */
+  midis: number[];
+  /** Intervals: played high-to-low. */
+  down: boolean;
+}
+
+/** A question: a random answer from the level (never three of the same in a row) on a random root. */
+export function earQuestion(level: EarLevel, recent: readonly string[], rand: () => number = Math.random): EarQuestion {
+  const pool = level.answers as readonly string[];
+  const pick = () => pool[Math.floor(rand() * pool.length) % pool.length]!;
+  let answer = pick();
+  const twice = recent.length >= 2 && recent[recent.length - 1] === recent[recent.length - 2] ? recent[recent.length - 1] : null;
+  for (let i = 0; i < 6 && (answer === twice || (answer === recent[recent.length - 1] && rand() < 0.4)); i++) answer = pick();
+  if (answer === twice) answer = pool.find((a) => a !== twice) ?? answer;
+  const a = EAR_ANSWERS[answer]!;
+  if (level.kind === "chord") {
+    // Root between A2 and G#3: a guitar-sized chord, root–5th–octave–3rd–5th.
+    const root = 45 + Math.floor(rand() * 12);
+    return { answer, midis: a.steps.map((s) => root + s), down: false };
+  }
+  const down = level.down && rand() < 0.5;
+  const low = 52 + Math.floor(rand() * 10); // E3..C#4 — clear on every sound
+  const pair = [low, low + a.steps[1]!];
+  return { answer, midis: down ? pair.reverse() : pair, down };
+}
+
+/** Points for a right answer: 100, ×1.1 for every answer in the streak before it (up to ×2). */
+export const earPoints = (streak: number) => Math.round(100 * (1 + Math.min(10, streak) * 0.1));
+
+/** A level is open when it's the first, or the one before it has had a round with EAR_UNLOCK right. */
+export function earUnlocked(levelIdx: number, bests: Record<string, number>): boolean {
+  if (levelIdx <= 0) return true;
+  const prev = EAR_LEVELS[levelIdx - 1];
+  return !!prev && (bests[`earok:${prev.id}`] ?? 0) >= EAR_UNLOCK;
+}

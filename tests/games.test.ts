@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SR, strum, take } from "./helpers/guitar";
-import { CHORDS, RUSH_LEVELS, fallSeconds, nextChord, plainName, raceStart, raceStep, rushPoints, strumResult } from "../src/lib/games";
+import { CHORDS, EAR_ANSWERS, EAR_LEVELS, RUSH_LEVELS, earPoints, earQuestion, earUnlocked, fallSeconds, nextChord, plainName, raceStart, raceStep, rushPoints, strumResult } from "../src/lib/games";
 import { analyseStrum, roomFloorOf } from "../src/lib/listen/score";
 import { ListenSession, type AudioSource } from "../src/lib/listen/session";
 
@@ -73,5 +73,67 @@ describe("Games: Change Race heard live", () => {
     }
     expect(race.misses).toBe(0);
     expect(race.changes).toBe(9);
+  });
+});
+
+describe("ear trainer", () => {
+  const seq = (vals: number[]) => {
+    let i = 0;
+    return () => vals[i++ % vals.length]!;
+  };
+
+  test("chord questions play the right quality on a guitar-sized root", () => {
+    const lvl = EAR_LEVELS[1];
+    for (let k = 0; k < 200; k++) {
+      const q = earQuestion(lvl, []);
+      expect(lvl.answers as readonly string[]).toContain(q.answer);
+      const root = q.midis[0]!;
+      expect(root).toBeGreaterThanOrEqual(45);
+      expect(root).toBeLessThan(57);
+      expect(q.midis.map((m) => m - root)).toEqual(EAR_ANSWERS[q.answer]!.steps);
+    }
+    // Major vs minor differ only in the third.
+    expect(EAR_ANSWERS.maj!.steps.filter((s, i) => s !== EAR_ANSWERS.min!.steps[i])).toEqual([16]);
+  });
+
+  test("interval questions: the right size, down only on the level that allows it", () => {
+    for (const lvl of [EAR_LEVELS[2], EAR_LEVELS[3]]) {
+      let downs = 0;
+      for (let k = 0; k < 300; k++) {
+        const q = earQuestion(lvl, []);
+        expect(q.midis).toHaveLength(2);
+        expect(Math.abs(q.midis[1]! - q.midis[0]!)).toBe(EAR_ANSWERS[q.answer]!.steps[1]!);
+        expect(q.down).toBe(q.midis[1]! < q.midis[0]!);
+        if (q.down) downs++;
+      }
+      if (lvl.down) expect(downs).toBeGreaterThan(80);
+      else expect(downs).toBe(0);
+    }
+  });
+
+  test("never three of the same answer in a row", () => {
+    const always0 = seq([0]);
+    const q = earQuestion(EAR_LEVELS[0], ["maj", "maj"], always0);
+    expect(q.answer).toBe("min");
+    const recent: string[] = [];
+    for (let k = 0; k < 500; k++) {
+      recent.push(earQuestion(EAR_LEVELS[0], recent.slice(-2)).answer);
+      if (recent.length >= 3) expect(new Set(recent.slice(-3)).size).toBeGreaterThan(1);
+    }
+  });
+
+  test("points grow with the streak up to double; levels unlock at 8 right", () => {
+    expect(earPoints(0)).toBe(100);
+    expect(earPoints(3)).toBe(130);
+    expect(earPoints(25)).toBe(200);
+    expect(earUnlocked(0, {})).toBe(true);
+    expect(earUnlocked(1, {})).toBe(false);
+    expect(earUnlocked(1, { "earok:majmin": 7 })).toBe(false);
+    expect(earUnlocked(1, { "earok:majmin": 8 })).toBe(true);
+    expect(earUnlocked(2, { "earok:majmin": 10 })).toBe(false);
+  });
+
+  test("every level's answers exist", () => {
+    for (const l of EAR_LEVELS) for (const a of l.answers) expect(EAR_ANSWERS[a]).toBeDefined();
   });
 });
