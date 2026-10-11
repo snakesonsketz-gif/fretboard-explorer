@@ -209,11 +209,14 @@ export function checkChord(s: Spectrum, targetPcs: number[], opts: { tolCents?: 
     const fund = peakNear(s, f0, tol).mag;
     return fund < PHANTOM_RATIO * peakNear(s, 2 * f0, tol).mag && fund < PHANTOM_ABSENT * loudFund;
   };
-  let chord = found;
-  if (found.notes.some((n) => phantom(n.midi))) {
+  const finish = (dropPhantoms: boolean, keptWeak = new Set<number>()) => {
+  // Fresh spectrum each time: explaining a note removes its partials from `work`.
+  work.set(whiten(s));
+  let chord = explain(work, s, tuningCents, tol, (m) => want.has(m % 12), 14, 0.08);
+  if (dropPhantoms && found.notes.some((n) => phantom(n.midi))) {
+    work.set(whiten(s));
     const keep = found.notes.filter((n) => !phantom(n.midi)).map((n) => n.midi);
     const ups = found.notes.filter((n) => phantom(n.midi)).map((n) => n.midi + 12);
-    work.set(whiten(s));
     const allowed = new Set([...keep, ...ups]);
     chord = explain(work, s, tuningCents, tol, (m) => allowed.has(m), allowed.size, 0.08, found.top);
   }
@@ -226,7 +229,8 @@ export function checkChord(s: Spectrum, targetPcs: number[], opts: { tolCents?: 
   // then, while a ringing string is still there (Bradley's round 2: muted strings read -9 to -18
   // dB at 0.08 s but -23 to -48 dB from 0.15 s on).
   const L = opts.late ?? s;
-  const rawOf = (m: number) => peakNear(L, midiToHz(m, tuningCents), tol).mag;
+  // A note kept despite an almost-missing fundamental (see below) is judged by its 3rd partial too.
+  const rawOf = (m: number) => Math.max(peakNear(L, midiToHz(m, tuningCents), tol).mag, keptWeak.has(m) ? peakNear(L, 3 * midiToHz(m, tuningCents), tol).mag : 0);
   const loudest = Math.max(1e-12, ...chord.notes.map((n) => rawOf(n.midi)));
   const sounding = chord.notes.filter((n) => rawOf(n.midi) >= WEAK_RATIO * loudest);
   const target = [...want].map((pc) => {
@@ -259,7 +263,16 @@ export function checkChord(s: Spectrum, targetPcs: number[], opts: { tolCents?: 
     else extras.push({ ...e });
   }
   extras.sort((a, b) => b.strength - a.strength);
-  return { target, extras, tuningCents, topSalience: chord.top };
+  return { target, extras, top: chord.top };
+  };
+  let res = finish(true);
+  // A real low note whose fundamental happens to be very weak isn't a phantom: dropping it leaves
+  // BOTH its 3rd and 5th partials behind as "wrong notes" (a weak B2 in G showed up as F#4 + D#5),
+  // which a single real wrong note doesn't do. Then it is kept after all.
+  const dropped = found.notes.filter((n) => phantom(n.midi)).map((n) => n.midi);
+  const real = dropped.filter((p) => [19, 28].every((d) => res.extras.some((e) => e.midi === p + d && e.strength >= 0.08)));
+  if (real.length) res = finish(false, new Set(real));
+  return { target: res.target, extras: res.extras, tuningCents, topSalience: res.top };
 }
 
 /**

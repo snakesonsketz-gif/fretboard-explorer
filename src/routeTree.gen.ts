@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevelopRouteImport } from './routes/develop'
 import { Route as ListenRouteImport } from './routes/listen'
+import { Route as PlayRouteImport } from './routes/play'
 import { Route as SequencerRouteImport } from './routes/sequencer'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const ListenRoute = ListenRouteImport.update({
   path: '/listen',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlayRoute = PlayRouteImport.update({
+  id: '/play',
+  path: '/play',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SequencerRoute = SequencerRouteImport.update({
   id: '/sequencer',
   path: '/sequencer',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/develop': typeof DevelopRoute
   '/listen': typeof ListenRoute
+  '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/develop': typeof DevelopRoute
   '/listen': typeof ListenRoute
+  '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/develop': typeof DevelopRoute
   '/listen': typeof ListenRoute
+  '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/develop' | '/listen' | '/sequencer'
+  fullPaths: '/' | '/develop' | '/listen' | '/play' | '/sequencer'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/develop' | '/listen' | '/sequencer'
-  id: '__root__' | '/' | '/develop' | '/listen' | '/sequencer'
+  to: '/' | '/develop' | '/listen' | '/play' | '/sequencer'
+  id: '__root__' | '/' | '/develop' | '/listen' | '/play' | '/sequencer'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DevelopRoute: typeof DevelopRoute
   ListenRoute: typeof ListenRoute
+  PlayRoute: typeof PlayRoute
   SequencerRoute: typeof SequencerRoute
 }
 
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/play': {
+      id: '/play'
+      path: '/play'
+      fullPath: '/play'
+      preLoaderRoute: typeof PlayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sequencer': {
       id: '/sequencer'
       path: '/sequencer'
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DevelopRoute: DevelopRoute,
   ListenRoute: ListenRoute,
+  PlayRoute: PlayRoute,
   SequencerRoute: SequencerRoute,
 }
 export const routeTree = rootRouteImport
