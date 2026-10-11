@@ -27,7 +27,7 @@ export const THRESHOLDS = {
   faint: 0.03, // between faint and heard: "unsure, faint"
   wrong: 0.13, // extra note counted as wrong (no false alarms seen on 288 correct strums)
   maybeWrong: 0.08, // between maybeWrong and wrong: "maybe" (not counted)
-  tooQuietDb: -48, // strum peak below this: unsure, too quiet
+  tooQuietDb: -55, // strum peak below this: unsure, too quiet (was -48; iPhone Safari soft strums sit at -46 to -52 and judge fine)
   // Buzz: hiss in the 3–10 kHz band relative to the strongest note (dB). Bradley's guitar on an
   // iPhone (Oct 2026): 76 clean strums -87…-70, buzzing strums -71…-63.
   buzzSome: -69,
@@ -185,7 +185,11 @@ export function measureStrum(input: StrumInput): StrumMeasure {
   const clearLook = clearTo - from >= Math.round(0.2 * sr) && (alone || !detectOnsets(audio.subarray(from, to), sr, { strumsOnly: false }).length);
   const root = rootByName(target.rootName);
   const pcs = target.degrees.map((d) => (((root.pc + degreeToSemitones(d)) % 12) + 12) % 12);
-  const chord = checkChord(spec, pcs);
+  // A later look (from 0.18 s in) for whether each chord note is really sounding.
+  const lateWin = new Float32Array(N);
+  const lFrom = body + Math.round(0.18 * sr), lTo = Math.min(lFrom + N, end - Math.round(0.01 * sr));
+  if (lTo - lFrom >= Math.round(0.15 * sr)) lateWin.set(audio.subarray(lFrom, lTo));
+  const chord = checkChord(spec, pcs, lTo - lFrom >= Math.round(0.15 * sr) ? { late: spectrumOf(lateWin, sr) } : {});
   // Follow every octave of every chord note (the check may have heard D4 where the string was D3).
   const candidates: number[] = [];
   for (let m = LOWEST_MIDI; m <= HIGHEST_MIDI; m++) if (pcs.includes(m % 12)) candidates.push(m);

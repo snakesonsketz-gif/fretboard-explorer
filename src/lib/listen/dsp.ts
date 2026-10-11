@@ -188,7 +188,7 @@ const WEAK_RATIO = 10 ** (-27 / 20);
 const PHANTOM_RATIO = 10 ** (-15 / 20);
 const PHANTOM_ABSENT = 10 ** (-24 / 20);
 
-export function checkChord(s: Spectrum, targetPcs: number[], opts: { tolCents?: number } = {}): ChordCheck {
+export function checkChord(s: Spectrum, targetPcs: number[], opts: { tolCents?: number; late?: Spectrum } = {}): ChordCheck {
   const tol = opts.tolCents ?? 35;
   const tuningCents = estimateTuning(s);
   const work = whiten(s);
@@ -222,7 +222,11 @@ export function checkChord(s: Spectrum, targetPcs: number[], opts: { tolCents?: 
   // deadened string's faint thud to look "heard". On the raw spectrum a muted string is 30–68 dB
   // under the loudest string, a played one within ~24 dB (Bradley's iPhone, Oct 2026); such a
   // note is dropped and, if it was its pitch's only octave, reported as not sounding.
-  const rawOf = (m: number) => peakNear(s, midiToHz(m, tuningCents), tol).mag;
+  // Judged a little later in the ring when that view is given: a muted string's thud is gone by
+  // then, while a ringing string is still there (Bradley's round 2: muted strings read -9 to -18
+  // dB at 0.08 s but -23 to -48 dB from 0.15 s on).
+  const L = opts.late ?? s;
+  const rawOf = (m: number) => peakNear(L, midiToHz(m, tuningCents), tol).mag;
   const loudest = Math.max(1e-12, ...chord.notes.map((n) => rawOf(n.midi)));
   const sounding = chord.notes.filter((n) => rawOf(n.midi) >= WEAK_RATIO * loudest);
   const target = [...want].map((pc) => {
@@ -398,6 +402,12 @@ export interface OnsetOptions {
   minRise?: number;
 }
 
+/**
+ * Quietest sound that can start a strum (dBFS). Tried -56 on Bradley's round 2 (iPhone Safari,
+ * soft strums at -50 to -47): it caught the one soft strum missed at -50 but added four false
+ * strums, so it stays at -50.
+ */
+export const FLOOR_DB = -50;
 /** Seconds of audio a candidate onset needs after it for the strum (sustain) check. */
 export const ONSET_LOOKAHEAD = 0.25;
 /**
@@ -415,7 +425,7 @@ export function detectOnsets(x: Float32Array, sr: number, opts: OnsetOptions = {
   const strumsOnly = opts.strumsOnly ?? true;
   const mergeWindow = Math.round((opts.mergeWindow ?? 0.2) * sr);
   const spacedMerge = opts.minRise ? Math.round(SPACED_MERGE * sr) : 0;
-  const floor = 10 ** ((opts.floorDb ?? -50) / 20);
+  const floor = 10 ** ((opts.floorDb ?? FLOOR_DB) / 20);
   const jump = opts.jump ?? 1.0; // natural-log ratio: e^1 ≈ 2.7× more high-frequency energy
   // Second difference ≈ high-pass (rises 12 dB/octave), enough to separate attacks from ring.
   const hp = new Float32Array(x.length);

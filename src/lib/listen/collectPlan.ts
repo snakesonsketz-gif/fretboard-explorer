@@ -70,7 +70,7 @@ const ROUND_1 = [
 ] as Omit<PlanStep, "spaced" | "round">[];
 
 /** How to make real buzz (round 1 showed "light pressure" often came out clean or dead instead). */
-const BUZZ = "Press just enough that the notes still sound, but buzz or rattle against the frets. Listen before you start: if a note goes silent or rings clean, change the pressure until you hear the rattle.";
+const BUZZ = "Press just enough that the notes still sound, but buzz or rattle against the frets — a buzzing rattle, not a dull thud. Listen before you start: if a note goes dull or silent, press a little harder; if it rings clean, a little lighter, until you hear the rattle.";
 
 /**
  * Round 2 (Oct 2026), aimed at what Bradley's first 21 takes showed: buzz was only really in the
@@ -99,7 +99,7 @@ const ROUND_2 = [
   { id: "r2-up-c", label: "clean", target: C, tab: "x32010", strums: 4, title: "Open C — up-strums only", how: `Clean C, up-strums only, at your normal strength. ${RING}` },
   { id: "r2-up-soft-am", label: "clean", target: Am, tab: "x02210", strums: 4, title: "A minor — light up-strums", how: `Clean A minor, up-strums only, lightly — the soft up-strum you'd use between down-strums. ${RING}` },
   { id: "r2-downup-g", label: "clean", target: G, tab: "320003", strums: 8, title: "Open G — down and up, slowly", how: "Clean G, 8 strums alternating down and up (down-up-down-up…), about one strum per second so each one is clear. Each down and each up counts as one strum. Let the last one ring out." },
-  { id: "r2-slow-g", label: "clean", target: G, tab: "320003", strums: 4, title: "Open G — slow strums", how: `Clean G, but strum slowly so the strings sound one after another (about half a second from the low string to the high one). ${RING}` },
+  { id: "r2-slow-g", label: "clean", target: G, tab: "320003", strums: 4, title: "Open G — slow strums", how: `Clean G, one slow strum each time: a single smooth stroke that takes about half a second from the low string to the high one (not one string at a time). ${RING}` },
 ] as Omit<PlanStep, "spaced" | "round">[];
 
 /**
