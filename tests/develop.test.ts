@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { SR, rng, take } from "./helpers/guitar";
 import { THRESHOLDS, type TargetChord } from "../src/lib/listen/score";
-import { analyseTake, crc32, encodeWav, judgeTake, makeZip, scorecard, toFloat, toPcm, verdictFor, type TakeLabel } from "../src/lib/listen/takes";
+import { analyseTake, crc32, encodeWav, judgeTake, makeZip, scorecard, strumDetection, toFloat, toPcm, verdictFor, type TakeLabel } from "../src/lib/listen/takes";
 import { sanitize, changedKeys } from "../src/lib/listen/tuning";
 
 const G: TargetChord = { rootName: "G", degrees: ["1", "3", "5"], label: "G" };
@@ -112,7 +112,8 @@ describe("Develop: the guided recording plan is musically right", () => {
         expect(step.muted?.length).toBeGreaterThan(0);
         for (const s of step.muted!) expect(chord.has(tabMidis(step.tab)[s]! % 12)).toBe(true); // muting a real chord note
       }
-      expect(step.strums).toBeGreaterThanOrEqual(4);
+      if (step.label === "noise") expect(step.strums).toBe(0); // sounds that aren't strums
+      else expect(step.strums).toBeGreaterThanOrEqual(4);
     });
   test("round 2 mutes only notes no other string doubles (so the mute can be heard)", () => {
     for (const step of PLAN.filter((s) => s.round === 2 && s.label === "muted")) {
@@ -124,9 +125,23 @@ describe("Develop: the guided recording plan is musically right", () => {
     }
   });
   test("rounds: every step in exactly one round, ids unique across rounds", () => {
-    expect(ROUNDS.map((r) => r.round)).toEqual([1, 2]);
+    expect(ROUNDS.map((r) => r.round)).toEqual([1, 2, 3]);
     expect(ROUNDS[0]!.steps.length).toBe(21); // round 1 unchanged: Bradley's recordings still match it
     expect(ROUNDS.reduce((a, r) => a + r.steps.length, 0)).toBe(PLAN.length);
+  });
+  test("steps with no strums count in the strum check: anything Fretlab counts there is a false strum", () => {
+    const base = { at: 0, target: G, note: "", sampleRate: SR, pcm: new Int16Array(SR), source: "mic" as const, device: "Phone · iPhone · Chrome" };
+    const takes = [
+      { ...base, id: "n1", label: "noise" as const, step: "r3-noise-hands", expected: 0 },
+      { ...base, id: "n2", label: "noise" as const, step: "r3-noise-room", expected: 0, confirmedStrums: 0 },
+      { ...base, id: "c1", label: "clean" as const, step: "clean-g", expected: 4 },
+    ];
+    const fake = (n: number) => Array.from({ length: n }, (_, i) => ({ time: i, measure: {} as never }));
+    const d = strumDetection(takes, new Map([["n1", fake(1)], ["n2", fake(0)], ["c1", fake(4)]]));
+    expect(d.steps).toBe(3);
+    expect(d.exact).toBe(2);
+    expect(d.extra).toBe(1);
+    expect(d.missed).toBe(0);
   });
   test("covers every kind of mistake, and clean chords outnumber each", () => {
     const n = (l: string) => PLAN.filter((s) => s.label === l).length;

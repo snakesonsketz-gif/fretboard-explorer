@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 const pct = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)}%` : "—");
 
 /** How well the current thresholds agree with what the player says happened. */
-export function Scorecard({ lines, detection }: { lines: ScoreLine[]; detection?: { steps: number; exact: number; found: number; expected: number } }) {
+export function Scorecard({ lines, detection }: { lines: ScoreLine[]; detection?: { steps: number; exact: number; found: number; expected: number; extra?: number; missed?: number } }) {
   const any = lines.some((l) => l.strums);
   return (
     <section className="panel space-y-3 p-3 sm:p-4" aria-label="Scorecard">
@@ -50,6 +50,7 @@ export function Scorecard({ lines, detection }: { lines: ScoreLine[]; detection?
       {detection && detection.steps ? (
         <p className="text-sm" data-testid="score-detection">
           <b>Strums found:</b> {detection.found} of {detection.expected} asked for · {detection.exact} of {detection.steps} guided steps exactly right
+          {detection.extra || detection.missed ? ` · ${detection.extra ?? 0} counted that weren't there, ${detection.missed ?? 0} missed` : ""}
         </p>
       ) : null}
       <p className="text-[11px] leading-snug text-muted-foreground">

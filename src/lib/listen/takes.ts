@@ -12,13 +12,14 @@ import { judgeStrum, type StrumMeasure, type StrumReport, type TargetChord, type
 import { ListenSession, type AudioSource } from "./session";
 import { PLAN } from "./collectPlan";
 
-export type TakeLabel = "clean" | "wrong-note" | "muted" | "buzz" | "other";
+export type TakeLabel = "clean" | "wrong-note" | "muted" | "buzz" | "noise" | "other";
 
 export const TAKE_LABELS: { id: TakeLabel; name: string; hint: string }[] = [
   { id: "clean", name: "Clean", hint: "Played the chord right — Fretlab should find nothing wrong." },
   { id: "wrong-note", name: "Wrong note", hint: "Fretted a note that isn't in the chord on purpose." },
   { id: "muted", name: "Muted string", hint: "Touched or muted a string so a chord note is missing or dies." },
   { id: "buzz", name: "Buzz", hint: "Pressed lightly or behind the fret so a string buzzes." },
+  { id: "noise", name: "Not a strum", hint: "Sounds that aren't strums (knocks, squeaks, talking) — Fretlab should count nothing." },
   { id: "other", name: "Other", hint: "Anything else — not counted in the scorecard." },
 ];
 
@@ -306,14 +307,18 @@ export function verdictFor(label: TakeLabel, r: StrumReport): { result: "good" |
 export function strumDetection(takes: Take[], measured: Map<string, TakeStrum[]>) {
   // The truth is what the player confirmed; until then, what the step asked for.
   const truth = (t: Take) => t.confirmedStrums ?? t.expected!;
-  const asked = takes.filter((t) => (t.confirmedStrums !== undefined || t.expected) && measured.has(t.id));
+  // (0 is a real answer: steps with no strums at all, to catch strums counted that weren't.)
+  const asked = takes.filter((t) => (t.confirmedStrums !== undefined || t.expected !== undefined) && measured.has(t.id));
   const found = asked.reduce((a, t) => a + measured.get(t.id)!.length, 0);
   const expected = asked.reduce((a, t) => a + truth(t), 0);
-  return { steps: asked.length, exact: asked.filter((t) => measured.get(t.id)!.length === truth(t)).length, found, expected, confirmed: asked.filter((t) => t.confirmedStrums !== undefined).length };
+  const extra = asked.reduce((a, t) => a + Math.max(0, measured.get(t.id)!.length - truth(t)), 0);
+  const missed = asked.reduce((a, t) => a + Math.max(0, truth(t) - measured.get(t.id)!.length), 0);
+  return { steps: asked.length, exact: asked.filter((t) => measured.get(t.id)!.length === truth(t)).length, found, expected, extra, missed, confirmed: asked.filter((t) => t.confirmedStrums !== undefined).length };
 }
 
 export function scorecard(takes: { label: TakeLabel; reports: StrumReport[] }[]): ScoreLine[] {
-  return TAKE_LABELS.filter((l) => l.id !== "other").map(({ id }) => {
+  // "Not a strum" takes have nothing to judge; they show up in the strum count instead.
+  return TAKE_LABELS.filter((l) => l.id !== "other" && l.id !== "noise").map(({ id }) => {
     const mine = takes.filter((t) => t.label === id);
     const line: ScoreLine = { label: id, takes: mine.length, strums: 0, good: 0, bad: 0, unsure: 0, maybe: 0, why: {} };
     for (const t of mine)
@@ -541,7 +546,7 @@ export async function importTakes(bytes: Uint8Array, zipName: string, existing: 
       ...(typeof m.roomFloorFromLeadIn === "number" ? { roomFloor: m.roomFloorFromLeadIn } : {}),
       ...(typeof m.roomHfFromLeadIn === "number" ? { roomHf: m.roomHfFromLeadIn } : {}),
       ...(typeof m.secondsBeforeTrim === "number" ? { originalSeconds: m.secondsBeforeTrim } : {}),
-      ...(m.step ? { step: m.step, ...(m.tab ? { tab: m.tab } : {}), ...(m.strumsAsked ? { expected: m.strumsAsked } : {}) } : {}),
+      ...(m.step ? { step: m.step, ...(m.tab ? { tab: m.tab } : {}), ...(typeof m.strumsAsked === "number" ? { expected: m.strumsAsked } : {}) } : {}),
       imported: m.importedFrom ?? zipName,
       ...(typeof m.strumsConfirmedByPlayer === "number" ? { confirmedStrums: m.strumsConfirmedByPlayer, confirmedAt: Date.parse(m.confirmedAt ?? "") || Date.now() } : {}),
     };
@@ -632,11 +637,37 @@ export async function clearTakes(): Promise<void> {
 export const newTakeId = () => Math.random().toString(36).slice(2, 10);
 
 /** Short description of this browser/phone for the export (no personal data). */
-export function deviceLabel(): string {
+const DEVICE_NAME_KEY = "fretlab.devicename.v1";
+
+/** The name the player gave this device ("Phone", "Tablet"…), if any. */
+export function deviceName(): string | null {
+  try {
+    return window.localStorage.getItem(DEVICE_NAME_KEY)?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+export function setDeviceName(name: string) {
+  try {
+    window.localStorage.setItem(DEVICE_NAME_KEY, name.trim().slice(0, 30));
+  } catch {
+    /* not remembered: the automatic label is used */
+  }
+}
+
+/** What kind of device and browser this is ("iPad · Safari"). iPads ask for desktop pages, so they look like Macs unless touch is checked. */
+export function deviceKind(): string {
   if (typeof navigator === "undefined") return "unknown";
   const ua = navigator.userAgent;
-  const os = /iPhone|iPad|iPod/.test(ua) ? (/iPad/.test(ua) ? "iPad" : "iPhone") : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "other";
+  const ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1);
+  const os = ipad ? "iPad" : /iPhone|iPod/.test(ua) ? "iPhone" : /Android/.test(ua) ? (/Mobile/.test(ua) ? "Android phone" : "Android tablet") : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "other";
   const br = /CriOS|Chrome/.test(ua) && !/Edg/.test(ua) ? "Chrome" : /Edg/.test(ua) ? "Edge" : /Firefox|FxiOS/.test(ua) ? "Firefox" : /Safari/.test(ua) ? "Safari" : "browser";
   const app = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() ? " (Android app)" : "";
   return `${os} · ${br}${app}`;
+}
+
+/** Recorded on: the player's name for the device plus its kind ("Tablet · iPad · Safari"). */
+export function deviceLabel(): string {
+  const name = typeof window === "undefined" ? null : deviceName();
+  return name ? `${name} · ${deviceKind()}` : deviceKind();
 }

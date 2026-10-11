@@ -19,7 +19,9 @@ import {
   TAKE_LABELS,
   clearTakes,
   deleteTake,
+  deviceKind,
   deviceLabel,
+  deviceName,
   encodeWav,
   exportTakes,
   importTakes,
@@ -67,6 +69,8 @@ function DevelopPage() {
   const rec = useRecorder();
   const fileInput = useRef<HTMLInputElement>(null);
   const player = usePlayer();
+  /** Scorecard and takes for one device only (phone vs tablet), or all. */
+  const [devFilter, setDevFilter] = useState("all");
 
   useEffect(() => {
     setDevMode(true); // opening /develop shows the tab from now on
@@ -94,7 +98,9 @@ function DevelopPage() {
     }
     return out;
   }, [takes, measured, T]);
-  const card = useMemo(() => scorecard(takes.filter((t) => reports.has(t.id)).map((t) => ({ label: t.label, reports: reports.get(t.id)! }))), [takes, reports]);
+  const devices = useMemo(() => [...new Set(takes.map((t) => t.device))].sort(), [takes]);
+  const shown = useMemo(() => (devFilter === "all" ? takes : takes.filter((t) => t.device === devFilter)), [takes, devFilter]);
+  const card = useMemo(() => scorecard(shown.filter((t) => reports.has(t.id)).map((t) => ({ label: t.label, reports: reports.get(t.id)! }))), [shown, reports]);
 
   if (!mounted || !T)
     return (
@@ -214,7 +220,8 @@ function DevelopPage() {
 
   const exportAll = async () => {
     const zip = exportTakes([...takes].reverse(), measured, T);
-    await deliver(zip, `fretlab-takes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.zip`, "application/zip", true);
+    const who = (deviceName() ?? deviceKind()).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "device";
+    await deliver(zip, `fretlab-takes-${who}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.zip`, "application/zip", true);
   };
 
   const downloadWav = (t: Take) => {
@@ -300,7 +307,18 @@ function DevelopPage() {
           {msg ? <p className="text-sm text-muted-foreground" role="status">{msg}</p> : null}
         </section>
 
-        <Scorecard lines={card} detection={strumDetection(takes, measured)} />
+        {devices.length > 1 ? (
+          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Device" data-testid="device-filter">
+            <span className="text-xs text-muted-foreground">Recorded on:</span>
+            {["all", ...devices].map((d) => (
+              <button key={d} type="button" role="tab" aria-selected={devFilter === d} onClick={() => setDevFilter(d)}
+                className={cn("rounded-md px-2.5 py-1 text-xs font-semibold ring-1", devFilter === d ? "bg-primary text-primary-foreground ring-primary" : "bg-secondary text-muted-foreground ring-border hover:text-foreground")}>
+                {d === "all" ? "All devices" : d} ({d === "all" ? takes.length : takes.filter((t) => t.device === d).length})
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <Scorecard lines={card} detection={strumDetection(shown, measured)} />
 
         <section className="panel space-y-3 p-3 sm:p-4" aria-label="Takes">
           <div className="flex flex-wrap items-center gap-2">
@@ -329,7 +347,7 @@ function DevelopPage() {
           {typeof window !== "undefined" && isNativeApp() ? <p className="text-xs text-muted-foreground">Exporting works best from the browser version of Fretlab.</p> : null}
           {takes.length ? (
             <div className="space-y-2">
-              {takes.map((t) => (
+              {shown.map((t) => (
                 <TakeCard key={t.id} take={t} strums={measured.get(t.id)} reports={reports.get(t.id)} T={T} playing={player.playingId === t.id} onPlay={(from) => player.play(t, from, from ? 2.5 : undefined)} onStop={player.stop} onDelete={() => remove(t)} onRelabel={(l) => relabel(t, l)} onDownload={() => downloadWav(t)} />
               ))}
             </div>

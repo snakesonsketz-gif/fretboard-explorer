@@ -3,7 +3,7 @@ import { Check, ChevronDown, CircleAlert, Download, Mic, Play, RotateCcw, Square
 import { Button } from "@/components/ui/button";
 import { MIC_HELP } from "@/components/listen/micHelp";
 import { ROUNDS, SETUP_TIPS, type PlanStep } from "@/lib/listen/collectPlan";
-import { deviceLabel, encodeWav, newTakeId, safeAnalyse, toPcm, trimSilence, type Take, type TakeStrum } from "@/lib/listen/takes";
+import { deviceKind, deviceLabel, deviceName, encodeWav, newTakeId, safeAnalyse, setDeviceName, toPcm, trimSilence, type Take, type TakeStrum } from "@/lib/listen/takes";
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
 import { ChordBox } from "./ChordBox";
@@ -18,7 +18,8 @@ const KIND: Record<PlanStep["label"], { name: string; cls: string }> = {
   "wrong-note": { name: "Wrong note — on purpose", cls: "bg-destructive/20 text-foreground ring-1 ring-destructive/50" },
   muted: { name: "Muted string — on purpose", cls: "bg-root/20 text-foreground ring-1 ring-root/50" },
   buzz: { name: "Buzz — on purpose", cls: "bg-accent/20 text-foreground ring-1 ring-accent/50" },
-  other: { name: "Other", cls: "bg-secondary" },
+  noise: { name: "No strums — on purpose", cls: "bg-secondary text-foreground ring-1 ring-border" },
+  other: { name: "Playing style", cls: "bg-secondary text-foreground ring-1 ring-border" },
 };
 
 /** What happened to the latest recording: saving, saved (read back and checked), or not. */
@@ -46,6 +47,15 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
   const [roundPick, setRoundPick] = useState<number | null>(null);
   const [save, setSave] = useState<SaveState | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  /** The player's name for this device ("Phone", "Tablet"), stored with every recording. */
+  const [devName, setDevName] = useState<string>("");
+  const [devEdit, setDevEdit] = useState(false);
+  useEffect(() => setDevName(deviceName() ?? ""), []);
+  const saveDevName = (n: string) => {
+    setDeviceName(n);
+    setDevName(n.trim());
+    setDevEdit(false);
+  };
   /** The last recording exactly as captured (nothing trimmed), so it can always be sent to Vix. */
   const [lastRaw, setLastRaw] = useState<{ stepId: string; wav: Uint8Array; name: string } | null>(null);
   useEffect(() => {
@@ -171,6 +181,15 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
         <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
           <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${(100 * done) / PLAN.length}%` }} />
         </div>
+        {ready ? (
+          devEdit || !devName ? (
+            <DeviceNamer value={devName} onSave={saveDevName} />
+          ) : (
+            <p className="text-xs text-muted-foreground" data-testid="guided-device">
+              Recording on <b className="text-foreground">{devName}</b> ({deviceKind()}) · <button type="button" className="text-primary hover:underline" disabled={recording} onClick={() => setDevEdit(true)}>change</button>
+            </p>
+          )
+        ) : null}
         <p className="text-sm text-muted-foreground">
           Fretlab tells you what to play and how. Record each step, tap <b className="text-foreground">Done</b>, then <b className="text-foreground">listen back and confirm</b> you played exactly what was asked. At the end, send the recordings to Vix.
         </p>
@@ -182,7 +201,8 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
           <ul className="list-disc space-y-1 pl-5 text-sm">
             {SETUP_TIPS.map((t) => <li key={t}>{t}</li>)}
           </ul>
-          <Button onClick={() => { try { window.localStorage.setItem(SETUP_KEY, "1"); } catch { /* fine */ } setReady(true); }}>I'm set up — show step 1</Button>
+          <DeviceNamer value={devName} onSave={saveDevName} />
+          <Button disabled={!devName} onClick={() => { try { window.localStorage.setItem(SETUP_KEY, "1"); } catch { /* fine */ } setReady(true); }}>I'm set up — show step 1</Button>
         </div>
       ) : null}
 
@@ -199,7 +219,7 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
               <p className="font-display text-xl font-black leading-tight">{step.title}</p>
               <p className="font-mono text-xs text-muted-foreground" title="Low E string first">Tab {[...step.tab].join(" ")} · {pretty(step.target.label)}</p>
               <p className="text-sm leading-snug">{step.how}</p>
-              <p className="text-sm font-semibold">Strum {step.strums} times.</p>
+              <p className="text-sm font-semibold">{step.strums ? `${step.unit === "picks" ? "Pick" : "Strum"} ${step.strums} times.` : "Don't strum at all — Fretlab should count nothing."}</p>
               {step.wrong?.length ? <p className="text-xs text-muted-foreground"><span className="font-semibold text-destructive-foreground">Red dot</span> = the wrong note.</p> : null}
               {step.muted?.length ? <p className="text-xs text-muted-foreground"><span className="font-bold text-root">~</span> = touch this string so it's muted.</p> : null}
             </div>
@@ -208,7 +228,7 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
           {recording ? (
             <div className="space-y-2" aria-live="polite">
               <p className={cn("text-base font-bold", playingRec ? "text-primary" : "")} data-testid="guided-status">
-                {rec.state === "starting" ? "Starting the microphone…" : rec.state === "quiet" ? `Stay quiet… ${Math.max(0, QUIET_SECONDS - rec.seconds).toFixed(1)} s` : `Play now — strums heard: ${rec.heard} of ${step.strums}`}
+                {rec.state === "starting" ? "Starting the microphone…" : rec.state === "quiet" ? `Stay quiet… ${Math.max(0, QUIET_SECONDS - rec.seconds).toFixed(1)} s` : step.strums ? `Play now — ${step.unit ?? "strums"} heard: ${rec.heard} of ${step.strums}` : `Go — make the sounds (strums heard: ${rec.heard})`}
               </p>
               <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                 <div className={cn("h-full rounded-full transition-[width] duration-100", playingRec ? "bg-primary" : "bg-muted-foreground")} style={{ width: `${Math.max(0, Math.min(100, ((rec.level + 70) / 70) * 100))}%` }} />
@@ -248,16 +268,16 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
                 </span>
               </div>
               {take.confirmedStrums !== undefined ? (
-                <p className="text-sm">You confirmed you played exactly {take.confirmedStrums} strums, as asked. <button type="button" className="text-primary hover:underline" onClick={() => begin(step)} disabled={recording}>Record it again</button></p>
+                <p className="text-sm">{take.confirmedStrums ? `You confirmed you played exactly ${take.confirmedStrums} ${step.unit ?? "strums"}, as asked.` : "You confirmed there were no strums, as asked."} <button type="button" className="text-primary hover:underline" onClick={() => begin(step)} disabled={recording}>Record it again</button></p>
               ) : (
                 <div className="space-y-2 rounded-md border border-primary/40 bg-primary/10 p-2.5">
-                  <p className="text-sm font-semibold">Listen back. Did you play exactly {step.strums} strums, the way this step asks?</p>
+                  <p className="text-sm font-semibold">{step.strums ? `Listen back. Did you play exactly ${step.strums} ${step.unit ?? "strums"}, the way this step asks?` : "Listen back. Did you make those sounds without strumming once?"}</p>
                   {found !== undefined && found !== step.strums ? (
                     <p className="text-xs text-muted-foreground">Fretlab counted {found}. If you really played {step.strums}, say yes — Fretlab's mistake gets recorded so it can be fixed. If you didn't, redo it.</p>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
                     <Button className="h-11 flex-1 gap-1.5" onClick={() => confirm(step, take)} disabled={saveFor?.saved === false} data-testid="guided-confirm">
-                      <Check className="h-4 w-4" /> Yes — exactly {step.strums}
+                      <Check className="h-4 w-4" /> {step.strums ? `Yes — exactly ${step.strums}` : "Yes — no strums"}
                     </Button>
                     <Button variant="secondary" className="h-11 flex-1 gap-1.5" onClick={() => begin(step)} data-testid="guided-redo">
                       <RotateCcw className="h-4 w-4" /> No — redo it
@@ -334,5 +354,24 @@ export function GuidedSession({ rec, player, takes, measured, onSave, onConfirm,
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** Ask which device this is, so phone and tablet recordings stay apart once both are sent. */
+function DeviceNamer({ value, onSave }: { value: string; onSave: (name: string) => void }) {
+  const [v, setV] = useState(value);
+  return (
+    <div className="space-y-1.5 rounded-md border border-border bg-background/40 p-2.5" data-testid="device-namer">
+      <p className="text-sm font-semibold">Which device is this?</p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {["Phone", "Tablet"].map((n) => (
+          <Button key={n} size="sm" variant={value === n ? "default" : "secondary"} className="h-9" onClick={() => onSave(n)}>{n}</Button>
+        ))}
+        <input value={v} onChange={(e) => setV(e.target.value)} placeholder="or type a name" aria-label="Device name"
+          className="h-9 w-36 rounded-md border border-input bg-background px-2 text-sm" />
+        <Button size="sm" variant="ghost" className="h-9" disabled={!v.trim()} onClick={() => onSave(v)}>Use</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">Every recording is labelled with it ({deviceKind()}), so Vix can tell the phone and tablet apart.</p>
+    </div>
   );
 }
