@@ -21,7 +21,7 @@ const GAMES = [
 ] as const;
 
 /** Games played on the real guitar: the microphone listens and judges every strum. */
-function PlayPage() {
+export function PlayPage() {
   const [game, setGame] = useState<(typeof GAMES)[number]["id"]>("rush");
   return (
     <AppShell>

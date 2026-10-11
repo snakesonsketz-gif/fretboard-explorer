@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { playChord } from "@/lib/audio";
 import { engine } from "@/lib/engine";
+import { useTabActive } from "@/lib/tabActive";
 import { beatTicks } from "@/lib/timeline";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { CopyPlus as Dup, ListOrdered, X } from "lucide-react";
@@ -220,6 +221,12 @@ export function SongWorkspace({ currentRootName, currentDegrees, currentVoicing,
     if (engine.playing) stopPlayback();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // So does switching to another tab (the song stays as it was).
+  const tabActive = useTabActive();
+  useEffect(() => {
+    if (!tabActive && engine.playing) stopPlayback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabActive]);
 
   const running = playing === "all";
   const auditioning = playing && playing !== "all" ? playing.section : null;

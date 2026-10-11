@@ -7,6 +7,7 @@ import { MIC_HELP } from "@/components/listen/micHelp";
 import { CHORDS, RUSH_LEVELS, RUSH_LIVES, chordLabel, fallSeconds, loadBests, nextChord, rushPoints, saveBest, savedGameChords, strumResult, type GameChord } from "@/lib/games";
 import { TIERS } from "@/lib/levels";
 import { pretty } from "@/lib/theory";
+import { useTabActive } from "@/lib/tabActive";
 import { cn } from "@/lib/utils";
 import { useGameMic, type HeardStrum } from "./useGameMic";
 import { ChordToggles, MineToggle, TierPicker, useRemembered, useSavedChords, useSwitchedOff, useTier } from "./TierPicker";
@@ -178,6 +179,12 @@ export function ChordRush() {
     setDrop(null);
     mic.stop();
   };
+  // Switching to another tab ends a round in progress and turns the microphone off.
+  const tabActive = useTabActive();
+  useEffect(() => {
+    if (!tabActive && (g.current.phase === "playing" || g.current.phase === "countdown")) quit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabActive]);
 
   const tab = drop ? g.current.pool[drop.name]?.tab || null : null;
   const danger = progress > 0.75;

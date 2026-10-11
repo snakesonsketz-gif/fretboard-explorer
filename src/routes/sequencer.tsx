@@ -10,6 +10,7 @@ import { SequenceLibrary } from "@/components/sequencer/SequenceLibrary";
 import { TransportBar } from "@/components/sequencer/TransportBar";
 import { useSequencer } from "@/components/sequencer/useSequencer";
 import { engine } from "@/lib/engine";
+import { useTabActive } from "@/lib/tabActive";
 import { loadPalette, type PaletteChord } from "@/lib/sequences";
 import { arrangementTicks, beatTicks, chordMidis, measureTicks, newId, roomAfter, type ChordEvent, type Grid } from "@/lib/timeline";
 
@@ -20,9 +21,15 @@ export const Route = createFileRoute("/sequencer")({
 
 type NewLen = "beat" | "2beats" | "bar" | "2bars";
 
-function SequencerPage() {
+export function SequencerPage() {
   const seq = useSequencer();
   const { arr, playing, undo } = seq;
+  // Switching to another tab stops playback (the arrangement stays as it was).
+  const tabActive = useTabActive();
+  useEffect(() => {
+    if (!tabActive && playing) seq.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabActive]);
   const [grid, setGrid] = useState<Grid>(1);
   const [zoom, setZoom] = useState<number | null>(null);
   const [palette, setPalette] = useState<PaletteChord[]>([]);

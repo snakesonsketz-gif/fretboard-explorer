@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useTabActive } from "@/lib/tabActive";
 import { useEffect, useMemo, useState } from "react";
 import { Headphones, Mic, Square } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -23,8 +24,14 @@ export const Route = createFileRoute("/listen")({
 
 const DOT: Record<Verdict, string> = { good: "bg-extension", fix: "bg-root", unsure: "bg-muted-foreground/40" };
 
-function ListenPage() {
+export function ListenPage() {
   const L = useListen();
+  // Switching to another tab turns the microphone off (the settings stay as they were).
+  const tabActive = useTabActive();
+  useEffect(() => {
+    if (!tabActive && (L.state === "on" || L.state === "starting")) L.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabActive]);
   const [mounted, setMounted] = useState(false);
   const [mode, setMode] = useState<ListenMode>("check");
   const [target, setTarget] = useState<TargetChord>({ rootName: "G", degrees: ["1", "3", "5"], label: "G" });

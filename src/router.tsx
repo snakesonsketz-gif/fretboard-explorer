@@ -8,7 +8,8 @@ export const getRouter = () => {
   const router = createRouter({
     routeTree,
     context: { queryClient },
-    scrollRestoration: true,
+    // Each tab keeps its own scroll position (TabHost), so the router doesn't restore scroll.
+    scrollRestoration: false,
     defaultPreloadStaleTime: 0,
   });
 

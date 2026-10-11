@@ -12,6 +12,7 @@ import {
   type FlavorId, type NashChord, type NashSetup,
 } from "@/lib/nashville";
 import { pretty } from "@/lib/theory";
+import { useTabActive } from "@/lib/tabActive";
 import { cn } from "@/lib/utils";
 import { Stat } from "./ChordRush";
 import { TierPicker, useRemembered, useTier } from "./TierPicker";
@@ -127,6 +128,11 @@ export function Nashville() {
     if (timer.current !== null) window.clearTimeout(timer.current);
     timer.current = null;
   };
+  // Switching to another tab pauses the round: nothing plays while it's hidden.
+  const tabActive = useTabActive();
+  useEffect(() => {
+    if (!tabActive) clearTimer();
+  }, [tabActive]);
 
   /** The key-setting 1-4-5-1, then the mystery chord(s). */
   const play = (q: Q, withCadence = true) => {

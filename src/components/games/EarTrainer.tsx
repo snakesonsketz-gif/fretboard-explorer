@@ -5,6 +5,7 @@ import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { engine } from "@/lib/engine";
 import { EAR_ANSWERS, EAR_READY, EAR_ROUND, earLevel, earPoints, earQuestion, loadBests, saveBest, savedEarAnswers, type EarAnswer, type EarMode, type EarQuestion } from "@/lib/games";
 import { TIERS, tierIndex } from "@/lib/levels";
+import { useTabActive } from "@/lib/tabActive";
 import { cn } from "@/lib/utils";
 import { Stat } from "./ChordRush";
 import { ChordToggles, MineToggle, TierPicker, useRemembered, useSavedChords, useSwitchedOff, useTier } from "./TierPicker";
@@ -69,6 +70,11 @@ export function EarTrainer() {
     if (timer.current !== null) window.clearTimeout(timer.current);
     timer.current = null;
   };
+  // Switching to another tab pauses the round: nothing plays while it's hidden.
+  const tabActive = useTabActive();
+  useEffect(() => {
+    if (!tabActive) clearTimer();
+  }, [tabActive]);
 
   const ask = (prev: Round) => {
     const q = earQuestion(level, prev.recent.slice(-2), Math.random, answers);
@@ -256,11 +262,9 @@ export function EarTrainer() {
         {phase === "playing" ? (
           <span className="ml-auto flex gap-2">
             {r.picked && q && r.picked !== q.answer ? (
-              <>
-                <Button size="sm" variant="ghost" className="gap-1.5 border font-bold" style={{ borderColor: "#ffe600", color: "#ffe600" }} onClick={compare} data-testid="ear-compare"><Volume2 className="h-3.5 w-3.5" /> Compare</Button>
-                <Button size="sm" className="gap-1.5 font-bold" onClick={advance} data-testid="ear-next">Next <ArrowRight className="h-3.5 w-3.5" /></Button>
-              </>
+              <Button size="sm" variant="ghost" className="gap-1.5 border font-bold" style={{ borderColor: "#ffe600", color: "#ffe600" }} onClick={compare} data-testid="ear-compare"><Volume2 className="h-3.5 w-3.5" /> Compare</Button>
             ) : null}
+            {r.picked && q ? <Button size="sm" className="gap-1.5 font-bold" onClick={advance} data-testid="ear-next">Next <ArrowRight className="h-3.5 w-3.5" /></Button> : null}
             <Button size="sm" variant="ghost" className="gap-1.5 border font-bold" style={{ borderColor: NEON_BAD, color: NEON_BAD, boxShadow: `0 0 8px ${NEON_BAD}66` }} onClick={quit}><Square className="h-3 w-3" style={{ fill: NEON_BAD }} /> Stop</Button>
           </span>
         ) : null}

@@ -13,7 +13,7 @@ export const Route = createFileRoute("/grimoire")({
  * fonts bundled; it sits here full width and grows to its full height, so the whole room scrolls
  * as one page. Custom builds are kept on this device.
  */
-function GrimoirePage() {
+export function GrimoirePage() {
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(1600);
 

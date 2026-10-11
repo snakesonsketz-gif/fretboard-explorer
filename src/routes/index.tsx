@@ -94,7 +94,7 @@ const SHARP_ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#",
 const MAJOR_MODES = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
 const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
 
-function Workstation() {
+export function Workstation() {
   const [mode, setMode] = useState<Mode>("chord");
   const [rootName, setRootName] = useState("C");
   const [chordId, setChordId] = useState("maj7");

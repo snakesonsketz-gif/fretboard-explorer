@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ImpossibleList } from "@/components/develop/ImpossibleList";
+import { useTabActive } from "@/lib/tabActive";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Download, FileAudio, FolderInput, Mic, Square, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -51,7 +52,7 @@ export const Route = createFileRoute("/develop")({
 const MAX_FILE_SECONDS = 60;
 const isNativeApp = () => !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
 
-function DevelopPage() {
+export function DevelopPage() {
   const [mounted, setMounted] = useState(false);
   const [takes, setTakes] = useState<Take[]>([]);
   const [measured, setMeasured] = useState<Map<string, TakeStrum[]>>(new Map());
@@ -70,6 +71,14 @@ function DevelopPage() {
   const rec = useRecorder();
   const fileInput = useRef<HTMLInputElement>(null);
   const player = usePlayer();
+  // Switching to another tab stops a recording (it's saved) and any take that's playing.
+  const tabActive = useTabActive();
+  useEffect(() => {
+    if (tabActive) return;
+    if (rec.state !== "idle") rec.stop();
+    player.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabActive]);
   /** Scorecard and takes for one device only (phone vs tablet), or all. */
   const [devFilter, setDevFilter] = useState("all");
 

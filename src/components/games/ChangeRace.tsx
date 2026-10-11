@@ -6,6 +6,7 @@ import { ChordBox } from "@/components/develop/ChordBox";
 import { MIC_HELP } from "@/components/listen/micHelp";
 import { CHANGE_PAIRS, CHANGE_SECONDS, CHORDS, RUSH_LEVELS, chordLabel, loadBests, raceStart, raceStep, saveBest, savedGameChords, strumResult, type GameChord, type RaceState } from "@/lib/games";
 import { pretty } from "@/lib/theory";
+import { useTabActive } from "@/lib/tabActive";
 import { cn } from "@/lib/utils";
 import { MicMeter, Stat } from "./ChordRush";
 import { useGameMic, type HeardStrum } from "./useGameMic";
@@ -110,6 +111,12 @@ export function ChangeRace() {
     setPhase("ready");
     mic.stop();
   };
+  // Switching to another tab ends a round in progress and turns the microphone off.
+  const tabActive = useTabActive();
+  useEffect(() => {
+    if (!tabActive && (g.current.phase === "playing" || g.current.phase === "countdown")) quit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabActive]);
 
   const dueKey = pair[race.due], nextKey = pair[race.due === 0 ? 1 : 0];
   const due = name(dueKey), next = name(nextKey);

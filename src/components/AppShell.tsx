@@ -4,8 +4,6 @@ import { BookOpen, Ear, FlaskConical, Gamepad2, Music2, Search, SlidersHorizonta
 import { setDevMode, useDevMode } from "@/lib/devMode";
 import { engine } from "@/lib/engine";
 import { cn } from "@/lib/utils";
-import { InstallTip } from "./InstallTip";
-import { WelcomeNote } from "./WelcomeNote";
 
 const TABS = [
   { to: "/", label: "Explore", icon: Search },
@@ -51,8 +49,6 @@ export function AppShell({ children, headerRight, room }: { children: ReactNode;
   const tabs = dev ? [...TABS, DEV_TAB] : TABS;
   return (
     <div className={cn("dark min-h-screen text-foreground", room === "grimoire" ? "bg-[#070404]" : "bg-background")}>
-      <InstallTip />
-      <WelcomeNote />
       <header className={cn("border-b", room === "grimoire" ? "border-[#5a1219] bg-[#0b0707]" : "border-border/70 bg-card/40")}
         style={room === "grimoire" ? { boxShadow: "0 1px 18px rgba(255,48,58,0.25)" } : undefined}>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:py-4">
