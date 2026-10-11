@@ -8,7 +8,7 @@ import { engine } from "@/lib/engine";
 import { loadBests, saveBest } from "@/lib/games";
 import { TIERS, tierIndex } from "@/lib/levels";
 import {
-  FLAVORS, KEYS, NUMBERS, TIER_SETUP, buildChord, cadence, chordName, choices, nashPoints, nashProgression, nashQuestion, voice,
+  FLAVORS, KEYS, NUMBERS, TIER_SETUP, buildChord, cadence, chordMenu, chordName, choices, exactSetup, nashPoints, nashProgression, nashQuestion, voice,
   type FlavorId, type NashChord, type NashSetup,
 } from "@/lib/nashville";
 import { pretty } from "@/lib/theory";
@@ -23,6 +23,8 @@ const NUM_COLOR: Record<string, string> = {
   b3: "#00ffa3", b6: "#ff8cf0", b7: "#ccff00", "3": "#7df9ff", "2": "#18c8ff",
 };
 const numColor = (id: string) => NUM_COLOR[id] ?? neonOf(id);
+/** A chord name with real flat and sharp signs on its root and bass note (Bbmaj7 → B♭maj7, D/F# → D/F♯). */
+const nice = (name: string) => name.replace(/([A-G])bb/g, "$1𝄫").replace(/([A-G])b/g, "$1♭").replace(/([A-G])#/g, "$1♯").replace(/([A-G])x/g, "$1𝄪");
 const ROUND = 10;
 
 type Phase = "ready" | "playing" | "over";
@@ -58,6 +60,27 @@ function Sym({ c, size = "lg" }: { c: NashChord; size?: "lg" | "md" }) {
   );
 }
 
+/** "My chords": a key and the exact chords picked in it (remembered on this device). */
+type Exact = { number: string; flavor: FlavorId };
+const MINE_KEY = "fretlab.nash.mine.v1";
+const DEFAULT_MINE = { key: "G", exact: [{ number: "1", flavor: "triad" }, { number: "4", flavor: "triad" }, { number: "5", flavor: "triad" }, { number: "6-", flavor: "triad" }] as Exact[] };
+function loadMine(): { key: string; exact: Exact[] } {
+  try {
+    const m = JSON.parse(window.localStorage.getItem(MINE_KEY) ?? "null") as { key: string; exact: Exact[] } | null;
+    return m && KEYS.includes(m.key as (typeof KEYS)[number]) && Array.isArray(m.exact) ? m : DEFAULT_MINE;
+  } catch {
+    return DEFAULT_MINE;
+  }
+}
+function storeMine(m: { key: string; exact: Exact[] }) {
+  try {
+    window.localStorage.setItem(MINE_KEY, JSON.stringify(m));
+  } catch {
+    /* not remembered */
+  }
+}
+const sameExact = (a: Exact, b: Exact) => a.number === b.number && a.flavor === b.flavor;
+
 const SETUP_KEY = "fretlab.nash.setup.v1";
 function loadSetup(tier: string): NashSetup | null {
   try {
@@ -91,7 +114,16 @@ export function Nashville() {
   const [keyChoice, setKeyChoice] = useState<string>("random");
   const [custom, setCustom] = useState<NashSetup | null>(null);
   const [showSetup, setShowSetup] = useState(false);
-  const setup: NashSetup = custom ?? TIER_SETUP[tier];
+  // Levels, or "My chords": your key and exactly the chords you pick.
+  const [mineOn, setMineOn] = useRemembered("fretlab.nash.mine.on", false);
+  const [mine, setMineRaw] = useState(DEFAULT_MINE);
+  useEffect(() => setMineRaw(loadMine()), []);
+  const setMine = (m: { key: string; exact: Exact[] }) => (setMineRaw(m), storeMine(m));
+  const toggleExact = (e: Exact) =>
+    setMine({ ...mine, exact: mine.exact.some((x) => sameExact(x, e)) ? mine.exact.filter((x) => !sameExact(x, e)) : [...mine.exact, e] });
+  const mineSetup = exactSetup(mine.exact);
+  const mineReady = mineSetup.numbers.length >= 2;
+  const setup: NashSetup = mineOn ? mineSetup : custom ?? TIER_SETUP[tier];
   const [phase, setPhase] = useState<Phase>("ready");
   const [r, setR] = useState<Round>(fresh());
   const [bests, setBests] = useState<Record<string, number>>({});
@@ -105,7 +137,7 @@ export function Nashville() {
   useEffect(() => setBests(loadBests()), []);
   useEffect(() => setCustom(loadSetup(tier)), [tier]);
   useEffect(() => () => void (timer.current !== null && window.clearTimeout(timer.current)), []);
-  const bestKey = `nash:${tier}:${mode}`;
+  const bestKey = mineOn ? `nash:mine:${mode}` : `nash:${tier}:${mode}`;
   const best = bests[bestKey] ?? 0;
 
   const editSetup = (s: NashSetup) => {
@@ -153,7 +185,7 @@ export function Nashville() {
 
   const ask = (prev: Round) => {
     const raw = mode === "prog" ? nashProgression(setup) : nashQuestion(setup, prev.recent.slice(-2));
-    const q: Q = { key: keyChoice === "random" ? raw.key : keyChoice, chords: raw.chords };
+    const q: Q = { key: mineOn ? mine.key : keyChoice === "random" ? raw.key : keyChoice, chords: raw.chords };
     setR({ ...prev, n: prev.n + 1, q, taps: [], flavor: null, done: false, recent: [...prev.recent, q.chords[0]!.number].slice(-4) });
     play(q);
   };
@@ -188,7 +220,7 @@ export function Nashville() {
     const gain = mode === "single" ? (allRight ? nashPoints(cur.streak, flavorRight) : 0) : Math.round((rightSlots.filter(Boolean).length * 50 + (allRight ? 100 : 0)) * mult);
     const streak = allRight ? cur.streak + 1 : 0;
     setR({ ...cur, taps, flavor, done: true, score: cur.score + gain, streak, correct: cur.correct + (allRight ? 1 : 0), marks: [...cur.marks, allRight] });
-    const names = q.chords.map((c) => pretty(chordName(q.key, c))).join(" – ");
+    const names = q.chords.map((c) => nice(chordName(q.key, c))).join(" – ");
     if (mode === "single") {
       const c = q.chords[0]!;
       const fl = FLAVORS.find((f) => f.id === c.flavor)!.name;
@@ -248,8 +280,63 @@ export function Nashville() {
 
       {phase !== "playing" ? (
         <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Which chords">
+            {([[false, "Levels"], [true, "My chords"]] as const).map(([on, label]) => (
+              <button key={label} type="button" role="radio" aria-checked={mineOn === on} onClick={() => setMineOn(on)} data-testid={on ? "nash-section-mine" : "nash-section-levels"}
+                className="rounded-lg border-2 px-3 py-2 font-display text-sm font-black transition-transform active:scale-95"
+                style={mineOn === on ? { ...neonCard("#ffe600"), ...neonText("#ffe600") } : { borderColor: "#ffe60044", background: "#0b0b16", color: "#ffe600" }}>
+                {label}
+                <span className="block text-[10px] font-normal opacity-80">{on ? "your key, exactly the chords you pick" : "Beginner to Expert sets"}</span>
+              </button>
+            ))}
+          </div>
+          {mineOn ? (
+            <div className="space-y-2 rounded-md border p-2" style={{ borderColor: "#ffe60055", background: "#0b0b16" }} data-testid="nash-mine">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">Key</span>
+                <Select value={mine.key} onValueChange={(k) => setMine({ ...mine, key: k })}>
+                  <SelectTrigger className="h-8 w-28" aria-label="Key for my chords" data-testid="nash-mine-key"><SelectValue /></SelectTrigger>
+                  <SelectContent>{KEYS.map((k) => <SelectItem key={k} value={k}>{pretty(k)} major</SelectItem>)}</SelectContent>
+                </Select>
+                <span className="text-[11px] text-muted-foreground">Quick:</span>
+                <button type="button" className="rounded border px-1.5 text-[11px]" style={{ borderColor: "#2a1f4d" }} onClick={() => setMine({ ...mine, exact: ["1", "2-", "3-", "4", "5", "6-", "7°"].map((n) => ({ number: n, flavor: "triad" as FlavorId })) })}>all triads</button>
+                <button type="button" className="rounded border px-1.5 text-[11px]" style={{ borderColor: "#2a1f4d" }} onClick={() => setMine({ ...mine, exact: ["1", "2-", "3-", "4", "5", "6-", "7°"].map((n) => ({ number: n, flavor: "seventh" as FlavorId })) })}>all 7ths</button>
+                <button type="button" className="rounded border px-1.5 text-[11px]" style={{ borderColor: "#2a1f4d" }} onClick={() => setMine({ ...mine, exact: [] })}>clear</button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Tap the exact chords you want to hear. <b style={{ color: "#ffe600" }}>{mine.exact.length}</b> picked
+                {mineReady ? ` · numbers ${mineSetup.numbers.join(" ")}` : " — pick chords on at least two different numbers to play"}
+              </p>
+              <div className="max-h-[22rem] space-y-1.5 overflow-y-auto pr-1">
+                {chordMenu().map((row) => {
+                  const col = numColor(row.number);
+                  return (
+                    <div key={row.number} className="flex items-start gap-2">
+                      <span className="w-10 shrink-0 pt-0.5 text-right font-display text-sm font-black" style={neonText(col)} title={NUMBERS[row.number]!.about}>{row.number}</span>
+                      <div className="flex flex-1 flex-wrap gap-1">
+                        {row.chords.map((c) => {
+                          const e = { number: c.number, flavor: c.flavor };
+                          const on = mine.exact.some((x) => sameExact(x, e));
+                          return (
+                            <button key={c.flavor} type="button" aria-pressed={on} onClick={() => toggleExact(e)} data-testid="nash-mine-chord" data-id={`${c.number}|${c.flavor}`}
+                              title={`${c.symbol} in ${pretty(mine.key)} — tap to ${on ? "remove" : "add"}`}
+                              className="rounded-md border-2 px-1.5 py-0.5 text-left leading-tight transition-all active:scale-95"
+                              style={on ? { borderColor: col, background: `${col}1f`, boxShadow: `0 0 6px ${col}88` } : { borderColor: "#2a1f4d", opacity: 0.6 }}>
+                              <span className="block font-display text-xs font-black" style={on ? { color: col } : { color: "#9a9ab5" }}>{nice(chordName(mine.key, c))}</span>
+                              <span className="block font-mono text-[9px] text-muted-foreground">{c.num}{c.qual ? <sup className="ml-px">{c.qual}</sup> : null}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
           <TierPicker value={tier} onChange={setTier} bests={Object.fromEntries(TIERS.map((t) => [t.id, bests[`nash:${t.id}:${mode}`] ?? 0]))}
             note={(t) => TIER_SETUP[t].numbers.length > 8 ? `${TIER_SETUP[t].numbers.length} numbers, ${TIER_SETUP[t].flavors.length} flavours` : TIER_SETUP[t].numbers.join(" ")} />
+          )}
           <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Question type">
             {([["single", "One chord"], ["prog", "4-chord progression"]] as const).map(([m, label]) => (
               <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)} data-testid={`nash-mode-${m}`}
@@ -260,7 +347,7 @@ export function Nashville() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className={cn("flex items-center gap-2 text-xs text-muted-foreground", mineOn && "hidden")}>
               Key
               <Select value={keyChoice} onValueChange={setKeyChoice}>
                 <SelectTrigger className="h-8 w-28" aria-label="Key" data-testid="nash-key"><SelectValue /></SelectTrigger>
@@ -277,7 +364,7 @@ export function Nashville() {
             ) : null}
             <InstrumentPicker />
           </div>
-          <div className="rounded-md border p-2" style={{ borderColor: "#2a1f4d", background: "#0b0b16" }}>
+          <div className={cn("rounded-md border p-2", mineOn && "hidden")} style={{ borderColor: "#2a1f4d", background: "#0b0b16" }}>
             <button type="button" className="flex w-full items-center gap-2 text-left text-xs font-bold" style={{ color: NEON_INFO }} onClick={() => setShowSetup((v) => !v)} aria-expanded={showSetup} data-testid="nash-setup">
               <Settings2 className="h-3.5 w-3.5 shrink-0" /> Numbers &amp; chord types {custom ? <span style={{ color: "#ffe600" }}>· custom</span> : <span className="text-muted-foreground">· {TIERS[tierIndex(tier)]!.name} set</span>}
               <span className="ml-auto text-muted-foreground">{showSetup ? "hide" : "show"}</span>
@@ -336,8 +423,9 @@ export function Nashville() {
             <p className="mx-auto max-w-sm text-sm text-muted-foreground">
               You'll hear 1 – 4 – 5 – 1 to find home, then {mode === "prog" ? "four chords" : "one chord"}. Tap {mode === "prog" ? "their numbers in order" : "its number"}.
               Minor is a minus (2-), diminished is ° and borrowed chords get a flat (b7).
+              {mineOn ? <span className="mt-1 block font-semibold" style={{ color: "#ffe600" }}>My chords: {mine.exact.length} chord{mine.exact.length === 1 ? "" : "s"} in {pretty(mine.key)} major.</span> : null}
             </p>
-            <Button size="lg" className="h-12 gap-2 px-6 text-base" onClick={start} data-testid="nash-start"><Play className="h-5 w-5" /> Start</Button>
+            <Button size="lg" className="h-12 gap-2 px-6 text-base" onClick={start} disabled={mineOn && !mineReady} data-testid="nash-start"><Play className="h-5 w-5" /> Start</Button>
           </div>
         ) : phase === "playing" && q ? (
           <div className="flex w-full flex-col items-center gap-3" data-testid="nash-question" data-answer={q.chords.map((c) => c.number).join(" ")}>
@@ -364,7 +452,7 @@ export function Nashville() {
                     {r.done ? (
                       <span className="flex flex-col items-center">
                         <Sym c={c} size={mode === "prog" ? "md" : "lg"} />
-                        <span className="mt-1 font-mono text-xs" style={{ color: "#e8e8f0" }}>{pretty(chordName(q.key, c))}</span>
+                        <span className="mt-1 font-mono text-xs" style={{ color: "#e8e8f0" }}>{nice(chordName(q.key, c))}</span>
                         {!right && t ? <span className="text-[10px] line-through" style={{ color: NEON_BAD }}>{t}</span> : null}
                       </span>
                     ) : (
@@ -409,7 +497,7 @@ export function Nashville() {
             {newBest ? <p className="flex items-center justify-center gap-1.5 text-xl font-black" style={neonText("#ffe600")}><Trophy className="h-6 w-6" /> New best!</p> : <p className="text-sm text-muted-foreground">Best: {best}</p>}
             {r.correct >= 8 && nextTier ? <p className="text-lg font-black" style={neonText("#ff2bd6")}>Ready for {nextTier.name}!</p> : <p className="text-xs text-muted-foreground">Tip: sing the root of each chord, then count up the scale from home to find its number.</p>}
             <div className="flex flex-wrap justify-center gap-2 pt-1">
-              <Button size="lg" className="h-11 gap-2" onClick={start} data-testid="nash-again"><Zap className="h-4 w-4" /> Go again</Button>
+              <Button size="lg" className="h-11 gap-2" onClick={start} disabled={mineOn && !mineReady} data-testid="nash-again"><Zap className="h-4 w-4" /> Go again</Button>
               {r.correct >= 8 && nextTier ? (
                 <Button size="lg" variant="ghost" className="h-11 gap-2 border font-bold" style={{ borderColor: "#ff2bd6", color: "#ff2bd6", boxShadow: "0 0 10px #ff2bd666" }} onClick={() => { setTier(nextTier.id); setPhase("ready"); setR(fresh()); setLast(null); }}>
                   Try {nextTier.name} <ArrowRight className="h-4 w-4" />

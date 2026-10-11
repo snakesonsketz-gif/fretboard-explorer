@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { FLAVORS, KEYS, NUMBERS, PROGRESSIONS, TIER_SETUP, buildChord, chordName, choices, keyPc, nashProgression, nashQuestion, voice } from "../src/lib/nashville";
+import { FLAVORS, KEYS, NUMBERS, PROGRESSIONS, TIER_SETUP, buildChord, chordMenu, chordName, choices, exactSetup, keyPc, nashProgression, nashQuestion, voice } from "../src/lib/nashville";
 
 const pcsOf = (key: string, c: NonNullable<ReturnType<typeof buildChord>>) => c.intervals.map((i) => (keyPc(key) + c.rootSemis + i) % 12);
 
@@ -74,5 +74,16 @@ describe("Nashville numbers", () => {
         expect(q.chords).toHaveLength(4);
         for (const c of q.chords) expect(TIER_SETUP[tier].numbers).toContain(c.number);
       }
+  });
+
+  test("my chords: only the exact chords picked, in the key picked", () => {
+    const setup = exactSetup([{ number: "1", flavor: "add9" }, { number: "6-", flavor: "seventh" }, { number: "4", flavor: "triad" }, { number: "3-", flavor: "thirteenth" }]);
+    expect(setup.numbers).toEqual(["1", "6-", "4"]); // a 13th on the 3- doesn't fit the key, so it's dropped
+    const names = new Set<string>();
+    for (let k = 0; k < 200; k++) for (const c of nashQuestion(setup, []).chords) names.add(chordName("G", c));
+    expect([...names].sort()).toEqual(["C", "Em7", "Gadd9"]);
+    for (let k = 0; k < 50; k++) for (const c of nashProgression(setup).chords) expect(["1", "6-", "4"]).toContain(c.number);
+    const menu = chordMenu();
+    expect(menu.find((m) => m.number === "5")!.chords.map((c) => chordName("C", c))).toContain("G13");
   });
 });

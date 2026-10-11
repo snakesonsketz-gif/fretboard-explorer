@@ -230,10 +230,23 @@ export const cadence = (key: string) => ["1", "4", "5", "1"].map((n) => voice(ke
 export interface NashSetup {
   numbers: string[];
   flavors: FlavorId[];
+  /** "My chords": exactly these chords (a number and its flavour each), nothing else. */
+  exact?: { number: string; flavor: FlavorId }[];
 }
+
+/** A setup made of exact chords: the numbers and flavours they use. */
+export function exactSetup(exact: { number: string; flavor: FlavorId }[]): NashSetup {
+  const ok = exact.filter((e) => buildChord(e.number, e.flavor));
+  return { numbers: [...new Set(ok.map((e) => e.number))], flavors: [...new Set(ok.map((e) => e.flavor))], exact: ok };
+}
+
+/** Every chord each number can make in a key (number by number, flavour by flavour), for picking exact chords. */
+export const chordMenu = () =>
+  Object.keys(NUMBERS).map((n) => ({ number: n, chords: FLAVORS.map((f) => buildChord(n, f.id)).filter((c): c is NashChord => !!c) }));
 
 /** Every (number, flavour) the setup allows — only combinations that fit the key. */
 export function choices(setup: NashSetup): NashChord[] {
+  if (setup.exact) return setup.exact.map((e) => buildChord(e.number, e.flavor)).filter((c): c is NashChord => !!c);
   const out: NashChord[] = [];
   for (const n of setup.numbers) for (const f of setup.flavors) {
     const c = buildChord(n, f);
