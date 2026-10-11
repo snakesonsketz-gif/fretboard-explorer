@@ -42,6 +42,8 @@ import { pluck } from "@/lib/audio";
 import type { FretPos } from "@/components/Fretboard";
 import { playSequence, playChord } from "@/lib/audio";
 import { loadFavorites, saveFavorites, type Favorite } from "@/lib/favorites";
+import { chordTier, scaleTier, arpeggioTier, type Tier } from "@/lib/levels";
+import { TierTabs, atOrBelow, inPick, loadTierPick, saveTierPick, type TierPick } from "@/components/TierTabs";
 import {
   ARPEGGIO_VARIANTS,
   CHORDS,
@@ -309,6 +311,31 @@ function Workstation() {
       .toLowerCase()
       .includes(q),
   );
+
+  // Difficulty sub-tabs for the library: one pick per section, remembered per device.
+  const [chordPick, setChordPick] = useState<TierPick>("beginner");
+  const [scalePick, setScalePick] = useState<TierPick>("beginner");
+  const [arpPick, setArpPick] = useState<TierPick>("beginner");
+  useEffect(() => {
+    setChordPick(loadTierPick("explore.chord"));
+    setScalePick(loadTierPick("explore.scale"));
+    setArpPick(loadTierPick("explore.arpeggio"));
+  }, []);
+  const tierCounts = <T,>(items: readonly T[], tierOf: (x: T) => Tier) => {
+    const c = { beginner: 0, intermediate: 0, advanced: 0, expert: 0, all: items.length } as Record<TierPick, number>;
+    for (const x of items) c[tierOf(x)]++;
+    return c;
+  };
+  const chordCounts = useMemo(() => tierCounts(CHORDS, (c) => chordTier(c.id)), []);
+  const scaleCounts = useMemo(() => tierCounts(SCALES, (s) => scaleTier(s.id)), []);
+  const arpCounts = useMemo(() => tierCounts(ARPEGGIO_VARIANTS, (a) => arpeggioTier(a.id)), []);
+  // A search looks across every level; otherwise show the chosen level only.
+  const searching = q.length > 0;
+  const tierChords = searching ? filteredChords : CHORDS.filter((c) => inPick(chordTier(c.id), chordPick));
+  const tierScales = searching ? filteredScales : SCALES.filter((s) => inPick(scaleTier(s.id), scalePick));
+  const tierArps = searching ? ARPEGGIO_VARIANTS : ARPEGGIO_VARIANTS.filter((a) => inPick(arpeggioTier(a.id), arpPick));
+  // Source chords for arpeggios are cumulative (at or below the level), plus the current chord.
+  const arpSourceChords = CHORDS.filter((c) => c.id === chordId || atOrBelow(chordTier(c.id), arpPick));
 
   const pickScale = (id: string, newRoot?: string) => {
     setMode("scale");
@@ -967,8 +994,15 @@ function Workstation() {
             </TabsList>
 
             <TabsContent value="chord" className="mt-3 space-y-4">
+              <TierTabs
+                value={chordPick}
+                onChange={(v) => { setChordPick(v); saveTierPick("explore.chord", v); }}
+                counts={chordCounts}
+                noun="chords"
+                searching={searching}
+              />
               {CHORD_FAMILIES.map((fam) => {
-                const items = filteredChords.filter((c) => c.family === fam);
+                const items = tierChords.filter((c) => c.family === fam);
                 if (items.length === 0) return null;
                 return (
                   <div key={fam}>
@@ -998,8 +1032,15 @@ function Workstation() {
             </TabsContent>
 
             <TabsContent value="scale" className="mt-3 space-y-4">
+              <TierTabs
+                value={scalePick}
+                onChange={(v) => { setScalePick(v); saveTierPick("explore.scale", v); }}
+                counts={scaleCounts}
+                noun="scales"
+                searching={searching}
+              />
               {SCALE_FAMILIES.map((fam) => {
-                const items = filteredScales.filter((s) => s.family === fam);
+                const items = tierScales.filter((s) => s.family === fam);
                 if (items.length === 0) return null;
                 return (
                   <div key={fam}>
@@ -1039,6 +1080,13 @@ function Workstation() {
             </TabsContent>
 
             <TabsContent value="arpeggio" className="mt-3 space-y-4">
+              <TierTabs
+                value={arpPick}
+                onChange={(v) => { setArpPick(v); saveTierPick("explore.arpeggio", v); }}
+                counts={arpCounts}
+                noun="arpeggios"
+                searching={searching}
+              />
               <div>
                 <p className="mb-1.5 text-[11px] uppercase tracking-widest text-muted-foreground">
                   Source chord
@@ -1055,7 +1103,7 @@ function Workstation() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CHORDS.map((c) => (
+                    {arpSourceChords.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {`${root.name}${c.suffix} — ${c.name}`}
                       </SelectItem>
@@ -1086,7 +1134,7 @@ function Workstation() {
                   Variants — result formula and change from the source
                 </p>
                 <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                  {ARPEGGIO_VARIANTS.map((a) => {
+                  {tierArps.map((a) => {
                     const out = a.transform(arpSource);
                     const removed = arpSource.filter((d) => !out.includes(d));
                     const added = out.filter((d) => !arpSource.includes(d));

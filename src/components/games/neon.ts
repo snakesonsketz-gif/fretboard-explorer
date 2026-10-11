@@ -9,7 +9,9 @@ export const NEON_GOOD = "#39ff14";
 export const NEON_BAD = "#ff2b6d";
 export const NEON_INFO = "#00e5ff";
 
-export const neonOf = (chord: string) => NEON[chord] ?? "#00e5ff";
+const PALETTE = ["#39ff14", "#00e5ff", "#ff2bd6", "#ffe600", "#ff7a00", "#b44dff", "#ff1f5a", "#00ffa3", "#7df9ff", "#ff8cf0", "#ccff00", "#18c8ff", "#ffb300", "#ff4d8d"];
+/** A chord's neon colour: fixed for the common ones, otherwise picked from its name (stable). */
+export const neonOf = (chord: string) => NEON[chord] ?? PALETTE[[...chord].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length]!;
 
 /** Glowing text in a neon colour. */
 export const neonText = (c: string): CSSProperties => ({ color: c, textShadow: `0 0 6px ${c}, 0 0 18px ${c}, 0 0 36px ${c}99` });

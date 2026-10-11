@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ChordBox } from "@/components/develop/ChordBox";
 import { MIC_HELP } from "@/components/listen/micHelp";
-import { CHANGE_PAIRS, CHANGE_SECONDS, CHORDS, loadBests, raceStart, raceStep, saveBest, strumResult, type RaceState } from "@/lib/games";
+import { CHANGE_PAIRS, CHANGE_SECONDS, CHORDS, RUSH_LEVELS, chordLabel, loadBests, raceStart, raceStep, saveBest, savedGameChords, strumResult, type GameChord, type RaceState } from "@/lib/games";
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
 import { MicMeter, Stat } from "./ChordRush";
 import { useGameMic, type HeardStrum } from "./useGameMic";
+import { MineToggle, TierPicker, useRemembered, useSavedChords, useTier } from "./TierPicker";
 import { NEON_BAD, NEON_GOOD, NEON_INFO, neonCard, neonLane, neonOf, neonText } from "./neon";
 
 type Phase = "ready" | "countdown" | "playing" | "over";
@@ -18,8 +19,21 @@ type Phase = "ready" | "countdown" | "playing" | "over";
  * change drill, counted by the microphone. A personal best is kept for every pair.
  */
 export function ChangeRace() {
+  const [tier, setTierRaw] = useTier("race");
   const [pairIdx, setPairIdx] = useState(0);
-  const pair = CHANGE_PAIRS[pairIdx]!;
+  const [mineOn, setMineOn] = useRemembered("fretlab.games.mine.race", true);
+  const favs = useSavedChords();
+  const mine = savedGameChords(favs, tier);
+  const pool: Record<string, GameChord> = { ...CHORDS, ...mine };
+  /** Your own pair: two chords picked from your saved ones (and this level's). */
+  const [own, setOwn] = useState<string[]>([]);
+  const setTier = (t: typeof tier) => (setTierRaw(t), setPairIdx(0), setOwn([]));
+  const pairs = CHANGE_PAIRS[tier];
+  const usingOwn = mineOn && own.length === 2;
+  const pair = (usingOwn ? own : pairs[Math.min(pairIdx, pairs.length - 1)]!) as [string, string];
+  const name = (k: string) => pretty(chordLabel(pool, k));
+  const ownChoices = [...Object.keys(mine), ...RUSH_LEVELS.find((l) => l.id === tier)!.chords];
+  const pickOwn = (k: string) => setOwn((o) => (o.includes(k) ? o.filter((x) => x !== k) : [...o, k].slice(-2)));
   const key = `race:${pair[0]}-${pair[1]}`;
   const [hints, setHints] = useState(true);
   const [phase, setPhase] = useState<Phase>("ready");
@@ -29,7 +43,7 @@ export function ChangeRace() {
   const [last, setLast] = useState<{ text: string; good: boolean; id: number } | null>(null);
   const [bests, setBests] = useState<Record<string, number>>({});
   const [newBest, setNewBest] = useState(false);
-  const g = useRef({ phase: "ready" as Phase, race: raceStart(), endsAt: 0 });
+  const g = useRef({ phase: "ready" as Phase, race: raceStart(), endsAt: 0, pair: ["G", "C"] as [string, string], pool: CHORDS as Record<string, GameChord> });
   const lastId = useRef(0);
 
   useEffect(() => setBests(loadBests()), []);
@@ -37,7 +51,7 @@ export function ChangeRace() {
   const mic = useGameMic(
     // The chord due when the strum was played (the next chord becomes due as soon as the last
     // one is judged clean — about half a second after it was strummed).
-    () => (g.current.phase === "playing" ? CHORDS[pair[g.current.race.due]]!.target : null),
+    () => (g.current.phase === "playing" ? g.current.pool[g.current.pair[g.current.race.due]]?.target ?? null : null),
     (h: HeardStrum) => {
       const s = g.current;
       if (s.phase !== "playing" || h.time > s.endsAt) return;
@@ -45,9 +59,9 @@ export function ChangeRace() {
       const before = s.race;
       s.race = raceStep(s.race, r);
       setRace(s.race);
-      const name = pretty(pair[before.due]);
-      if (r.kind === "clean") setLast({ text: before.started ? `${name} ✓ — change ${s.race.changes}` : `${name} ✓ — go!`, good: true, id: ++lastId.current });
-      else if (r.kind === "wrong") setLast({ text: `That wasn't a clean ${name} — ${r.why}`, good: false, id: ++lastId.current });
+      const nm = pretty(chordLabel(s.pool, s.pair[before.due]));
+      if (r.kind === "clean") setLast({ text: before.started ? `${nm} ✓ — change ${s.race.changes}` : `${nm} ✓ — go!`, good: true, id: ++lastId.current });
+      else if (r.kind === "wrong") setLast({ text: `That wasn't a clean ${nm} — ${r.why}`, good: false, id: ++lastId.current });
       else if (r.kind === "quiet") setLast({ text: "Louder — I can barely hear you", good: false, id: ++lastId.current });
     },
   );
@@ -74,7 +88,7 @@ export function ChangeRace() {
   }, [phase]);
 
   const start = async () => {
-    g.current = { phase: "countdown", race: raceStart(), endsAt: 0 };
+    g.current = { phase: "countdown", race: raceStart(), endsAt: 0, pair, pool };
     setRace(raceStart());
     setLeft(CHANGE_SECONDS);
     setLast(null);
@@ -96,7 +110,8 @@ export function ChangeRace() {
     mic.stop();
   };
 
-  const due = pair[race.due], next = pair[race.due === 0 ? 1 : 0];
+  const dueKey = pair[race.due], nextKey = pair[race.due === 0 ? 1 : 0];
+  const due = name(dueKey), next = name(nextKey);
   const best = bests[key] ?? 0;
 
   return (
@@ -108,14 +123,28 @@ export function ChangeRace() {
 
       {phase === "ready" || phase === "over" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Chord pair">
-            {CHANGE_PAIRS.map(([a, b], i) => (
-              <Button key={`${a}-${b}`} size="sm" variant={i === pairIdx ? "default" : "secondary"} className="font-display font-bold" role="radio" aria-checked={i === pairIdx} onClick={() => setPairIdx(i)} data-testid="race-pair">
+          <TierPicker value={tier} onChange={setTier} note={(t) => CHANGE_PAIRS[t].slice(0, 2).map(([x, y]) => `${pretty(x)}↔${pretty(y)}`).join("  ") + "…"} />
+          <div className={cn("flex flex-wrap gap-1.5", usingOwn && "opacity-50")} role="radiogroup" aria-label="Chord pair">
+            {pairs.map(([a, b], i) => (
+              <Button key={`${a}-${b}`} size="sm" variant={!usingOwn && i === pairIdx ? "default" : "secondary"} className="font-display font-bold" role="radio" aria-checked={!usingOwn && i === pairIdx} onClick={() => (setPairIdx(i), setOwn([]))} data-testid="race-pair">
                 {pretty(a)} ↔ {pretty(b)}
                 {bests[`race:${a}-${b}`] ? <span className="ml-1 font-mono text-[10px] opacity-70">{bests[`race:${a}-${b}`]}</span> : null}
               </Button>
             ))}
           </div>
+          <MineToggle checked={mineOn} onChange={setMineOn} count={Object.keys(mine).length} tier={tier} />
+          {mineOn && Object.keys(mine).length ? (
+            <div className="space-y-1 rounded-md border p-2" style={{ borderColor: "#ffe60055", background: "#0b0b16" }}>
+              <p className="text-[11px] text-muted-foreground">Make your own pair — tap two (your saved chords are starred):</p>
+              <div className="flex flex-wrap gap-1.5">
+                {ownChoices.map((k) => (
+                  <Button key={k} size="sm" variant={own.includes(k) ? "default" : "secondary"} className="h-7 px-2 font-display text-xs font-bold" onClick={() => pickOwn(k)} data-testid="race-own">
+                    {k.startsWith("my:") ? "★ " : ""}{name(k)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch checked={hints} onCheckedChange={setHints} aria-label="Show chord shapes" /> Show shapes
           </label>
@@ -137,7 +166,7 @@ export function ChangeRace() {
       <div className="relative grid min-h-[22rem] place-items-center rounded-xl border-2 p-4" style={{ ...neonLane, borderColor: "#2a1f4d" }} data-testid="race-board">
         {phase === "ready" ? (
           <div className="space-y-3 text-center">
-            <p className="text-sm text-muted-foreground">Start on {pretty(pair[0])}, then {pretty(pair[1])}, then back — as fast as you can while every strum stays clean.</p>
+            <p className="text-sm text-muted-foreground">Start on {name(pair[0])}, then {name(pair[1])}, then back — as fast as you can while every strum stays clean.</p>
             <Button size="lg" className="h-12 gap-2 px-6 text-base" onClick={() => void start()} data-testid="race-start"><Play className="h-5 w-5" /> Start</Button>
           </div>
         ) : phase === "countdown" ? (
@@ -145,19 +174,19 @@ export function ChangeRace() {
         ) : phase === "playing" ? (
           <div className="flex w-full flex-col items-center gap-4" data-testid="race-due" data-chord={due}>
             <div key={`${due}-${race.changes}`} className="flex w-full max-w-md items-center justify-center gap-4 rounded-2xl border-[3px] px-4 py-5 sm:gap-6" style={neonCard(neonOf(due))}>
-              <span className="font-display text-[6rem] font-black leading-none sm:text-[7.5rem]" style={neonText(neonOf(due))}>{pretty(due)}</span>
-              {hints ? <ChordBox tab={CHORDS[due]!.tab} size={112} /> : null}
+              <span className={cn("font-display font-black leading-none", due.length > 5 ? "text-[3.5rem] sm:text-[5rem]" : "text-[6rem] sm:text-[7.5rem]")} style={neonText(neonOf(due))}>{due}</span>
+              {hints && pool[dueKey]?.tab ? <ChordBox tab={pool[dueKey]!.tab} size={112} /> : null}
             </div>
             <span className="flex items-center gap-2 text-muted-foreground">
               <span className="text-xs uppercase tracking-widest">next</span>
               <ArrowRight className="h-5 w-5" />
-              <span className="rounded-lg border-2 px-3 py-1 font-display text-3xl font-black" style={{ ...neonCard(neonOf(next), false), ...neonText(neonOf(next)) }}>{pretty(next)}</span>
+              <span className="rounded-lg border-2 px-3 py-1 font-display text-3xl font-black" style={{ ...neonCard(neonOf(next), false), ...neonText(neonOf(next)) }}>{next}</span>
             </span>
           </div>
         ) : (
           <div className="space-y-2 text-center" data-testid="race-over">
             <p className="font-display text-5xl font-black" style={neonText(NEON_INFO)}>Time!</p>
-            <p className="text-lg"><b className="text-3xl" style={neonText(NEON_GOOD)} data-testid="race-final">{race.changes}</b> clean change{race.changes === 1 ? "" : "s"} in a minute · {pretty(pair[0])} ↔ {pretty(pair[1])}</p>
+            <p className="text-lg"><b className="text-3xl" style={neonText(NEON_GOOD)} data-testid="race-final">{race.changes}</b> clean change{race.changes === 1 ? "" : "s"} in a minute · {name(pair[0])} ↔ {name(pair[1])}</p>
             {newBest ? <p className="flex items-center justify-center gap-1.5 text-xl font-black" style={neonText("#ffe600")}><Trophy className="h-6 w-6" /> New best!</p> : <p className="text-sm text-muted-foreground">Best: {best}</p>}
             <p className="text-xs text-muted-foreground">{race.misses} strum{race.misses === 1 ? "" : "s"} weren't clean. Tip: 30+ changes a minute on a pair means it's in your hands.</p>
             <Button size="lg" className="h-11 gap-2" onClick={() => void start()}><Zap className="h-4 w-4" /> Go again</Button>

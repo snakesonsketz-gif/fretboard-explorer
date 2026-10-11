@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, Ear, Lock, Play, Square, Trophy, Turtle, Unlock, Volume2, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Ear, Play, Square, Trophy, Turtle, Volume2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { engine } from "@/lib/engine";
-import { EAR_ANSWERS, EAR_LEVELS, EAR_ROUND, EAR_UNLOCK, earPoints, earQuestion, earUnlocked, loadBests, saveBest, type EarQuestion } from "@/lib/games";
+import { EAR_ANSWERS, EAR_READY, EAR_ROUND, earLevel, earPoints, earQuestion, loadBests, saveBest, savedEarAnswers, type EarAnswer, type EarMode, type EarQuestion } from "@/lib/games";
+import { TIERS, tierIndex } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 import { Stat } from "./ChordRush";
+import { MineToggle, TierPicker, useRemembered, useSavedChords, useTier } from "./TierPicker";
 import { NEON_BAD, NEON_GOOD, NEON_INFO, neonCard, neonLane, neonText } from "./neon";
 
 type Phase = "ready" | "playing" | "over";
@@ -33,16 +35,23 @@ function hear(q: EarQuestion, kind: "chord" | "interval", slow = false) {
 
 /**
  * Ear Trainer: the app plays a chord or an interval, you tap what you heard. Ten sounds a round,
- * points grow with the streak, and 8 right on a level unlocks the next one. No microphone.
+ * points grow with the streak. Chords or intervals, at four difficulties; saved chord types from
+ * Explore can join the chord rounds. No microphone.
  */
 export function EarTrainer() {
-  const [levelIdx, setLevelIdx] = useState(0);
-  const level = EAR_LEVELS[levelIdx]!;
+  const [kind, setKindRaw] = useState<EarMode>("chord");
+  const [tier, setTier] = useTier(`ear.${kind}`);
+  const [mineOn, setMineOn] = useRemembered("fretlab.games.mine.ear", true);
+  const favs = useSavedChords();
+  const builtIn = earLevel(kind, tier);
+  const mine = kind === "chord" ? savedEarAnswers(favs, tier, builtIn.answers) : {};
+  const answers: Record<string, EarAnswer> = { ...EAR_ANSWERS, ...mine };
+  const level = mineOn && kind === "chord" ? earLevel(kind, tier, Object.keys(mine)) : builtIn;
+  const setKind = (k: EarMode) => setKindRaw(k);
   const [phase, setPhase] = useState<Phase>("ready");
   const [r, setR] = useState<Round>(fresh());
   const [bests, setBests] = useState<Record<string, number>>({});
   const [newBest, setNewBest] = useState(false);
-  const [unlocked, setUnlocked] = useState<number | null>(null);
   const [last, setLast] = useState<{ text: string; good: boolean; id: number } | null>(null);
   const live = useRef(r);
   live.current = r;
@@ -51,10 +60,6 @@ export function EarTrainer() {
 
   useEffect(() => setBests(loadBests()), []);
   useEffect(() => () => void (timer.current !== null && window.clearTimeout(timer.current)), []);
-  // A level that's still locked can't stay chosen (e.g. after bests were cleared).
-  useEffect(() => {
-    if (!earUnlocked(levelIdx, bests)) setLevelIdx(0);
-  }, [bests, levelIdx]);
 
   const clearTimer = () => {
     if (timer.current !== null) window.clearTimeout(timer.current);
@@ -62,7 +67,7 @@ export function EarTrainer() {
   };
 
   const ask = (prev: Round) => {
-    const q = earQuestion(level, prev.recent.slice(-2));
+    const q = earQuestion(level, prev.recent.slice(-2), Math.random, answers);
     const next = { ...prev, n: prev.n + 1, q, picked: null, recent: [...prev.recent, q.answer].slice(-4) };
     setR(next);
     hear(q, level.kind);
@@ -72,21 +77,14 @@ export function EarTrainer() {
     clearTimer();
     engine.unlock(); // inside the tap (iPhone)
     setNewBest(false);
-    setUnlocked(null);
     setLast(null);
     setPhase("playing");
     ask(fresh());
   };
 
   const finish = (fin: Round) => {
-    const before = loadBests();
-    const openBefore = EAR_LEVELS.map((_, i) => earUnlocked(i, before));
     setNewBest(saveBest(`ear:${level.id}`, fin.score));
-    saveBest(`earok:${level.id}`, fin.correct);
-    const all = loadBests();
-    setBests(all);
-    const opened = EAR_LEVELS.findIndex((_, i) => !openBefore[i] && earUnlocked(i, all));
-    setUnlocked(opened >= 0 ? opened : null);
+    setBests(loadBests());
     setPhase("over");
   };
 
@@ -101,14 +99,14 @@ export function EarTrainer() {
     const cur = live.current;
     if (!cur.q || cur.picked) return;
     const right = id === cur.q.answer;
-    const name = EAR_ANSWERS[cur.q.answer]!.label;
+    const name = answers[cur.q.answer]!.label;
     const gain = right ? earPoints(cur.streak) : 0;
     const streak = right ? cur.streak + 1 : 0;
     setR({ ...cur, picked: id, score: cur.score + gain, streak, topStreak: Math.max(cur.topStreak, streak), correct: cur.correct + (right ? 1 : 0), marks: [...cur.marks, right] });
     setLast(
       right
         ? { text: `${name} ✓ +${gain}${streak >= 3 ? ` · ${streak} in a row!` : ""}`, good: true, id: ++lastId.current }
-        : { text: `That was ${name} — not ${EAR_ANSWERS[id]!.label}`, good: false, id: ++lastId.current },
+        : { text: `That was ${name} — not ${answers[id]!.label}`, good: false, id: ++lastId.current },
     );
     if (right) timer.current = window.setTimeout(advance, 1100);
   };
@@ -118,7 +116,7 @@ export function EarTrainer() {
     const cur = live.current;
     if (!cur.q || !cur.picked) return;
     hear(cur.q, level.kind);
-    const other = EAR_ANSWERS[cur.picked]!;
+    const other = answers[cur.picked]!;
     const base = cur.q.down ? cur.q.midis[1]! : cur.q.midis[0]!;
     const midis = other.steps.map((s) => base + s);
     const q2: EarQuestion = { answer: other.id, midis: cur.q.down ? midis.reverse() : midis, down: cur.q.down };
@@ -133,6 +131,7 @@ export function EarTrainer() {
   };
 
   const best = bests[`ear:${level.id}`] ?? 0;
+  const nextTier = TIERS[tierIndex(tier) + 1];
   const q = r.q;
   const many = level.answers.length > 6;
 
@@ -145,20 +144,18 @@ export function EarTrainer() {
 
       {phase !== "playing" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Level">
-            {EAR_LEVELS.map((l, i) => {
-              const open = earUnlocked(i, bests);
-              const prev = EAR_LEVELS[i - 1];
-              return (
-                <Button key={l.id} size="sm" variant={i === levelIdx ? "default" : "secondary"} className="gap-1 font-display font-bold" role="radio" aria-checked={i === levelIdx} disabled={!open}
-                  title={open ? undefined : `Get ${EAR_UNLOCK}/${EAR_ROUND} on ${prev?.name} to unlock`} onClick={() => setLevelIdx(i)} data-testid="ear-level">
-                  {open ? null : <Lock className="h-3 w-3" />}
-                  {l.name}
-                  {bests[`ear:${l.id}`] ? <span className="ml-0.5 font-mono text-[10px] opacity-70">{bests[`ear:${l.id}`]}</span> : null}
-                </Button>
-              );
-            })}
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="What to train">
+            {(["chord", "interval"] as const).map((k) => (
+              <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)} data-testid={`ear-kind-${k}`}
+                className="rounded-lg border-2 px-3 py-2 font-display font-black transition-transform active:scale-95"
+                style={kind === k ? { ...neonCard(NEON_INFO), ...neonText(NEON_INFO) } : { borderColor: `${NEON_INFO}44`, background: "#0b0b16", color: NEON_INFO }}>
+                {k === "chord" ? "Chord types" : "Intervals"}
+              </button>
+            ))}
           </div>
+          <TierPicker value={tier} onChange={setTier} bests={Object.fromEntries(TIERS.map((t) => [t.id, bests[`ear:${kind}:${t.id}`] ?? 0]))} note={(t) => earLevel(kind, t).name} />
+          <p className="text-xs text-muted-foreground" data-testid="ear-pool">{level.answers.map((a) => answers[a]?.label).join(" · ")}</p>
+          {kind === "chord" ? <MineToggle checked={mineOn} onChange={setMineOn} count={Object.keys(mine).length} tier={tier} what="chord types" /> : null}
           <InstrumentPicker />
         </div>
       ) : null}
@@ -182,9 +179,8 @@ export function EarTrainer() {
           <div className="space-y-3 text-center">
             <Ear className="mx-auto h-14 w-14" style={{ color: NEON_INFO, filter: `drop-shadow(0 0 10px ${NEON_INFO})` }} />
             <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-              {level.kind === "chord" ? "A chord plays — is it " : "Two notes play — how far apart are they? "}
-              {level.kind === "chord" ? level.answers.map((a) => EAR_ANSWERS[a]!.label).join(", ").replace(/, ([^,]*)$/, " or $1") + "?" : ""}
-              {" "}{EAR_ROUND} sounds a round. Get {EAR_UNLOCK} right to unlock the next level.
+              {level.kind === "chord" ? "A chord plays — which type is it?" : "Two notes play — how far apart are they?"}
+              {" "}{EAR_ROUND} sounds a round. Get {EAR_READY} right and you're ready for the next level.
             </p>
             <Button size="lg" className="h-12 gap-2 px-6 text-base" onClick={start} data-testid="ear-start"><Play className="h-5 w-5" /> Start</Button>
           </div>
@@ -209,7 +205,7 @@ export function EarTrainer() {
 
             <div className={cn("grid w-full gap-2", many ? "grid-cols-3 sm:grid-cols-4" : level.answers.length === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3")} role="group" aria-label="What did you hear?">
               {level.answers.map((id) => {
-                const a = EAR_ANSWERS[id]!;
+                const a = answers[id]!;
                 const isAnswer = !!r.picked && id === q.answer;
                 const isWrongPick = !!r.picked && id === r.picked && id !== q.answer;
                 const color = isWrongPick ? NEON_BAD : a.color;
@@ -230,19 +226,19 @@ export function EarTrainer() {
         ) : (
           <div className="space-y-2 text-center" data-testid="ear-over">
             <p className="font-display text-5xl font-black" style={neonText(NEON_INFO)}>Round over!</p>
-            <p className="text-lg"><b className="text-4xl" style={neonText(r.correct >= EAR_UNLOCK ? NEON_GOOD : "#ffe600")} data-testid="ear-correct">{r.correct}/{EAR_ROUND}</b> right · <b style={neonText(NEON_GOOD)}>{r.score}</b> points</p>
+            <p className="text-lg"><b className="text-4xl" style={neonText(r.correct >= EAR_READY ? NEON_GOOD : "#ffe600")} data-testid="ear-correct">{r.correct}/{EAR_ROUND}</b> right · <b style={neonText(NEON_GOOD)}>{r.score}</b> points</p>
             {newBest ? <p className="flex items-center justify-center gap-1.5 text-xl font-black" style={neonText("#ffe600")}><Trophy className="h-6 w-6" /> New best!</p> : <p className="text-sm text-muted-foreground">Best: {best}</p>}
-            {unlocked !== null ? (
-              <p className="flex items-center justify-center gap-1.5 text-lg font-black" style={neonText("#ff2bd6")} data-testid="ear-unlocked"><Unlock className="h-5 w-5" /> {EAR_LEVELS[unlocked]!.name} unlocked!</p>
-            ) : r.correct < EAR_UNLOCK && levelIdx < EAR_LEVELS.length - 1 && !earUnlocked(levelIdx + 1, bests) ? (
-              <p className="text-xs text-muted-foreground">Get {EAR_UNLOCK} right to unlock {EAR_LEVELS[levelIdx + 1]!.name}.</p>
+            {r.correct >= EAR_READY && nextTier ? (
+              <p className="text-lg font-black" style={neonText("#ff2bd6")} data-testid="ear-ready">Ready for {nextTier.name}!</p>
+            ) : r.correct < EAR_READY ? (
+              <p className="text-xs text-muted-foreground">Get {EAR_READY} right and you're ready for the next level.</p>
             ) : null}
             {r.topStreak >= 3 ? <p className="text-xs text-muted-foreground">Longest streak: {r.topStreak}</p> : null}
             <div className="flex flex-wrap justify-center gap-2 pt-1">
               <Button size="lg" className="h-11 gap-2" onClick={start} data-testid="ear-again"><Zap className="h-4 w-4" /> Go again</Button>
-              {unlocked !== null ? (
-                <Button size="lg" variant="ghost" className="h-11 gap-2 border font-bold" style={{ borderColor: "#ff2bd6", color: "#ff2bd6", boxShadow: "0 0 10px #ff2bd666" }} onClick={() => { setLevelIdx(unlocked); setPhase("ready"); setR(fresh()); setLast(null); }}>
-                  Try {EAR_LEVELS[unlocked]!.name} <ArrowRight className="h-4 w-4" />
+              {r.correct >= EAR_READY && nextTier ? (
+                <Button size="lg" variant="ghost" className="h-11 gap-2 border font-bold" style={{ borderColor: "#ff2bd6", color: "#ff2bd6", boxShadow: "0 0 10px #ff2bd666" }} onClick={() => { setTier(nextTier.id); setPhase("ready"); setR(fresh()); setLast(null); }}>
+                  Try {nextTier.name} <ArrowRight className="h-4 w-4" />
                 </Button>
               ) : null}
             </div>

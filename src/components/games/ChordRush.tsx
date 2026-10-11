@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ChordBox } from "@/components/develop/ChordBox";
 import { MIC_HELP } from "@/components/listen/micHelp";
-import { CHORDS, RUSH_LEVELS, RUSH_LIVES, fallSeconds, loadBests, nextChord, rushPoints, saveBest, strumResult, type RushLevel } from "@/lib/games";
+import { CHORDS, RUSH_LEVELS, RUSH_LIVES, chordLabel, fallSeconds, loadBests, nextChord, rushPoints, saveBest, savedGameChords, strumResult, type GameChord } from "@/lib/games";
+import { TIERS } from "@/lib/levels";
 import { pretty } from "@/lib/theory";
 import { cn } from "@/lib/utils";
 import { useGameMic, type HeardStrum } from "./useGameMic";
+import { MineToggle, TierPicker, useRemembered, useSavedChords, useTier } from "./TierPicker";
 import { NEON_BAD, NEON_GOOD, NEON_INFO, neonCard, neonLane, neonOf, neonText } from "./neon";
 
 interface Drop {
@@ -25,8 +27,14 @@ type Feedback = { text: string; tone: "good" | "bad" | "info"; id: number };
  * Faster with every chord cleared; a chord that lands costs a life (3 lives).
  */
 export function ChordRush() {
-  const [levelId, setLevelId] = useState<RushLevel["id"]>("starter");
+  const [levelId, setLevelId] = useTier("rush");
   const level = RUSH_LEVELS.find((l) => l.id === levelId)!;
+  const [mineOn, setMineOn] = useRemembered("fretlab.games.mine.rush", true);
+  const favs = useSavedChords();
+  const mine = savedGameChords(favs, levelId);
+  const pool: Record<string, GameChord> = mineOn ? { ...CHORDS, ...mine } : CHORDS;
+  const names: string[] = [...level.chords, ...(mineOn ? Object.keys(mine) : [])];
+  const [bests, setBests] = useState<Record<string, number>>({});
   const [hints, setHints] = useState(true);
   const [phase, setPhase] = useState<Phase>("ready");
   const [count, setCount] = useState(3);
@@ -42,25 +50,30 @@ export function ChordRush() {
   const [newBest, setNewBest] = useState(false);
 
   // The game loop reads these (state is for drawing).
-  const g = useRef({ phase: "ready" as Phase, drop: null as Drop | null, drops: [] as Drop[], score: 0, combo: 0, lives: RUSH_LIVES, cleared: 0, missed: 0, nextId: 1 });
+  const g = useRef({ pool: CHORDS as Record<string, GameChord>, names: [] as string[], phase: "ready" as Phase, drop: null as Drop | null, drops: [] as Drop[], score: 0, combo: 0, lives: RUSH_LIVES, cleared: 0, missed: 0, nextId: 1 });
   const fbId = useRef(0);
   const say = (text: string, tone: Feedback["tone"]) => setFeedback({ text, tone, id: ++fbId.current });
 
-  useEffect(() => setBest(loadBests()[`rush:${levelId}`] ?? 0), [levelId]);
+  useEffect(() => {
+    const all = loadBests();
+    setBests(all);
+    setBest(all[`rush:${levelId}`] ?? 0);
+  }, [levelId]);
+  const label = (key: string) => pretty(chordLabel(g.current.pool, key));
 
   const mic = useGameMic(
     (t) => {
       // The chord on screen when the strum was played (a strum just after a new chord appears
       // still belongs to the old one if it began before).
       const d = g.current.drops.find((x) => t >= x.shownAt - 0.05 && t <= x.landsAt + 0.05);
-      return d && !d.done ? CHORDS[d.name]!.target : null;
+      return d && !d.done ? g.current.pool[d.name]?.target ?? null : null;
     },
     (s: HeardStrum) => onStrum(s),
   );
 
   const spawn = (now: number) => {
     const s = g.current;
-    const name = nextChord(level.chords, s.drop?.name ?? null);
+    const name = nextChord(s.names, s.drop?.name ?? null);
     const fall = fallSeconds(level, s.cleared);
     const d: Drop = { id: s.nextId++, name, shownAt: now, landsAt: now + fall, done: false };
     s.drop = d;
@@ -83,6 +96,7 @@ export function ChordRush() {
     setPhase("over");
     setNewBest(saveBest(`rush:${level.id}`, s.score));
     setBest(Math.max(best, s.score));
+    setBests(loadBests());
     mic.stop();
   };
 
@@ -98,7 +112,7 @@ export function ChordRush() {
       const pts = rushPoints((d.landsAt - h.time) / (d.landsAt - d.shownAt), s.combo - 1);
       s.score += pts;
       s.cleared += 1;
-      say(`${pretty(d.name)} — clean! +${pts}${s.combo > 1 ? `  ·  ×${s.combo} combo` : ""}`, "good");
+      say(`${label(d.name)} — clean! +${pts}${s.combo > 1 ? `  ·  ×${s.combo} combo` : ""}`, "good");
       sync();
       spawn(mic.now());
     } else if (r.kind === "wrong") {
@@ -125,7 +139,7 @@ export function ChordRush() {
           s.lives -= 1;
           s.combo = 0;
           s.missed += 1;
-          say(`Too slow — that was ${pretty(d.name)}`, "bad");
+          say(`Too slow — that was ${label(d.name)}`, "bad");
           sync();
           if (s.lives <= 0) return gameOver();
           spawn(now);
@@ -139,7 +153,7 @@ export function ChordRush() {
   }, [phase]);
 
   const start = async () => {
-    g.current = { phase: "countdown", drop: null, drops: [], score: 0, combo: 0, lives: RUSH_LIVES, cleared: 0, missed: 0, nextId: 1 };
+    g.current = { pool, names, phase: "countdown", drop: null, drops: [], score: 0, combo: 0, lives: RUSH_LIVES, cleared: 0, missed: 0, nextId: 1 };
     sync();
     setDrop(null);
     setFeedback(null);
@@ -162,7 +176,7 @@ export function ChordRush() {
     mic.stop();
   };
 
-  const tab = drop ? CHORDS[drop.name]!.tab : null;
+  const tab = drop ? g.current.pool[drop.name]?.tab || null : null;
   const danger = progress > 0.75;
 
   return (
@@ -173,16 +187,16 @@ export function ChordRush() {
       </div>
 
       {phase === "ready" || phase === "over" ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {RUSH_LEVELS.map((l) => (
-            <Button key={l.id} size="sm" variant={l.id === levelId ? "default" : "secondary"} onClick={() => setLevelId(l.id)} data-testid={`rush-level-${l.id}`}>
-              {l.name}
-            </Button>
-          ))}
-          <span className="text-xs text-muted-foreground">{level.chords.map(pretty).join(" · ")}</span>
-          <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch checked={hints} onCheckedChange={setHints} aria-label="Show chord shapes" /> Show shapes
-          </label>
+        <div className="space-y-2">
+          <TierPicker value={levelId} onChange={setLevelId} bests={Object.fromEntries(TIERS.map((t) => [t.id, bests[`rush:${t.id}`] ?? 0]))}
+            note={(t) => RUSH_LEVELS.find((l) => l.id === t)!.chords.slice(0, 5).map(pretty).join(" ") + "…"} />
+          <p className="text-xs text-muted-foreground" data-testid="rush-pool">{names.map((n) => pretty(chordLabel(pool, n))).join(" · ")}</p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <MineToggle checked={mineOn} onChange={setMineOn} count={Object.keys(mine).length} tier={levelId} />
+            <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+              <Switch checked={hints} onCheckedChange={setHints} aria-label="Show chord shapes" /> Show shapes
+            </label>
+          </div>
         </div>
       ) : null}
 
@@ -212,11 +226,12 @@ export function ChordRush() {
           <div
             key={drop.id}
             className={cn("absolute left-1/2 flex w-[88%] max-w-md items-center justify-center gap-4 rounded-2xl border-[3px] px-4 py-4 sm:gap-6", danger && "animate-pulse")}
-            style={{ ...neonCard(neonOf(drop.name)), top: `${progress * 100}%`, transform: `translate(-50%, -${progress * 100}%)` }}
+            style={{ ...neonCard(neonOf(label(drop.name))), top: `${progress * 100}%`, transform: `translate(-50%, -${progress * 100}%)` }}
             data-testid="rush-chord"
             data-chord={drop.name}
           >
-            <span className="font-display text-[5.5rem] font-black leading-none sm:text-[7rem]" style={neonText(neonOf(drop.name))}>{pretty(drop.name)}</span>
+            <span className={cn("font-display font-black leading-none", label(drop.name).length > 5 ? "text-[3.5rem] sm:text-[5rem]" : "text-[5.5rem] sm:text-[7rem]")} style={neonText(neonOf(label(drop.name)))}>{label(drop.name)}</span>
+            {drop.name.startsWith("my:") ? <span className="absolute right-2 top-1 text-[10px] font-bold uppercase tracking-widest" style={{ color: "#ffe600" }}>★ yours</span> : null}
             {hints && tab ? <ChordBox tab={tab} size={112} /> : null}
           </div>
         ) : null}
