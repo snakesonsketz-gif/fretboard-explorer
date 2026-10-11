@@ -5,6 +5,7 @@ import { setDevMode, useDevMode } from "@/lib/devMode";
 import { engine } from "@/lib/engine";
 import { cn } from "@/lib/utils";
 import { InstallTip } from "./InstallTip";
+import { WelcomeNote } from "./WelcomeNote";
 
 const TABS = [
   { to: "/", label: "Explore", icon: Search },
@@ -47,6 +48,7 @@ export function AppShell({ children, headerRight }: { children: ReactNode; heade
   return (
     <div className="dark min-h-screen bg-background text-foreground">
       <InstallTip />
+      <WelcomeNote />
       <header className="border-b border-border/70 bg-card/40">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:py-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
