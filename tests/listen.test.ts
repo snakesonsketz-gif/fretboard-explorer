@@ -87,6 +87,33 @@ describe("Listen: lessons from Bradley's real recordings (iPhone, Oct 2026)", ()
   });
 });
 
+describe("Listen: up-strums", () => {
+  const TABS: [string, TargetChord][] = [["320003", G], ["x32010", C], ["xx0232", { rootName: "D", degrees: ["1", "3", "5"], label: "D" }], ["022000", { rootName: "E", degrees: ["1", "b3", "5"], label: "Em" }], ["x02210", { rootName: "A", degrees: ["1", "b3", "5"], label: "Am" }]];
+  test("an up-strum that only catches the top 3–6 strings isn't marked wrong, missing, buzzy or dead", () => {
+    let flagged = 0;
+    for (const [tab, t] of TABS)
+      for (const k of [3, 4, 5, 6])
+        for (let seed = 1; seed <= 2; seed++) {
+          const r = attempt(tab, t, { up: true, upStrings: k, spread: 0.008, seed, amp: 0.6 });
+          flagged += r.accuracy.notes.filter((n) => n.status === "missing").length + r.accuracy.extras.filter((e) => e.status === "wrong").length + r.clarity.dead.length + (r.clarity.buzz === "some" || r.clarity.buzz === "strong" ? 1 : 0);
+        }
+    expect(flagged).toBe(0);
+  });
+  test("down-up strumming: every down-strum and nearly every up-strum is counted, nothing extra", () => {
+    let found = 0, total = 0, extra = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const parts = Array.from({ length: 12 }, (_, i) => ({ tab: TABS[seed % TABS.length]![0], at: 0.3 + i * 0.4, opts: { up: i % 2 === 1, upStrings: i % 2 ? 4 : 6, amp: i % 2 ? 0.7 : 1, spread: 0.008, seconds: 1.5 } }));
+      const { audio, onsets } = take(parts, 5.4, 0.002, seed);
+      const det = detectOnsets(audio, SR);
+      total += onsets.length;
+      found += onsets.filter((o) => det.some((d) => Math.abs(d - o) < 0.05 * SR)).length;
+      extra += det.filter((d) => !onsets.some((o) => Math.abs(d - o) < 0.05 * SR)).length;
+    }
+    expect(extra).toBe(0);
+    expect(found / total).toBeGreaterThanOrEqual(0.95);
+  });
+});
+
 describe("Listen: clarity and ring-out", () => {
   test("clean strum: no buzz, rings", () => {
     const r = attempt("320003", G);

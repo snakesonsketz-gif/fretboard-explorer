@@ -75,6 +75,9 @@ export function pluck(midi: number, rand: () => number, o: PluckOpts = {}): Floa
 export interface StrumOpts extends PluckOpts {
   /** Seconds between strings in the strum (down-strum low→high). */
   spread?: number;
+  /** Up-strum: high string first, and only the top `upStrings` strings (default all). */
+  up?: boolean;
+  upStrings?: number;
   /** Per-string overrides by string index (0 = low E). */
   strings?: Record<number, PluckOpts>;
   noise?: number;
@@ -90,8 +93,11 @@ export function strum(tab: string, o: StrumOpts = {}): { audio: Float32Array; on
   const audio = new Float32Array(Math.round(seconds * SR) + start);
   const notes = shape(tab);
   let k = 0;
-  notes.forEach((m, si) => {
-    if (m === null) return;
+  const order = notes.map((m, si) => ({ m, si }));
+  if (o.up) order.reverse();
+  const played = o.up ? order.filter((n) => n.m !== null).slice(0, o.upStrings ?? 6).map((n) => n.si) : null;
+  order.forEach(({ m, si }) => {
+    if (m === null || (played && !played.includes(si))) return;
     const off = start + Math.round(k++ * (o.spread ?? 0.012) * SR);
     const s = pluck(m, rand, { ...o, ...(o.strings?.[si] ?? {}), seconds: seconds - (off - start) / SR });
     for (let i = 0; i < s.length && off + i < audio.length; i++) audio[off + i]! += s[i]!;

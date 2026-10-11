@@ -67,7 +67,7 @@ const BUZZ = "Press just enough that the notes still sound, but buzz or rattle a
 /**
  * Round 2 (Oct 2026), aimed at what Bradley's first 21 takes showed: buzz was only really in the
  * recording on 7 strums, muting is only detectable on a note no other string doubles, and soft,
- * quick and slow strumming need more examples.
+ * quick, slow and up-strums (none in round 1) need examples.
  */
 const ROUND_2 = [
   // ---------------- real buzz, on more chords
@@ -86,6 +86,11 @@ const ROUND_2 = [
   { id: "r2-soft-am", label: "clean", target: Am, tab: "x02210", strums: 4, title: "A minor — softly", how: `Clean A minor, strummed softly. ${RING}` },
   { id: "r2-fast-c", label: "clean", target: C, tab: "x32010", strums: 8, title: "Open C — steady rhythm", how: "Clean C, 8 down-strums in a steady rhythm, about two per second, with a light, relaxed strumming hand. Let the last one ring out." },
   { id: "r2-fast-em", label: "clean", target: Em, tab: "022000", strums: 8, title: "E minor — down and up", how: "Clean E minor, 8 strums alternating down and up (down-up-down-up…), about two per second. Each down and each up counts as one strum. Let the last one ring out." },
+  // ---------------- up-strums (high string first, often only the top strings, usually softer)
+  { id: "r2-up-g", label: "clean", target: G, tab: "320003", strums: 4, title: "Open G — up-strums only", how: `Clean G, but strum UP only (high string first). It's fine if you only catch the top 3 or 4 strings — that's normal for an up-strum. ${RING}` },
+  { id: "r2-up-c", label: "clean", target: C, tab: "x32010", strums: 4, title: "Open C — up-strums only", how: `Clean C, up-strums only, at your normal strength. ${RING}` },
+  { id: "r2-up-soft-am", label: "clean", target: Am, tab: "x02210", strums: 4, title: "A minor — light up-strums", how: `Clean A minor, up-strums only, lightly — the soft up-strum you'd use between down-strums. ${RING}` },
+  { id: "r2-downup-g", label: "clean", target: G, tab: "320003", strums: 8, title: "Open G — down and up, slowly", how: "Clean G, 8 strums alternating down and up (down-up-down-up…), about one strum per second so each one is clear. Each down and each up counts as one strum. Let the last one ring out." },
   { id: "r2-slow-g", label: "clean", target: G, tab: "320003", strums: 4, title: "Open G — slow strums", how: `Clean G, but strum slowly so the strings sound one after another (about half a second from the low string to the high one). ${RING}` },
 ] as Omit<PlanStep, "spaced" | "round">[];
 
