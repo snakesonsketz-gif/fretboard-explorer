@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { centsOff, detectPitch, fft, windowFor } from "../src/lib/tuner/pitch";
 import { advice, nearestNote, nearestString, Tracker, zoneOf } from "../src/lib/tuner/tracker";
-import { FAVORITE_TUNINGS, INSTRUMENTS, midiHz, notesText, parseNote, shortName, stringsOf, tuningById, TUNINGS } from "../src/lib/tuner/tunings";
+import { FAVORITE_TUNINGS, INSTRUMENTS, midiHz, notesText, octaveName, parseNote, shortName, stringsOf, tuningById, TUNINGS } from "../src/lib/tuner/tunings";
 import { pluck, rng, SR } from "./helpers/guitar";
 
 /** A decaying string-like tone with exact pitch: weak fundamental, strong overtones, a little noise. */
@@ -208,5 +208,41 @@ describe("tuner settings", () => {
     expect(c.strings.map((x) => x.midi)).toEqual([36, 43, 48, 53, 57, 60]);
     expect(activeTuning(sanitizeSettings({ instrument: "bass" })).name).toBe("Standard");
     expect(activeTuning(sanitizeSettings({ instrument: "guitar7" })).strings.length).toBe(7);
+  });
+});
+
+describe("chromatic mode", () => {
+  const dropC = stringsOf(tuningById("drop-c")!).map((s) => s.midi);
+  const p = (hz: number) => ({ hz, clarity: 0.95, level: 0.1 });
+  test("tunes to the nearest note, with its octave, and says when it's one of the strings", () => {
+    const t = new Tracker({ midis: dropC, a4: 440, mode: "chromatic" });
+    const r = t.push(p(midiHz(38, 440, 12))); // D2, a little sharp: not a Drop C string
+    expect(r.targetMidi).toBe(38);
+    expect(r.string).toBe(-1);
+    expect(r.cents).toBeCloseTo(12, 6);
+    const c = new Tracker({ midis: dropC, a4: 440, mode: "chromatic" });
+    const low = c.push(p(midiHz(36, 440, -7))); // C2 = the 6th string
+    expect(low.targetMidi).toBe(36);
+    expect(low.string).toBe(0);
+    // The same letter an octave up is a different target (C3 = 4th string), never confused with C2.
+    const c3 = new Tracker({ midis: dropC, a4: 440, mode: "chromatic" }).push(p(midiHz(48, 440, 3)));
+    expect(c3.targetMidi).toBe(48);
+    expect(c3.string).toBe(2);
+  });
+  test("a locked string still wins in chromatic mode", () => {
+    const t = new Tracker({ midis: dropC, a4: 440, mode: "chromatic", locked: 0 });
+    const r = t.push(p(midiHz(40)));
+    expect(r.targetMidi).toBe(36);
+    expect(r.cents).toBeCloseTo(400, 6);
+  });
+  test("tuning names carry octaves", () => {
+    expect(octaveName(tuningById("drop-c")!)).toBe("C2 G2 C3 F3 A3 D4");
+    expect(octaveName(tuningById("standard")!)).toBe("E2 A2 D3 G3 B3 E4");
+  });
+  test("settings default to chromatic with voices ignored", () => {
+    const s = sanitizeSettings(null);
+    expect(s.mode).toBe("chromatic");
+    expect(s.ignoreVoices).toBe(true);
+    expect(sanitizeSettings({ mode: "strings", ignoreVoices: false }).mode).toBe("strings");
   });
 });

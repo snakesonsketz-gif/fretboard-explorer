@@ -47,21 +47,27 @@ export function advice(cents: number): string {
 }
 
 export interface Reading {
-  /** Index of the string (auto or locked), or -1 when the note is far from every string. */
+  /** Index of the matching string, or -1 (by string: far from every string; chromatic: not a string's note). */
   string: number;
-  /** Cents off the target (string, or the nearest note when string is -1). */
+  /** The note being tuned to (MIDI): the string's note, or in chromatic mode the nearest note. */
+  targetMidi: number;
+  /** Cents off the target. */
   cents: number;
   hz: number;
   targetHz: number;
-  /** The nearest chromatic note (always filled). */
+  /** The nearest chromatic note to what's heard (always filled). */
   note: { midi: number; name: string; octave: number };
   /** Cents off the nearest chromatic note. */
   noteCents: number;
 }
 
+export type TunerMode = "chromatic" | "strings";
+
 export interface TrackerOptions {
   midis: number[];
   a4: number;
+  /** "chromatic": tune to the nearest note; "strings": tune to the nearest (or locked) string. */
+  mode?: TunerMode;
   /** Lock to one string (index) instead of picking the nearest. */
   locked?: number | null;
   flats?: boolean;
@@ -71,51 +77,58 @@ export interface TrackerOptions {
 const FAR = 350;
 
 /**
- * Smooths readings: needs two readings in a row on a new string before switching to it, and
- * shows the median of the last few readings so the needle doesn't jitter.
+ * Smooths readings: needs two readings in a row on a new note or string before switching to it,
+ * and shows the median of the last few readings so the needle doesn't jitter.
  */
 export class Tracker {
   private recent: number[] = [];
-  private current = -2;
-  private pending = -2;
+  private current: number | null = null;
+  private pending: number | null = null;
   private pendingCount = 0;
 
   constructor(public opts: TrackerOptions) {}
 
   reset() {
     this.recent = [];
-    this.current = -2;
-    this.pending = -2;
+    this.current = null;
+    this.pending = null;
     this.pendingCount = 0;
   }
 
   push(p: Pitch): Reading {
     const { midis, a4, locked, flats } = this.opts;
+    const chromatic = this.opts.mode === "chromatic";
     const near = nearestNote(p.hz, a4, flats);
-    let string: number;
-    if (locked != null && locked >= 0 && locked < midis.length) string = locked;
+    const isLocked = locked != null && locked >= 0 && locked < midis.length;
+    // What we tune to: the nearest note (chromatic), the locked string, or the nearest string.
+    let key: number;
+    if (chromatic && !isLocked) key = near.midi;
+    else if (isLocked) key = -100 - locked; // strings are keyed apart from notes
     else {
       const m = nearestString(p.hz, midis, a4);
-      string = Math.abs(m.cents) > FAR ? -1 : m.index;
+      key = Math.abs(m.cents) > FAR ? near.midi : -100 - m.index;
     }
-    if (string !== this.current) {
-      if (string === this.pending) this.pendingCount++;
+    if (key !== this.current) {
+      if (key === this.pending) this.pendingCount++;
       else {
-        this.pending = string;
+        this.pending = key;
         this.pendingCount = 1;
       }
-      if (this.current === -2 || this.pendingCount >= 2) {
-        this.current = string;
+      if (this.current === null || this.pendingCount >= 2) {
+        this.current = key;
         this.recent = [];
-      } else string = this.current;
+      } else key = this.current;
     } else this.pendingCount = 0;
 
-    const targetHz = string >= 0 ? midiHz(midis[string]!, a4) : midiHz(near.midi, a4);
+    const stringIdx = key <= -100 ? -100 - key : -1;
+    const targetMidi = stringIdx >= 0 ? midis[stringIdx]! : key;
+    const string = stringIdx >= 0 ? stringIdx : midis.indexOf(targetMidi);
+    const targetHz = midiHz(targetMidi, a4);
     const raw = centsOff(p.hz, targetHz);
     this.recent.push(raw);
     if (this.recent.length > 5) this.recent.shift();
     const sorted = [...this.recent].sort((a, b) => a - b);
     const cents = sorted[Math.floor(sorted.length / 2)]!;
-    return { string, cents, hz: p.hz, targetHz, note: { midi: near.midi, name: near.name, octave: near.octave }, noteCents: near.cents };
+    return { string, targetMidi, cents, hz: p.hz, targetHz, note: { midi: near.midi, name: near.name, octave: near.octave }, noteCents: near.cents };
   }
 }

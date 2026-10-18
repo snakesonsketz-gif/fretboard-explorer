@@ -155,3 +155,6 @@ export function notesText(midis: number[], flats = false): string {
 
 /** "C G C F A D" — the usual short way to write a tuning. */
 export const shortName = (t: Pick<Tuning, "notes">) => stringsOf(t).map((s) => s.name).join(" ");
+
+/** "C2 G2 C3 F3 A3 D4" — every string with its octave, so the target pitch is never ambiguous. */
+export const octaveName = (t: Pick<Tuning, "notes">) => stringsOf(t).map((s) => `${s.name}${s.octave}`).join(" ");

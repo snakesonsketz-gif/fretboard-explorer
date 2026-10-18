@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTabActive } from "@/lib/tabActive";
 import { A4_MAX, A4_MIN, activeTuning, DEFAULT_SETTINGS, loadSettings, saveSettings, standardFor, type TunerSettings } from "@/lib/tuner/settings";
 import { advice, zoneOf } from "@/lib/tuner/tracker";
-import { FAVORITE_TUNINGS, GROUP_ORDER, INSTRUMENTS, midiName, midiOctave, shortName, stringsOf, tuningById, tuningsFor, type InstrumentId } from "@/lib/tuner/tunings";
+import { FAVORITE_TUNINGS, GROUP_ORDER, INSTRUMENTS, midiHz, midiName, midiOctave, octaveName, stringsOf, tuningById, tuningsFor, type InstrumentId } from "@/lib/tuner/tunings";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tuner")({
@@ -46,7 +46,7 @@ export function TunerPage() {
   const bigChange = changes.some((c) => Math.abs(c) >= 3);
 
   useEffect(() => setLocked(null), [midisKey, s.instrument]);
-  const T = useTuner({ midis, a4: s.a4, locked, flats });
+  const T = useTuner({ midis, a4: s.a4, locked, flats, mode: s.mode, pluckedOnly: s.ignoreVoices });
 
   // Leaving the tab turns the microphone and any tone off.
   const tabActive = useTabActive();
@@ -62,6 +62,12 @@ export function TunerPage() {
   const zone = r ? zoneOf(r.cents) : null;
   const shownString = r && r.string >= 0 ? tuning.strings[r.string] : null;
   const listening = T.state !== "off";
+  // What the needle is tuning to, with its octave: the heard note (chromatic), or the string.
+  const target = r
+    ? { midi: r.targetMidi, name: shownString && shownString.midi === r.targetMidi ? shownString.name : midiName(r.targetMidi, flats), octave: midiOctave(r.targetMidi) }
+    : locked !== null
+      ? { midi: tuning.strings[locked]!.midi, name: tuning.strings[locked]!.name, octave: tuning.strings[locked]!.octave }
+      : null;
 
   const pickInstrument = (id: InstrumentId) => update((v) => ({ ...v, instrument: id }));
   const pickTuning = (id: string) =>
@@ -141,7 +147,7 @@ export function TunerPage() {
                       <SelectLabel>{g}</SelectLabel>
                       {items.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
-                          {t.name} <span className="ml-1 font-mono text-xs text-muted-foreground">{shortName(t)}</span>
+                          {t.name} <span className="ml-1 font-mono text-xs text-muted-foreground">{octaveName(t)}</span>
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -165,7 +171,7 @@ export function TunerPage() {
 
           <div>
             <p className="font-display text-lg font-bold" data-testid="tuner-tuning-name">
-              {tuning.name} <span className="ml-1 font-mono text-base text-primary">{tuning.strings.map((x) => x.name).join(" ")}</span>
+              {tuning.name} <span className="ml-1 font-mono text-base text-primary">{tuning.strings.map((x) => `${x.name}${x.octave}`).join(" ")}</span>
             </p>
             {tuning.note ? <p className="text-xs text-muted-foreground">{tuning.note}</p> : null}
           </div>
@@ -173,23 +179,73 @@ export function TunerPage() {
 
         {/* Meter */}
         <section className="panel flex flex-col items-center gap-2 p-4" aria-label="Tuner" aria-live="polite">
+          <div className="flex w-full flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            <div className="inline-flex rounded-lg bg-secondary/60 p-0.5" role="radiogroup" aria-label="Tuner mode">
+              {(
+                [
+                  ["chromatic", "Chromatic"],
+                  ["strings", "By string"],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={s.mode === m}
+                  onClick={() => update((v) => ({ ...v, mode: m }))}
+                  className={cn("rounded-md px-3 py-1 text-xs font-semibold transition-colors", s.mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+                  data-testid={`tuner-mode-${m}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Switch checked={s.ignoreVoices} onCheckedChange={(v) => update((x) => ({ ...x, ignoreVoices: v }))} aria-label="Ignore voices and background noise" data-testid="tuner-ignore-voices" />
+              Ignore voices &amp; noise
+            </label>
+            {s.instrument === "other" && s.ignoreVoices ? (
+              <p className="w-full text-center text-[11px] text-primary">Tuning a bowed instrument (violin, cello)? Turn off “Ignore voices” — a bowed note doesn't fade like a plucked one.</p>
+            ) : null}
+          </div>
           <div className="text-center" data-testid="tuner-readout">
             <p className="h-5 text-xs uppercase tracking-widest text-muted-foreground">
-              {shownString ? `${ordinal(shownString.number)} string${locked !== null ? " (locked)" : ""}` : r ? "Not one of these strings" : listening ? "Play one string" : " "}
+              {r
+                ? shownString
+                  ? `${ordinal(shownString.number)} string${locked !== null ? " (locked)" : ""}`
+                  : s.mode === "chromatic"
+                    ? "Chromatic"
+                    : "Not one of these strings"
+                : locked !== null
+                  ? `${ordinal(tuning.strings[locked]!.number)} string (locked)`
+                  : listening
+                    ? "Pluck one string"
+                    : " "}
             </p>
             <p className={cn("font-display text-7xl font-black leading-none tabular-nums", zone ? ZONE_TEXT[zone] : "text-muted-foreground/40")} data-testid="tuner-note">
-              {shownString ? shownString.name : r ? r.note.name : locked !== null ? tuning.strings[locked]!.name : "–"}
-              <span className="ml-1 align-top text-2xl font-bold text-muted-foreground">
-                {shownString ? shownString.octave : r ? r.note.octave : locked !== null ? tuning.strings[locked]!.octave : ""}
+              {target ? target.name : "–"}
+              <span className="ml-0.5 text-4xl font-black" data-testid="tuner-octave">
+                {target ? target.octave : ""}
               </span>
+            </p>
+            <p className="mt-1 h-4 text-xs text-muted-foreground" data-testid="tuner-target">
+              {target ? `Target ${target.name}${target.octave} · ${midiHz(target.midi, s.a4).toFixed(2)} Hz` : ""}
             </p>
           </div>
           <TunerMeter cents={r ? r.cents : null} active={!!r} />
           <p className={cn("min-h-6 text-center text-base font-semibold", zone ? ZONE_TEXT[zone] : "text-muted-foreground")} data-testid="tuner-advice">
-            {r ? advice(r.cents) : T.toneString !== null ? `Reference tone: ${tuning.strings[T.toneString]!.name}${tuning.strings[T.toneString]!.octave}` : listening ? "Listening…" : "Press Start and play a string"}
+            {r
+              ? advice(r.cents)
+              : T.toneString !== null
+                ? `Reference tone: ${tuning.strings[T.toneString]!.name}${tuning.strings[T.toneString]!.octave}`
+                : T.hear === "voice"
+                  ? "Ignoring voices and held sounds — pluck a string"
+                  : listening
+                    ? "Listening… pluck a string"
+                    : "Press Start and play a string"}
           </p>
           <p className="h-4 font-mono text-xs text-muted-foreground" data-testid="tuner-hz">
-            {r ? `${r.hz.toFixed(1)} Hz → ${r.targetHz.toFixed(1)} Hz · ${r.cents > 0 ? "+" : ""}${r.cents.toFixed(1)}¢` : ""}
+            {r ? `Hearing ${r.note.name}${r.note.octave} · ${r.hz.toFixed(1)} Hz · ${r.cents > 0 ? "+" : ""}${r.cents.toFixed(1)}¢` : ""}
           </p>
           <div className="flex items-center gap-3 pt-1">
             {listening ? (
@@ -239,7 +295,7 @@ export function TunerPage() {
                   <span className="text-[10px] text-muted-foreground">{x.number}</span>
                   <span className={cn("font-display text-xl font-black leading-tight", done ? "text-extension" : active && zone ? ZONE_TEXT[zone] : "")}>
                     {x.name}
-                    <span className="text-[10px] font-semibold text-muted-foreground">{x.octave}</span>
+                    <span className="text-sm font-bold">{x.octave}</span>
                   </span>
                   <span className={cn("h-3.5 text-[10px] font-semibold", ch < 0 ? "text-third" : "text-primary")} title={ch ? `${Math.abs(ch)} half step${Math.abs(ch) === 1 ? "" : "s"} ${ch < 0 ? "below" : "above"} standard` : undefined}>
                     {ch ? `${ch < 0 ? "↓" : "↑"}${Math.abs(ch)}` : done ? "✓" : ""}
@@ -253,7 +309,9 @@ export function TunerPage() {
           <p className="text-xs text-muted-foreground">
             {locked !== null
               ? `Locked to the ${ordinal(tuning.strings[locked]!.number)} string — tap it again to go back to automatic.`
-              : "Tap a string to hear it and lock the tuner to it. Otherwise it picks the string you play."}
+              : s.mode === "chromatic"
+                ? "Tap a string to hear it and lock the tuner to it. Otherwise it shows whatever note you play, with its octave."
+                : "Tap a string to hear it and lock the tuner to it. Otherwise it picks the string you play."}
             {bigChange && locked === null ? (
               <span className="mt-1 block text-primary">
                 Big change from standard (↓/↑ = half steps). Tap each string while you retune it, so the tuner can't mistake it for its neighbour.

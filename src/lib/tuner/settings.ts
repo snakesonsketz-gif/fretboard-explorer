@@ -1,4 +1,5 @@
 /** What the tuner remembers on this device: instrument, tuning per instrument, A4, custom tunings. */
+import type { TunerMode } from "./tracker";
 import { DEFAULT_TUNING, INSTRUMENTS, notesText, stringsOf, tuningById, tuningsFor, type InstrumentId, type TuningString } from "./tunings";
 
 export interface TunerSettings {
@@ -11,13 +12,17 @@ export interface TunerSettings {
   custom: Partial<Record<InstrumentId, number[]>>;
   /** Reference tone keeps sounding until tapped again. */
   hold: boolean;
+  /** Chromatic (any note) or by string. */
+  mode: TunerMode;
+  /** Ignore voices and sounds that aren't a plucked string. */
+  ignoreVoices: boolean;
 }
 
 export const A4_MIN = 415;
 export const A4_MAX = 466;
 const KEY = "fretlab.tuner.v1";
 
-export const DEFAULT_SETTINGS: TunerSettings = { instrument: "guitar", tuning: { guitar: DEFAULT_TUNING }, a4: 440, custom: {}, hold: false };
+export const DEFAULT_SETTINGS: TunerSettings = { instrument: "guitar", tuning: { guitar: DEFAULT_TUNING }, a4: 440, custom: {}, hold: false, mode: "chromatic", ignoreVoices: true };
 
 export function sanitizeSettings(s: Partial<TunerSettings> | null | undefined): TunerSettings {
   const out: TunerSettings = { ...DEFAULT_SETTINGS, tuning: { ...DEFAULT_SETTINGS.tuning }, custom: {} };
@@ -25,6 +30,8 @@ export function sanitizeSettings(s: Partial<TunerSettings> | null | undefined): 
   if (INSTRUMENTS.some((i) => i.id === s.instrument)) out.instrument = s.instrument!;
   if (typeof s.a4 === "number" && Number.isFinite(s.a4)) out.a4 = Math.round(Math.min(A4_MAX, Math.max(A4_MIN, s.a4)));
   out.hold = !!s.hold;
+  if (s.mode === "chromatic" || s.mode === "strings") out.mode = s.mode;
+  if (typeof s.ignoreVoices === "boolean") out.ignoreVoices = s.ignoreVoices;
   for (const inst of INSTRUMENTS) {
     const c = s.custom?.[inst.id];
     if (Array.isArray(c) && c.length >= 1 && c.length <= 12 && c.every((m) => Number.isInteger(m) && m >= 12 && m <= 96)) out.custom[inst.id] = [...c];
