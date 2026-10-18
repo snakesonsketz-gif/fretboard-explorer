@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BookOpen, Ear, FlaskConical, Gamepad2, Gauge, Music2, Search, SlidersHorizontal } from "lucide-react";
+import { BookOpen, Ear, FlaskConical, Gamepad2, Gauge, Hammer, Music2, Search, SlidersHorizontal } from "lucide-react";
 import { setDevMode, useDevMode } from "@/lib/devMode";
 import { engine } from "@/lib/engine";
 import { cn } from "@/lib/utils";
@@ -13,7 +13,10 @@ const TABS = [
   { to: "/listen", label: "Listen", icon: Ear },
   { to: "/play", label: "Play", icon: Gamepad2 },
 ] as const;
-const DEV_TAB = { to: "/develop", label: "Develop", icon: FlaskConical } as const;
+const DEV_TABS = [
+  { to: "/develop", label: "Develop", icon: FlaskConical },
+  { to: "/luthier", label: "Luthier", icon: Hammer },
+] as const;
 
 /** The Grimoire tab's own look: gothic red lettering on black, glowing when you're in the room. */
 const GRIMOIRE_RED = "#ff3842";
@@ -47,7 +50,7 @@ export function AppShell({ children, headerRight, room }: { children: ReactNode;
     if (on) void navigate({ to: "/develop" });
     else if (path === "/develop") void navigate({ to: "/" });
   };
-  const tabs = dev ? [...TABS, DEV_TAB] : TABS;
+  const tabs = dev ? [...TABS, ...DEV_TABS] : TABS;
   return (
     <div className={cn("dark min-h-screen text-foreground", room === "grimoire" ? "bg-[#070404]" : "bg-background")}>
       <header className={cn("border-b", room === "grimoire" ? "border-[#5a1219] bg-[#0b0707]" : "border-border/70 bg-card/40")}

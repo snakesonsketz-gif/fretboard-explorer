@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevelopRouteImport } from './routes/develop'
 import { Route as GrimoireRouteImport } from './routes/grimoire'
 import { Route as ListenRouteImport } from './routes/listen'
+import { Route as LuthierRouteImport } from './routes/luthier'
 import { Route as PlayRouteImport } from './routes/play'
 import { Route as SequencerRouteImport } from './routes/sequencer'
 import { Route as TunerRouteImport } from './routes/tuner'
@@ -37,6 +38,11 @@ const ListenRoute = ListenRouteImport.update({
   path: '/listen',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LuthierRoute = LuthierRouteImport.update({
+  id: '/luthier',
+  path: '/luthier',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlayRoute = PlayRouteImport.update({
   id: '/play',
   path: '/play',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/develop': typeof DevelopRoute
   '/grimoire': typeof GrimoireRoute
   '/listen': typeof ListenRoute
+  '/luthier': typeof LuthierRoute
   '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
   '/tuner': typeof TunerRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/develop': typeof DevelopRoute
   '/grimoire': typeof GrimoireRoute
   '/listen': typeof ListenRoute
+  '/luthier': typeof LuthierRoute
   '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
   '/tuner': typeof TunerRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/develop': typeof DevelopRoute
   '/grimoire': typeof GrimoireRoute
   '/listen': typeof ListenRoute
+  '/luthier': typeof LuthierRoute
   '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
   '/tuner': typeof TunerRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/develop'
     | '/grimoire'
     | '/listen'
+    | '/luthier'
     | '/play'
     | '/sequencer'
     | '/tuner'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/develop'
     | '/grimoire'
     | '/listen'
+    | '/luthier'
     | '/play'
     | '/sequencer'
     | '/tuner'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/develop'
     | '/grimoire'
     | '/listen'
+    | '/luthier'
     | '/play'
     | '/sequencer'
     | '/tuner'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   DevelopRoute: typeof DevelopRoute
   GrimoireRoute: typeof GrimoireRoute
   ListenRoute: typeof ListenRoute
+  LuthierRoute: typeof LuthierRoute
   PlayRoute: typeof PlayRoute
   SequencerRoute: typeof SequencerRoute
   TunerRoute: typeof TunerRoute
@@ -151,6 +164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/luthier': {
+      id: '/luthier'
+      path: '/luthier'
+      fullPath: '/luthier'
+      preLoaderRoute: typeof LuthierRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/play': {
       id: '/play'
       path: '/play'
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   DevelopRoute: DevelopRoute,
   GrimoireRoute: GrimoireRoute,
   ListenRoute: ListenRoute,
+  LuthierRoute: LuthierRoute,
   PlayRoute: PlayRoute,
   SequencerRoute: SequencerRoute,
   TunerRoute: TunerRoute,

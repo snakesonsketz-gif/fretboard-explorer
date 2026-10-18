@@ -5,6 +5,7 @@ import { DevelopPage } from "@/routes/develop";
 import { GrimoirePage } from "@/routes/grimoire";
 import { Workstation } from "@/routes/index";
 import { ListenPage } from "@/routes/listen";
+import { LuthierPage } from "@/routes/luthier";
 import { PlayPage } from "@/routes/play";
 import { SequencerPage } from "@/routes/sequencer";
 import { TunerPage } from "@/routes/tuner";
@@ -20,6 +21,7 @@ const TABS: Record<string, ComponentType> = {
   "/listen": ListenPage,
   "/play": PlayPage,
   "/develop": DevelopPage,
+  "/luthier": LuthierPage,
 };
 
 /**
