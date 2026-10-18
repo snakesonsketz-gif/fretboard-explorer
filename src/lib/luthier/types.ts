@@ -173,7 +173,8 @@ export function search(guides: Guide[], query: string): Guide[] {
     if (!res.every((r) => r.test(text))) continue;
     const title = norm(g.title);
     const summary = norm(g.summary);
-    const s = res.reduce((n, r) => n + (r.test(title) ? 3 : 0) + (r.test(summary) ? 1 : 0), 0);
+    const titleWords = new Set(title.split(/\s+/));
+    const s = res.reduce((n, r, i) => n + (r.test(title) ? 3 : 0) + (titleWords.has(words[i]!) ? 2 : 0) + (r.test(summary) ? 1 : 0), 0);
     scored.push({ g, s });
   }
   return scored.sort((a, b) => b.s - a.s).map((x) => x.g);

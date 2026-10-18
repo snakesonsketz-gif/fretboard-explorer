@@ -101,5 +101,6 @@ describe("luthier search", () => {
     const top = search(guides, "pot").slice(0, 6).map((g) => g.title.toLowerCase());
     expect(top.every((t) => !t.includes("dead spot"))).toBe(true);
     expect(search(guides, "volume knob")[0]!.id).toBe("ef-volume-knob-fix");
+    for (const q of ["lower action", "raise action", "string height"]) expect(search(guides, q)[0]!.id, q).toBe("dx-raise-lower-action");
   });
 });
