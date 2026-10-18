@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import type { ColorScheme } from "@/lib/luthier/types";
 import { swatch } from "@/lib/luthier/types";
-import { C, Figure, N, T } from "./kit";
+import { At, C, Figure, Hl, N, T, Tag, Zoom, type StepTag } from "./kit";
 
 type P = readonly [number, number];
 export interface Schemes {
@@ -169,6 +169,13 @@ function Lever({ l, label }: { l: ReturnType<typeof lever>; label: string }) {
 interface WireDef {
   pts: P[];
   role: string;
+  /** The step(s) this wire is soldered in: it lights up then and fades back in the other steps. */
+  n?: StepTag | undefined;
+}
+/** Wiring steps fade the wires of other steps right back so the step's own wires stand out. */
+const WIRE_DIM = 0.14;
+function InStep({ n, children }: { n?: StepTag | undefined; children: ReactNode }) {
+  return n === undefined ? <>{children}</> : <Hl n={n} dim={WIRE_DIM}>{children}</Hl>;
 }
 /** Light outline behind dark wires and dark outline behind light ones, so black and white leads both show. */
 export function outlineFor(hex: string) {
@@ -182,50 +189,50 @@ function Wire({ w, s }: { w: WireDef; s: Schemes }) {
   const d = w.pts.map(([x, y], i) => `${i ? "L" : "M"} ${x} ${y}`).join(" ");
   const end = w.pts[w.pts.length - 1]!;
   return (
-    <g>
+    <InStep n={w.n}>
       <path d={d} fill="none" stroke={outlineFor(color)} strokeWidth={4.4} strokeLinejoin="round" strokeLinecap="round" />
       <path d={d} fill="none" stroke={color} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
       <circle cx={end[0]} cy={end[1]} r={2.4} fill="#d8dce0" stroke="#2b2f35" />
-    </g>
+    </InStep>
   );
 }
 /** A capacitor drawn on a wire segment between a and b. */
-function Cap({ a, b, label = "cap" }: { a: P; b: P; label?: string }) {
+function Cap({ a, b, label = "cap", n }: { a: P; b: P; label?: string; n?: StepTag | undefined }) {
   const mx = (a[0] + b[0]) / 2;
   const my = (a[1] + b[1]) / 2;
   const vertical = Math.abs(b[1] - a[1]) > Math.abs(b[0] - a[0]);
   return (
-    <g>
+    <InStep n={n}>
       <path d={`M ${a[0]} ${a[1]} L ${b[0]} ${b[1]}`} stroke="#9aa1aa" strokeWidth={1.8} />
       <ellipse cx={mx} cy={my} rx={vertical ? 6 : 9} ry={vertical ? 9 : 6} fill="#c4772f" stroke="#7a4a1c" />
       <T x={mx + (vertical ? 9 : 0)} y={my + (vertical ? 0 : -12)} anchor={vertical ? "start" : "middle"} size={8} color={C.ink}>
         {label}
       </T>
-    </g>
+    </InStep>
   );
 }
 /** Tape mark: the series-link pair soldered together and insulated. */
-function Taped({ at, label = "joined + taped" }: { at: P; label?: string }) {
+function Taped({ at, label = "joined + taped", n }: { at: P; label?: string; n?: StepTag | undefined }) {
   return (
-    <g>
+    <InStep n={n}>
       <rect x={at[0] - 6} y={at[1] - 4} width={12} height={8} rx={2} fill="#1d1d1d" stroke="#888" />
       <T x={at[0] + 9} y={at[1]} size={7}>
         {label}
       </T>
-    </g>
+    </InStep>
   );
 }
 /** Bare ground wire soldered across the pot backs (and anything else grounded). */
-function Rail({ x1, x2, y }: { x1: number; x2: number; y: number }) {
+function Rail({ x1, x2, y, n }: { x1: number; x2: number; y: number; n?: StepTag | undefined }) {
   return (
-    <g>
+    <InStep n={n}>
       <line x1={x1} y1={y} x2={x2} y2={y} stroke="#c8ccd2" strokeWidth={2.6} strokeDasharray="1 0" />
       <T x={x1} y={y + 10} size={8}>ground wire linking the pot backs</T>
-    </g>
+    </InStep>
   );
 }
-const toRail = (p: ReturnType<typeof pot>, y: number): WireDef => ({ role: "gnd", pts: [[p.x, p.y + 20], [p.x, y]] });
-const lug1ToBack = (p: ReturnType<typeof pot>): WireDef => ({ role: "gnd", pts: [p.l1, [p.l1[0] - 4, p.l1[1] + 10], [p.x - 15, p.y - 10]] });
+const toRail = (p: ReturnType<typeof pot>, y: number, n?: StepTag): WireDef => ({ role: "gnd", pts: [[p.x, p.y + 20], [p.x, y]], ...(n === undefined ? {} : { n }) });
+const lug1ToBack = (p: ReturnType<typeof pot>, n?: StepTag): WireDef => ({ role: "gnd", pts: [p.l1, [p.l1[0] - 4, p.l1[1] + 10], [p.x - 15, p.y - 10]], ...(n === undefined ? {} : { n }) });
 
 /** The colour key for whatever roles a diagram uses. */
 function Legend({ roles, s }: { roles: string[]; s: Schemes }) {
@@ -272,16 +279,16 @@ const RAIL_Y = 238;
 /* ------------------------------------------------------------------ recipes */
 
 /** A humbucker's leads: link pair joined + taped, hot to `hotTo`, ground and bare down a channel to the rail. */
-function HbLeads({ h, s, hotTo, hotY, chan, railY }: { h: ReturnType<typeof humbucker>; s: Schemes; hotTo: P; hotY: number; chan: number; railY: number }) {
+function HbLeads({ h, s, hotTo, hotY, chan, railY, linkN, hotN, gndN }: { h: ReturnType<typeof humbucker>; s: Schemes; hotTo: P; hotY: number; chan: number; railY: number; linkN: StepTag; hotN: StepTag; gndN: StepTag }) {
   const link: P = [h.nFinish[0] + 6, h.y + 48];
   return (
     <g>
-      <Wire s={s} w={{ role: "nFinish", pts: [h.nFinish, [h.nFinish[0], link[1]], link] }} />
-      <Wire s={s} w={{ role: "sFinish", pts: [h.sFinish, [h.sFinish[0], link[1]], link] }} />
-      <Taped at={link} label="taped" />
-      <Wire s={s} w={{ role: "hot", pts: [h.hot, [h.hot[0], hotY], [hotTo[0], hotY], hotTo] }} />
-      <Wire s={s} w={{ role: "ground", pts: [h.ground, [h.ground[0], h.y + 64], [chan, h.y + 64], [chan, railY]] }} />
-      <Wire s={s} w={{ role: "bare", pts: [h.bare, [h.bare[0], h.y + 70], [chan + 6, h.y + 70], [chan + 6, railY]] }} />
+      <Wire s={s} w={{ role: "nFinish", pts: [h.nFinish, [h.nFinish[0], link[1]], link], n: linkN }} />
+      <Wire s={s} w={{ role: "sFinish", pts: [h.sFinish, [h.sFinish[0], link[1]], link], n: linkN }} />
+      <Taped at={link} label="taped" n={linkN} />
+      <Wire s={s} w={{ role: "hot", pts: [h.hot, [h.hot[0], hotY], [hotTo[0], hotY], hotTo], n: hotN }} />
+      <Wire s={s} w={{ role: "ground", pts: [h.ground, [h.ground[0], h.y + 64], [chan, h.y + 64], [chan, railY]], n: gndN }} />
+      <Wire s={s} w={{ role: "bare", pts: [h.bare, [h.bare[0], h.y + 70], [chan + 6, h.y + 70], [chan + 6, railY]], n: gndN }} />
     </g>
   );
 }
@@ -308,17 +315,28 @@ export function SingleHumbuckerWiring({ s }: { s: Schemes }) {
       <Pot p={v} label="volume 500k" />
       <Pot p={t} label="tone 500k" />
       <Jack j={j} />
-      <Rail x1={20} x2={322} y={RAIL_Y} />
-      <HbLeads h={h} s={s} hotTo={v.l3} hotY={120} chan={140} railY={RAIL_Y} />
-      <Wire s={s} w={lug1ToBack(v)} />
-      <Wire s={s} w={toRail(v, RAIL_Y)} />
-      <Wire s={s} w={toRail(t, RAIL_Y)} />
-      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 138], [j.tip[0], 138], j.tip] }} />
-      <Wire s={s} w={{ role: "signal", pts: [v.l3, [v.l3[0] + 8, 148], [t.l2[0], 148], t.l2] }} />
-      <Cap a={t.l1} b={[t.l1[0] - 26, t.l1[1] + 26]} label=".022 µF" />
-      <Wire s={s} w={{ role: "gnd", pts: [[t.l1[0] - 26, t.l1[1] + 26], [t.l1[0] - 26, RAIL_Y]] }} />
-      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], RAIL_Y], [322, RAIL_Y]] }} />
+      <Rail x1={20} x2={322} y={RAIL_Y} n={[2, 3, 4]} />
+      <HbLeads h={h} s={s} hotTo={v.l3} hotY={120} chan={140} railY={RAIL_Y} linkN={1} hotN={2} gndN={2} />
+      <Wire s={s} w={lug1ToBack(v, 3)} />
+      <Wire s={s} w={toRail(v, RAIL_Y, 4)} />
+      <Wire s={s} w={toRail(t, RAIL_Y, 4)} />
+      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 138], [j.tip[0], 138], j.tip], n: 3 }} />
+      <Wire s={s} w={{ role: "signal", pts: [v.l3, [v.l3[0] + 8, 148], [t.l2[0], 148], t.l2], n: 4 }} />
+      <Cap a={t.l1} b={[t.l1[0] - 26, t.l1[1] + 26]} label=".022 µF" n={4} />
+      <Wire s={s} w={{ role: "gnd", pts: [[t.l1[0] - 26, t.l1[1] + 26], [t.l1[0] - 26, RAIL_Y]], n: 4 }} />
+      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], RAIL_Y], [322, RAIL_Y]], n: 3 }} />
       <T x={20} y={RAIL_Y + 20} size={8}>(also solder the bridge ground to this wire)</T>
+      <Tag x={h.x + 80} y={h.y + 8} n={1}>link pair: solder + tape</Tag>
+      <Zoom n={1} x={290} y={80} r={36} cx={h.nFinish[0] + 6} cy={h.y + 44} scale={3}>
+        <Wire s={s} w={{ role: "nFinish", pts: [h.nFinish, [h.nFinish[0], h.y + 48], [h.nFinish[0] + 6, h.y + 48]] }} />
+        <Wire s={s} w={{ role: "sFinish", pts: [h.sFinish, [h.sFinish[0], h.y + 48], [h.nFinish[0] + 6, h.y + 48]] }} />
+        <rect x={h.nFinish[0]} y={h.y + 44} width={12} height={8} rx={2} fill="#1d1d1d" stroke="#888" strokeWidth={0.4} />
+      </Zoom>
+      <T x={290} y={128} anchor="middle" size={8} color={C.accent} weight={700} n={1}>north + south finish</T>
+      <T x={290} y={139} anchor="middle" size={8} color={C.accent} weight={700} n={1}>soldered, taped, not grounded</T>
+      <Tag x={v.l3[0] + 30} y={96} n={2}>hot → lug 3 · ground + bare → ground</Tag>
+      <Tag x={240} y={110} n={3} anchor="middle">lug 2 → tip · sleeve → ground</Tag>
+      <Tag x={250} y={110} n={4} anchor="middle">.022 µF tone cap · link pot backs</Tag>
       <N n={1} x={h.x + 100} y={h.y + 48} />
       <N n={2} x={v.l3[0] + 18} y={110} />
       <N n={3} x={250} y={128} />
@@ -338,13 +356,13 @@ export function LesPaulWiring({ s }: { s: Schemes }) {
   const j = jack(320, 196);
   const tone = (v: typeof nv, t: typeof nt) => (
     <g>
-      <Wire s={s} w={{ role: "signal", pts: [v.l3, [v.l3[0], 150], [v.l3[0] + 10, 150]] }} />
-      <Cap a={[v.l3[0] + 10, 150]} b={[t.l2[0] - 4, 150]} label=".022" />
-      <Wire s={s} w={{ role: "signal", pts: [[t.l2[0] - 4, 150], [t.l2[0], 150], t.l2] }} />
-      <Wire s={s} w={lug1ToBack(t)} />
-      <Wire s={s} w={lug1ToBack(v)} />
-      <Wire s={s} w={toRail(v, RAIL_Y)} />
-      <Wire s={s} w={toRail(t, RAIL_Y)} />
+      <Wire s={s} w={{ role: "signal", pts: [v.l3, [v.l3[0], 150], [v.l3[0] + 10, 150]], n: 3 }} />
+      <Cap a={[v.l3[0] + 10, 150]} b={[t.l2[0] - 4, 150]} label=".022" n={3} />
+      <Wire s={s} w={{ role: "signal", pts: [[t.l2[0] - 4, 150], [t.l2[0], 150], t.l2], n: 3 }} />
+      <Wire s={s} w={lug1ToBack(t, 3)} />
+      <Wire s={s} w={lug1ToBack(v, 2)} />
+      <Wire s={s} w={toRail(v, RAIL_Y, 4)} />
+      <Wire s={s} w={toRail(t, RAIL_Y, 4)} />
     </g>
   );
   return (
@@ -368,20 +386,24 @@ export function LesPaulWiring({ s }: { s: Schemes }) {
       <Pot p={bt} label="bridge tone" />
       <Toggle3 t={sw} />
       <Jack j={j} />
-      <Rail x1={14} x2={344} y={RAIL_Y} />
-      <HbLeads h={hn} s={s} hotTo={nv.l3} hotY={104} chan={72} railY={RAIL_Y} />
-      <HbLeads h={hb} s={s} hotTo={bv.l3} hotY={108} chan={218} railY={RAIL_Y} />
+      <Rail x1={14} x2={344} y={RAIL_Y} n={[1, 4]} />
+      <HbLeads h={hn} s={s} hotTo={nv.l3} hotY={104} chan={72} railY={RAIL_Y} linkN={1} hotN={1} gndN={1} />
+      <HbLeads h={hb} s={s} hotTo={bv.l3} hotY={108} chan={218} railY={RAIL_Y} linkN={1} hotN={1} gndN={1} />
       {tone(nv, nt)}
       {tone(bv, bt)}
-      <Wire s={s} w={{ role: "signal", pts: [nv.l2, [nv.l2[0], 128], [sw.rhythm[0], 128], sw.rhythm] }} />
-      <Wire s={s} w={{ role: "signal", pts: [bv.l2, [bv.l2[0], 136], [sw.treble[0], 136], sw.treble] }} />
-      <Wire s={s} w={{ role: "signal", pts: [sw.out, [sw.out[0], 70], [352, 70], [352, 166], [j.tip[0], 166], j.tip] }} />
-      <Wire s={s} w={{ role: "gnd", pts: [sw.gnd, [sw.gnd[0] + 0, 150], [300, 150], [300, RAIL_Y]] }} />
-      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], RAIL_Y], [344, RAIL_Y]] }} />
+      <Wire s={s} w={{ role: "signal", pts: [nv.l2, [nv.l2[0], 128], [sw.rhythm[0], 128], sw.rhythm], n: 2 }} />
+      <Wire s={s} w={{ role: "signal", pts: [bv.l2, [bv.l2[0], 136], [sw.treble[0], 136], sw.treble], n: 2 }} />
+      <Wire s={s} w={{ role: "signal", pts: [sw.out, [sw.out[0], 70], [352, 70], [352, 166], [j.tip[0], 166], j.tip], n: 4 }} />
+      <Wire s={s} w={{ role: "gnd", pts: [sw.gnd, [sw.gnd[0] + 0, 150], [300, 150], [300, RAIL_Y]], n: 4 }} />
+      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], RAIL_Y], [344, RAIL_Y]], n: 4 }} />
       <T x={14} y={RAIL_Y + 20} size={8}>(also solder the tailpiece/bridge ground to this wire)</T>
+      <Tag x={180} y={78} n={1} anchor="middle">each hot → its own volume's lug 3</Tag>
+      <Tag x={180} y={78} n={2} anchor="middle">vol lug 2 → toggle: neck=rhythm, bridge=treble</Tag>
+      <Tag x={180} y={224} n={3} anchor="middle">modern: cap from vol lug 3 to tone lug 2</Tag>
+      <Tag x={150} y={60} n={4} anchor="middle">toggle out → jack tip · all grounds to the rail</Tag>
       <N n={1} x={hn.x + 96} y={hn.y + 40} />
       <N n={2} x={262} y={124} />
-      <N n={3} x={76} y={162} />
+      <N n={3} x={150} y={60} />
       <N n={4} x={344} y={54} />
     </WiringFigure>
   );
@@ -415,36 +437,46 @@ export function StratWiring({ s }: { s: Schemes }) {
       <Single s={pn} label="neck" />
       <Single s={pm} label="middle" />
       <Single s={pb} label="bridge" />
-      <Lever l={sw} label="5-way switch" />
+      <Hl n={[1, 3, 4]}>
+        <Lever l={sw} label="5-way switch" />
+      </Hl>
       <Pot p={v} label="volume" />
       <Pot p={t1} label="tone 1 (neck)" />
       <Pot p={t2} label="tone 2 (middle)" />
       <Jack j={j} />
-      <Rail x1={10} x2={338} y={rail} />
-      <Wire s={s} w={{ role: "scHot", pts: [pb.hot, [pb.hot[0], 66], [sw.A["B"]![0], 66], sw.A["B"]!] }} />
-      <Wire s={s} w={{ role: "scHot", pts: [pm.hot, [pm.hot[0], 58], [sw.A["M"]![0], 58], sw.A["M"]!] }} />
-      <Wire s={s} w={{ role: "scHot", pts: [pn.hot, [pn.hot[0], 50], [sw.A["N"]![0], 50], sw.A["N"]!] }} />
+      <Rail x1={10} x2={338} y={rail} n={[2, 5]} />
+      <Wire s={s} w={{ role: "scHot", pts: [pb.hot, [pb.hot[0], 66], [sw.A["B"]![0], 66], sw.A["B"]!], n: 2 }} />
+      <Wire s={s} w={{ role: "scHot", pts: [pm.hot, [pm.hot[0], 58], [sw.A["M"]![0], 58], sw.A["M"]!], n: 2 }} />
+      <Wire s={s} w={{ role: "scHot", pts: [pn.hot, [pn.hot[0], 50], [sw.A["N"]![0], 50], sw.A["N"]!], n: 2 }} />
       {[pn, pm, pb].map((p, i) => (
-        <Wire key={i} s={s} w={{ role: "scGround", pts: [p.gnd, [p.gnd[0], 44 - i * 3], [10 + i * 4, 44 - i * 3], [10 + i * 4, rail]] }} />
+        <Wire key={i} s={s} w={{ role: "scGround", pts: [p.gnd, [p.gnd[0], 44 - i * 3], [10 + i * 4, 44 - i * 3], [10 + i * 4, rail]], n: 2 }} />
       ))}
-      <Wire s={s} w={{ role: "signal", pts: [sw.A["C"]!, sw.B["C"]!] }} />
-      <Wire s={s} w={{ role: "signal", pts: [sw.B["C"]!, [sw.B["C"]![0], 152], [v.l3[0], 152], v.l3] }} />
-      <Wire s={s} w={{ role: "signal", pts: [sw.B["N"]!, [sw.B["N"]![0], 142], [t1.l2[0], 142], t1.l2] }} />
-      <Wire s={s} w={{ role: "signal", pts: [sw.B["M"]!, [sw.B["M"]![0], 136], [t2.l2[0], 136], t2.l2] }} />
-      <Wire s={s} w={{ role: "gnd", pts: [t1.l1, [t1.l1[0], 160], [t2.l1[0], 160], t2.l1] }} />
-      <Cap a={[204, 160]} b={[204, rail]} label=".047 µF" />
-      <Wire s={s} w={lug1ToBack(v)} />
+      <Wire s={s} w={{ role: "signal", pts: [sw.A["C"]!, sw.B["C"]!], n: 3 }} />
+      <Wire s={s} w={{ role: "signal", pts: [sw.B["C"]!, [sw.B["C"]![0], 152], [v.l3[0], 152], v.l3], n: 3 }} />
+      <Wire s={s} w={{ role: "signal", pts: [sw.B["N"]!, [sw.B["N"]![0], 142], [t1.l2[0], 142], t1.l2], n: 4 }} />
+      <Wire s={s} w={{ role: "signal", pts: [sw.B["M"]!, [sw.B["M"]![0], 136], [t2.l2[0], 136], t2.l2], n: 4 }} />
+      <Wire s={s} w={{ role: "gnd", pts: [t1.l1, [t1.l1[0], 160], [t2.l1[0], 160], t2.l1], n: 4 }} />
+      <Cap a={[204, 160]} b={[204, rail]} label=".047 µF" n={4} />
+      <Wire s={s} w={lug1ToBack(v, 5)} />
       {[v, t1, t2].map((p, i) => (
-        <Wire key={`r${i}`} s={s} w={toRail(p, rail)} />
+        <Wire key={`r${i}`} s={s} w={toRail(p, rail, 5)} />
       ))}
-      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 128], [300, 128], [300, 176], [j.tip[0], 176], j.tip] }} />
-      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], rail], [338, rail]] }} />
+      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 128], [300, 128], [300, 176], [j.tip[0], 176], j.tip], n: 5 }} />
+      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], rail], [338, rail]], n: 5 }} />
+      <At n={1}>
+        <Tag x={sw.x + 20} y={sw.y - 22} anchor="middle">meter: which lug is live in 1 · 3 · 5</Tag>
+        <Tag x={246} y={100} color={C.dim}>B=1 · M=3 · N=5</Tag>
+      </At>
+      <Tag x={180} y={78} n={2} anchor="middle">hots → deck A · grounds → ground</Tag>
+      <Tag x={sw.x + 30} y={sw.y - 22} n={3} anchor="middle">jumper the commons → volume lug 3</Tag>
+      <Tag x={300} y={112} n={4} anchor="middle">B-N → tone 1 · B-M → tone 2</Tag>
+      <Tag x={180} y={118} n={5} anchor="middle">vol lug 2 → tip · grounds to the rail</Tag>
       <T x={10} y={rail + 20} size={8}>(also solder the trem-claw ground to this wire)</T>
-      <N n={1} x={sw.x + 98} y={sw.y + 16} />
+      <N n={1} x={sw.x - 50} y={sw.y + 50} />
       <N n={2} x={120} y={36} />
-      <N n={3} x={sw.B["C"]![0] + 16} y={124} />
+      <N n={3} x={sw.x - 50} y={sw.y + 50} />
       <N n={4} x={222} y={172} />
-      <N n={5} x={100} y={120} />
+      <N n={5} x={330} y={60} />
     </WiringFigure>
   );
 }
@@ -473,31 +505,40 @@ export function TeleWiring({ s }: { s: Schemes }) {
     >
       <Single s={pn} label="neck" />
       <Single s={pb} label="bridge" />
-      <Lever l={sw} label="3-way switch" />
+      <Hl n={[1, 2, 3]}>
+        <Lever l={sw} label="3-way switch" />
+      </Hl>
       <Pot p={v} label="volume" />
       <Pot p={t} label="tone" />
       <Jack j={j} />
-      <Rail x1={12} x2={324} y={rail} />
-      <Wire s={s} w={{ role: "signal", pts: [sw.A["1"]!, [sw.A["1"]![0], 82], [sw.A["2"]![0], 82], sw.A["2"]!] }} />
-      <Wire s={s} w={{ role: "scHot", pts: [pb.hot, [pb.hot[0], 64], [sw.A["1"]![0], 64], sw.A["1"]!] }} />
-      <Wire s={s} w={{ role: "signal", pts: [sw.B["2"]!, [sw.B["2"]![0], sw.B["2"]![1] + 14], [sw.B["3"]![0], sw.B["3"]![1] + 14], sw.B["3"]!] }} />
-      <Wire s={s} w={{ role: "scHot", pts: [pn.hot, [pn.hot[0], 56], [120, 56], [120, sw.B["2"]![1] - 8], [sw.B["2"]![0], sw.B["2"]![1] - 8], sw.B["2"]!] }} />
+      <Rail x1={12} x2={324} y={rail} n={[3, 4]} />
+      <Wire s={s} w={{ role: "signal", pts: [sw.A["1"]!, [sw.A["1"]![0], 82], [sw.A["2"]![0], 82], sw.A["2"]!], n: 2 }} />
+      <Wire s={s} w={{ role: "scHot", pts: [pb.hot, [pb.hot[0], 64], [sw.A["1"]![0], 64], sw.A["1"]!], n: 2 }} />
+      <Wire s={s} w={{ role: "signal", pts: [sw.B["2"]!, [sw.B["2"]![0], sw.B["2"]![1] + 14], [sw.B["3"]![0], sw.B["3"]![1] + 14], sw.B["3"]!], n: 2 }} />
+      <Wire s={s} w={{ role: "scHot", pts: [pn.hot, [pn.hot[0], 56], [120, 56], [120, sw.B["2"]![1] - 8], [sw.B["2"]![0], sw.B["2"]![1] - 8], sw.B["2"]!], n: 2 }} />
       {[pn, pb].map((p, i) => (
-        <Wire key={i} s={s} w={{ role: "scGround", pts: [p.gnd, [p.gnd[0], 46 - i * 4], [12 + i * 5, 46 - i * 4], [12 + i * 5, rail]] }} />
+        <Wire key={i} s={s} w={{ role: "scGround", pts: [p.gnd, [p.gnd[0], 46 - i * 4], [12 + i * 5, 46 - i * 4], [12 + i * 5, rail]], n: 3 }} />
       ))}
-      <Wire s={s} w={{ role: "signal", pts: [sw.A["C"]!, sw.B["C"]!] }} />
-      <Wire s={s} w={{ role: "signal", pts: [sw.B["C"]!, [sw.B["C"]![0], 150], [v.l3[0], 150], v.l3] }} />
-      <Wire s={s} w={lug1ToBack(v)} />
-      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 140], [j.tip[0], 140], j.tip] }} />
-      <Wire s={s} w={{ role: "signal", pts: [v.l3, [v.l3[0] + 10, 158], [t.l2[0], 158], t.l2] }} />
-      <Cap a={t.l1} b={[t.l1[0] - 24, rail - 20]} label=".047 µF" />
-      <Wire s={s} w={{ role: "gnd", pts: [[t.l1[0] - 24, rail - 20], [t.l1[0] - 24, rail]] }} />
+      <Wire s={s} w={{ role: "signal", pts: [sw.A["C"]!, sw.B["C"]!], n: 3 }} />
+      <Wire s={s} w={{ role: "signal", pts: [sw.B["C"]!, [sw.B["C"]![0], 150], [v.l3[0], 150], v.l3], n: 3 }} />
+      <Wire s={s} w={lug1ToBack(v, 4)} />
+      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 140], [j.tip[0], 140], j.tip], n: 4 }} />
+      <Wire s={s} w={{ role: "signal", pts: [v.l3, [v.l3[0] + 10, 158], [t.l2[0], 158], t.l2], n: 4 }} />
+      <Cap a={t.l1} b={[t.l1[0] - 24, rail - 20]} label=".047 µF" n={4} />
+      <Wire s={s} w={{ role: "gnd", pts: [[t.l1[0] - 24, rail - 20], [t.l1[0] - 24, rail]], n: 4 }} />
       {[v, t].map((p, i) => (
-        <Wire key={`r${i}`} s={s} w={toRail(p, rail)} />
+        <Wire key={`r${i}`} s={s} w={toRail(p, rail, 4)} />
       ))}
-      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], rail], [324, rail]] }} />
+      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], rail], [324, rail]], n: 4 }} />
+      <At n={1}>
+        <Tag x={sw.x + 30} y={sw.y - 46} anchor="middle">position 1 = lever toward the bridge</Tag>
+        <Tag x={sw.x + 30} y={sw.y - 24} anchor="middle" color={C.dim}>1 bridge · 2 both · 3 neck</Tag>
+      </At>
+      <Tag x={sw.x + 30} y={sw.y - 24} n={2} anchor="middle">A: 1+2 → bridge hot · B: 2+3 → neck hot</Tag>
+      <Tag x={sw.x + 30} y={sw.y - 24} n={3} anchor="middle">commons joined → volume lug 3</Tag>
+      <Tag x={250} y={120} n={4} anchor="middle">vol 2 → tip · tone cap → ground</Tag>
       <N n={1} x={sw.x + 98} y={sw.y + 16} />
-      <N n={2} x={230} y={74} />
+      <N n={2} x={330} y={118} />
       <N n={3} x={44} y={120} />
       <N n={4} x={250} y={150} />
     </WiringFigure>
@@ -536,24 +577,31 @@ export function CoilSplitWiring({ s }: { s: Schemes }) {
         <rect key={`b${i}`} x={x - 3} y={y - 19} width={6} height={6} fill={C.metal} opacity={0.5} />
       ))}
       <Jack j={j} />
-      <Rail x1={20} x2={330} y={rail} />
-      <Wire s={s} w={{ role: "nFinish", pts: [h.nFinish, [h.nFinish[0], link[1]], link] }} />
-      <Wire s={s} w={{ role: "sFinish", pts: [h.sFinish, [h.sFinish[0], link[1]], link] }} />
-      <Wire s={s} w={{ role: "signal", pts: [link, [link[0], 222], [row.com[0] - 40, 222], [row.com[0] - 40, 232], [row.com[0], 232], row.com] }} />
-      <Wire s={s} w={{ role: "gnd", pts: [row.up, [row.up[0] + 22, row.up[1]], [row.up[0] + 22, rail]] }} />
+      <Rail x1={20} x2={330} y={rail} n={[1, 3]} />
+      <Wire s={s} w={{ role: "nFinish", pts: [h.nFinish, [h.nFinish[0], link[1]], link], n: [2, 4] }} />
+      <Wire s={s} w={{ role: "sFinish", pts: [h.sFinish, [h.sFinish[0], link[1]], link], n: [2, 4] }} />
+      <Wire s={s} w={{ role: "signal", pts: [link, [link[0], 222], [row.com[0] - 40, 222], [row.com[0] - 40, 232], [row.com[0], 232], row.com], n: [2, 4] }} />
+      <Wire s={s} w={{ role: "gnd", pts: [row.up, [row.up[0] + 22, row.up[1]], [row.up[0] + 22, rail]], n: [3, 4] }} />
       <T x={row.up[0] + 26} y={row.up[1] - 8} size={8} color={C.ink}>live when pulled</T>
-      <Wire s={s} w={{ role: "hot", pts: [h.hot, [h.hot[0], 106], [v.l3[0], 106], v.l3] }} />
-      <Wire s={s} w={{ role: "ground", pts: [h.ground, [h.ground[0], h.y + 64], [30, h.y + 64], [30, rail]] }} />
-      <Wire s={s} w={{ role: "bare", pts: [h.bare, [h.bare[0], h.y + 70], [24, h.y + 70], [24, rail]] }} />
-      <Wire s={s} w={lug1ToBack(v)} />
-      <Wire s={s} w={{ role: "gnd", pts: [[v.x - 20, v.y + 6], [v.x - 34, v.y + 6], [v.x - 34, rail]] }} />
-      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 118], [j.tip[0], 118], j.tip] }} />
-      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], rail], [330, rail]] }} />
+      <Wire s={s} w={{ role: "hot", pts: [h.hot, [h.hot[0], 106], [v.l3[0], 106], v.l3], n: 1 }} />
+      <Wire s={s} w={{ role: "ground", pts: [h.ground, [h.ground[0], h.y + 64], [30, h.y + 64], [30, rail]], n: 1 }} />
+      <Wire s={s} w={{ role: "bare", pts: [h.bare, [h.bare[0], h.y + 70], [24, h.y + 70], [24, rail]], n: 1 }} />
+      <Wire s={s} w={lug1ToBack(v, 1)} />
+      <Wire s={s} w={{ role: "gnd", pts: [[v.x - 20, v.y + 6], [v.x - 34, v.y + 6], [v.x - 34, rail]], n: 1 }} />
+      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 118], [j.tip[0], 118], j.tip], n: 1 }} />
+      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0], rail], [330, rail]], n: 1 }} />
+      <Tag x={250} y={80} n={1} anchor="middle">wire the pot like a normal volume</Tag>
+      <Tag x={link[0] + 14} y={link[1] + 22} n={2}>link pair → switch common (one wire)</Tag>
+      <Tag x={340} y={150} n={3} anchor="end">meter: lug live when PULLED → ground</Tag>
+      <At n={4}>
+        <Tag x={250} y={70} anchor="middle" color={C.good}>pushed = full humbucker</Tag>
+        <Tag x={250} y={92} anchor="middle">pulled = link grounded → north coil only</Tag>
+      </At>
       <T x={v.x + 26} y={v.y + 4} size={8} color={C.ink}>push-pull pot</T>
-      <N n={1} x={v.l3[0] + 18} y={96} />
+      <N n={1} x={340} y={130} />
       <N n={2} x={link[0] - 16} y={160} />
       <N n={3} x={row.up[0] + 44} y={226} />
-      <N n={4} x={300} y={60} />
+      <N n={4} x={340} y={130} />
     </WiringFigure>
   );
 }
@@ -584,26 +632,30 @@ export function JazzBassWiring({ s }: { s: Schemes }) {
       <Pot p={vb} label="bridge vol" />
       <Pot p={t} label="tone" />
       <Jack j={j} />
-      <Rail x1={14} x2={340} y={RAIL_Y} />
-      <Wire s={s} w={{ role: "scHot", pts: [pn.hot, [pn.hot[0], 70], [vn.l3[0], 70], vn.l3] }} />
-      <Wire s={s} w={{ role: "scHot", pts: [pb.hot, [pb.hot[0], 62], [vb.l3[0], 62], vb.l3] }} />
-      <Wire s={s} w={{ role: "scGround", pts: [pn.gnd, [pn.gnd[0], 50], [14, 50], [14, RAIL_Y]] }} />
-      <Wire s={s} w={{ role: "scGround", pts: [pb.gnd, [pb.gnd[0], 46], [20, 46], [20, RAIL_Y]] }} />
+      <Rail x1={14} x2={340} y={RAIL_Y} n={[1, 4]} />
+      <Wire s={s} w={{ role: "scHot", pts: [pn.hot, [pn.hot[0], 70], [vn.l3[0], 70], vn.l3], n: 1 }} />
+      <Wire s={s} w={{ role: "scHot", pts: [pb.hot, [pb.hot[0], 62], [vb.l3[0], 62], vb.l3], n: 1 }} />
+      <Wire s={s} w={{ role: "scGround", pts: [pn.gnd, [pn.gnd[0], 50], [14, 50], [14, RAIL_Y]], n: 1 }} />
+      <Wire s={s} w={{ role: "scGround", pts: [pb.gnd, [pb.gnd[0], 46], [20, 46], [20, RAIL_Y]], n: 1 }} />
       {[vn, vb].map((v, i) => (
-        <Wire key={i} s={s} w={lug1ToBack(v)} />
+        <Wire key={i} s={s} w={lug1ToBack(v, 2)} />
       ))}
-      <Wire s={s} w={{ role: "signal", pts: [vn.l2, [vn.l2[0], 132], [vb.l2[0], 132], vb.l2] }} />
-      <Wire s={s} w={{ role: "signal", pts: [[vb.l2[0], 132], [t.l2[0], 132], t.l2] }} />
-      <Wire s={s} w={{ role: "signal", pts: [[t.l2[0], 132], [j.tip[0], 132], j.tip] }} />
-      <Cap a={t.l1} b={[t.l1[0] - 26, t.l1[1] + 30]} label=".047 µF" />
-      <Wire s={s} w={{ role: "gnd", pts: [[t.l1[0] - 26, t.l1[1] + 30], [t.l1[0] - 26, RAIL_Y]] }} />
+      <Wire s={s} w={{ role: "signal", pts: [vn.l2, [vn.l2[0], 132], [vb.l2[0], 132], vb.l2], n: 3 }} />
+      <Wire s={s} w={{ role: "signal", pts: [[vb.l2[0], 132], [t.l2[0], 132], t.l2], n: 3 }} />
+      <Wire s={s} w={{ role: "signal", pts: [[t.l2[0], 132], [j.tip[0], 132], j.tip], n: 3 }} />
+      <Cap a={t.l1} b={[t.l1[0] - 26, t.l1[1] + 30]} label=".047 µF" n={4} />
+      <Wire s={s} w={{ role: "gnd", pts: [[t.l1[0] - 26, t.l1[1] + 30], [t.l1[0] - 26, RAIL_Y]], n: 4 }} />
       {[vn, vb, t].map((p, i) => (
-        <Wire key={`r${i}`} s={s} w={toRail(p, RAIL_Y)} />
+        <Wire key={`r${i}`} s={s} w={toRail(p, RAIL_Y, 4)} />
       ))}
-      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0] + 8, j.sleeve[1]], [j.sleeve[0] + 8, RAIL_Y], [340, RAIL_Y]] }} />
-      <N n={1} x={130} y={84} />
+      <Wire s={s} w={{ role: "gnd", pts: [j.sleeve, [j.sleeve[0] + 8, j.sleeve[1]], [j.sleeve[0] + 8, RAIL_Y], [340, RAIL_Y]], n: 4 }} />
+      <Tag x={180} y={90} n={1} anchor="middle">each hot → its volume's lug 3</Tag>
+      <Tag x={120} y={110} n={2} anchor="middle">lug 1 bent onto the pot back</Tag>
+      <Tag x={180} y={100} n={3} anchor="middle">both lug 2s joined = output → tone + tip</Tag>
+      <Tag x={180} y={112} n={4} anchor="middle">.047 µF to ground · link all grounds</Tag>
+      <N n={1} x={44} y={140} />
       <N n={2} x={36} y={200} />
-      <N n={3} x={120} y={120} />
+      <N n={3} x={44} y={140} />
       <N n={4} x={300} y={222} />
     </WiringFigure>
   );
@@ -626,23 +678,59 @@ export function TrebleBleedWiring({ s }: { s: Schemes }) {
       note="Published values range from about 470–1200 pF, often with a resistor (e.g. 1 nF + 150k, Fender's 1200 pF + 20k). Sources disagree on series vs parallel; parallel is the common layout."
     >
       <Pot p={v} label="volume" />
-      <Wire s={s} w={{ role: "signal", pts: [[40, 60], [v.l3[0], 60], v.l3] }} />
+      <Wire s={s} w={{ role: "signal", pts: [[40, 60], [v.l3[0], 60], v.l3], n: 1 }} />
       <T x={40} y={50} size={9} color={C.ink}>from pickup / switch</T>
-      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 90], [40, 90]] }} />
+      <Wire s={s} w={{ role: "signal", pts: [v.l2, [v.l2[0], 90], [40, 90]], n: 1 }} />
       <T x={40} y={80} size={9} color={C.ink}>to jack tip</T>
       <Wire s={s} w={lug1ToBack(v)} />
-      {/* cap ‖ resistor between lug 3 (A side) and lug 2 (B side) */}
-      <path d={`M ${v.l3[0]} 128 L 222 128 M 222 120 L 222 136 M 222 120 L 232 120 M 254 120 L 270 120 M 222 136 L 232 136 M 254 136 L 270 136 M 270 120 L 270 136 M 270 128 L 290 128 L 290 104 L ${v.l2[0]} 104`} fill="none" stroke="#9aa1aa" strokeWidth={1.8} />
-      <circle cx={v.l3[0]} cy={128} r={2.6} fill="#d8dce0" />
-      <circle cx={v.l2[0]} cy={104} r={2.6} fill="#d8dce0" />
-      <ellipse cx={243} cy={120} rx={11} ry={5} fill="#3b82c4" stroke="#1d4f80" />
-      <rect x={232} y={133} width={22} height={6} rx={2} fill="#d8c08a" stroke="#7a6a3a" />
-      <T x={296} y={118} size={9} color={C.accent} weight={700}>cap 1 nF</T>
-      <T x={296} y={138} size={9} color={C.accent} weight={700}>resistor 150k</T>
+      <At n={1}>
+        <Tag x={v.l3[0] + 24} y={60} color={C.good}>lug 3 = IN</Tag>
+        <Tag x={v.l2[0] + 24} y={104}>lug 2 = OUT</Tag>
+      </At>
+      <At n={2}>
+        {/* cap only, legs short, straight across lug 3 and lug 2 */}
+        {(() => {
+          const cap = (
+            <g>
+              <path d={`M ${v.l3[0]} ${v.l3[1] + 2} L ${v.l3[0] - 2} ${v.l3[1] - 10} M ${v.l2[0]} ${v.l2[1] + 2} L ${v.l2[0] + 4} ${v.l2[1] - 8}`} stroke="#b8bec6" strokeWidth={1} fill="none" />
+              <ellipse cx={v.x + 8} cy={v.l2[1] - 12} rx={7} ry={3.6} fill="#3b82c4" stroke="#1d4f80" strokeWidth={0.6} />
+            </g>
+          );
+          return (
+            <>
+              {cap}
+              <Zoom x={290} y={150} r={40} cx={v.x + 7} cy={v.l2[1] - 4} scale={2.6} label="cap across lug 3 ↔ lug 2">
+                <circle cx={v.x} cy={v.y} r={22} fill="#59606a" />
+                {[v.l1, v.l2, v.l3].map(([x, y], i) => (
+                  <rect key={i} x={x - 3} y={y} width={6} height={9} fill={C.metal} stroke={C.line} strokeWidth={0.4} />
+                ))}
+                {cap}
+              </Zoom>
+            </>
+          );
+        })()}
+        <Tag x={250} y={24} anchor="middle">small cap straight across lug 3 ↔ lug 2</Tag>
+        <Tag x={250} y={46} anchor="middle" color={C.dim}>short legs, clear of the pot back</Tag>
+      </At>
+      <At n={[3, 4]}>
+        {/* cap ‖ resistor between lug 3 (A side) and lug 2 (B side) */}
+        <path d={`M ${v.l3[0]} 128 L 222 128 M 222 120 L 222 136 M 222 120 L 232 120 M 254 120 L 270 120 M 222 136 L 232 136 M 254 136 L 270 136 M 270 120 L 270 136 M 270 128 L 290 128 L 290 104 L ${v.l2[0]} 104`} fill="none" stroke="#9aa1aa" strokeWidth={1.8} />
+        <circle cx={v.l3[0]} cy={128} r={2.6} fill="#d8dce0" />
+        <circle cx={v.l2[0]} cy={104} r={2.6} fill="#d8dce0" />
+        <ellipse cx={243} cy={120} rx={11} ry={5} fill="#3b82c4" stroke="#1d4f80" />
+        <rect x={232} y={133} width={22} height={6} rx={2} fill="#d8c08a" stroke="#7a6a3a" />
+        <T x={296} y={118} size={9} color={C.accent} weight={700}>cap 1 nF</T>
+        <T x={296} y={138} size={9} color={C.accent} weight={700}>resistor 150k</T>
+      </At>
+      <Tag x={250} y={24} n={3} anchor="middle">side by side, legs twisted at each end</Tag>
+      <At n={4}>
+        <Tag x={250} y={24} anchor="middle">clip on first: roll volume 10 → 3, listen</Tag>
+        <Tag x={290} y={196} anchor="middle" color={C.good}>then solder it in</Tag>
+      </At>
       <N n={1} x={v.l3[0] + 16} y={v.l3[1] + 14} />
       <N n={2} x={v.x - 60} y={v.y} />
-      <N n={3} x={243} y={100} />
-      <N n={4} x={330} y={210} />
+      <N n={3} x={243} y={96} />
+      <N n={4} x={40} y={140} />
     </WiringFigure>
   );
 }
