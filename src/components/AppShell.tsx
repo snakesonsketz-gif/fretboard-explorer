@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BookOpen, Ear, FlaskConical, Gamepad2, Music2, Search, SlidersHorizontal } from "lucide-react";
+import { BookOpen, Ear, FlaskConical, Gamepad2, Gauge, Music2, Search, SlidersHorizontal } from "lucide-react";
 import { setDevMode, useDevMode } from "@/lib/devMode";
 import { engine } from "@/lib/engine";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { to: "/", label: "Explore", icon: Search },
   { to: "/grimoire", label: "Grimoire", icon: BookOpen },
+  { to: "/tuner", label: "Tuner", icon: Gauge },
   { to: "/sequencer", label: "Sequencer", icon: SlidersHorizontal },
   { to: "/listen", label: "Listen", icon: Ear },
   { to: "/play", label: "Play", icon: Gamepad2 },
@@ -76,7 +77,12 @@ export function AppShell({ children, headerRight, room }: { children: ReactNode;
             </button>
           </div>
           {headerRight ? <div className="shrink-0 sm:order-last">{headerRight}</div> : null}
-          <nav aria-label="Sections" className="flex w-full gap-0.5 overflow-x-auto rounded-lg bg-secondary/60 p-1 sm:w-auto sm:gap-1">
+          {/* Phones and small tablets: the tabs sit in two even rows so every label fits; one row from md up. */}
+          <nav
+            aria-label="Sections"
+            className="grid w-full gap-0.5 rounded-lg bg-secondary/60 p-1 md:flex md:w-auto md:gap-1 md:overflow-x-auto"
+            style={{ gridTemplateColumns: `repeat(${Math.ceil(tabs.length / 2)}, minmax(0, 1fr))` }}
+          >
             {tabs.map(({ to, label, icon: Icon }) =>
               to === "/grimoire" ? (
                 <Link
@@ -99,7 +105,7 @@ export function AppShell({ children, headerRight, room }: { children: ReactNode;
                   className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1.5 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground sm:flex-none sm:px-3 sm:text-sm"
                   activeProps={{ className: "bg-primary text-primary-foreground hover:text-primary-foreground", "aria-current": "page" }}
                 >
-                  {/* Five tabs on a phone: drop the icons so the labels fit. */}
+                  {/* On a phone: no icons, so the labels fit. */}
                   <Icon className="hidden h-4 w-4 shrink-0 sm:block" aria-hidden />
                   {label}
                 </Link>

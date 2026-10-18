@@ -7,6 +7,7 @@ import { Workstation } from "@/routes/index";
 import { ListenPage } from "@/routes/listen";
 import { PlayPage } from "@/routes/play";
 import { SequencerPage } from "@/routes/sequencer";
+import { TunerPage } from "@/routes/tuner";
 import { InstallTip } from "./InstallTip";
 import { WelcomeNote } from "./WelcomeNote";
 
@@ -14,6 +15,7 @@ import { WelcomeNote } from "./WelcomeNote";
 const TABS: Record<string, ComponentType> = {
   "/": Workstation,
   "/grimoire": GrimoirePage,
+  "/tuner": TunerPage,
   "/sequencer": SequencerPage,
   "/listen": ListenPage,
   "/play": PlayPage,
