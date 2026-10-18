@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Search } from "lucide-react";
+import { Clock, Image as ImageIcon, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { diagramsFor } from "@/components/luthier/diagrams";
 import { Difficulty, GuideView } from "@/components/luthier/GuideView";
+import { HowToUse } from "@/components/luthier/HowToUse";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,6 +31,7 @@ export function LuthierPage() {
   const [cat, setCat] = useState<string | null>(null);
   const [type, setType] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [picturesOnly, setPicturesOnly] = useState(false);
   const top = useRef<HTMLDivElement>(null);
 
   // The guides are big, so they load only when the tab is opened in Dev mode.
@@ -46,9 +49,9 @@ export function LuthierPage() {
   const byId = useMemo(() => new Map((data?.guides ?? []).map((g) => [g.id, g])), [data]);
   const filtered = useMemo(() => {
     if (!data) return [];
-    const list = data.guides.filter((g) => (!cat || g.category === cat) && appliesTo(g, type));
+    const list = data.guides.filter((g) => (!cat || g.category === cat) && appliesTo(g, type) && (!picturesOnly || diagramsFor(g.id).length > 0));
     return search(list, query);
-  }, [data, cat, type, query]);
+  }, [data, cat, type, query, picturesOnly]);
   const counts = useMemo(() => {
     const m = new Map<string, number>();
     for (const g of data?.guides ?? []) if (appliesTo(g, type)) m.set(g.category, (m.get(g.category) ?? 0) + 1);
@@ -112,11 +115,12 @@ export function LuthierPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {cat || type || query ? (
+                {cat || type || query || picturesOnly ? (
                   <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={() => {
                       setCat(null);
                       setType(null);
                       setQuery("");
+                      setPicturesOnly(false);
                     }}>
                     Clear
                   </Button>
@@ -139,8 +143,22 @@ export function LuthierPage() {
                     {c.name} <span className="opacity-60">{counts.get(c.id) ?? 0}</span>
                   </button>
                 ))}
+                <button
+                  type="button"
+                  aria-pressed={picturesOnly}
+                  onClick={() => setPicturesOnly((v) => !v)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                    picturesOnly ? "border-primary bg-primary text-primary-foreground" : "border-dashed border-primary/60 text-primary hover:border-primary",
+                  )}
+                  data-testid="luthier-pictures-only"
+                >
+                  <ImageIcon className="h-3 w-3" /> With pictures
+                </button>
               </div>
             </section>
+
+            <HowToUse onOpen={open} />
 
             {failed ? <p className="panel p-4 text-sm text-third">Couldn't load the guides. Check your connection and reopen the tab.</p> : null}
             {data && !filtered.length ? <p className="panel p-4 text-sm text-muted-foreground">No guide matches that. Try fewer or different words.</p> : null}
@@ -157,6 +175,11 @@ export function LuthierPage() {
                       <span className="inline-flex items-center gap-1 text-muted-foreground">
                         <Clock className="h-3 w-3" /> {g.time}
                       </span>
+                      {diagramsFor(g.id).length ? (
+                        <span className="inline-flex items-center gap-1 text-primary" title="Has pictures">
+                          <ImageIcon className="h-3 w-3" /> {diagramsFor(g.id).length}
+                        </span>
+                      ) : null}
                     </span>
                   </button>
                 </li>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowLeft, Check, Clock, ExternalLink, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DIAGRAMS, diagramsFor } from "@/components/luthier/diagrams";
 import { APPLIES_NAME, CATEGORIES, DIFFICULTY, segments, swatch, tokensIn, type ColorScheme, type Guide } from "@/lib/luthier/types";
 import { cn } from "@/lib/utils";
 
@@ -98,8 +99,11 @@ export function GuideView({ guide: g, byId, colors, onOpen, onBack }: { guide: G
     });
 
   const tokens = useMemo(() => tokensIn(g), [g]);
-  const needHb = ["hot", "ground", "link", "nFinish", "sFinish", "bare"].some((t) => tokens.has(t));
-  const needSc = tokens.has("scHot") || tokens.has("scGround");
+  const pictures = useMemo(() => diagramsFor(g.id), [g.id]);
+  const hbPicture = pictures.some((k) => k.startsWith("hb-") || ["wire-single-hb", "wire-les-paul", "wire-coil-split"].includes(k));
+  const scPicture = pictures.some((k) => ["wire-strat", "wire-tele", "wire-jazz-bass"].includes(k));
+  const needHb = hbPicture || ["hot", "ground", "link", "nFinish", "sFinish", "bare"].some((t) => tokens.has(t));
+  const needSc = scPicture || tokens.has("scHot") || tokens.has("scGround");
   const hbSchemes = colors.filter((c) => c.kind === "humbucker");
   const scSchemes = colors.filter((c) => c.kind === "single" || c.kind === "p90");
   const [brands, setBrands] = useState<{ hb: number; sc: number }>({ hb: -1, sc: -1 });
@@ -290,6 +294,17 @@ export function GuideView({ guide: g, byId, colors, onOpen, onBack }: { guide: G
               </a>
             </div>
           ))}
+        </Section>
+      ) : null}
+
+      {pictures.length ? (
+        <Section title={`Pictures · ${pictures.length}`}>
+          <p className="text-xs text-muted-foreground">Each picture has numbered markers that match the numbered instructions under it. Drawings are schematic — the curves and gaps are exaggerated so you can see them.</p>
+          <div className="grid gap-3 lg:grid-cols-2" data-testid="luthier-pictures">
+            {pictures.map((k) => (
+              <div key={k}>{DIAGRAMS[k]!.render({ hb, sc })}</div>
+            ))}
+          </div>
         </Section>
       ) : null}
 
