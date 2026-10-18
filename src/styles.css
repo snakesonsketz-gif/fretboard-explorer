@@ -226,3 +226,33 @@
 .font-grimoire {
   font-family: "Grenze Gotisch", "UnifrakturMaguntia", Georgia, serif;
 }
+
+/* Tab Maker: each tab cell sits on its string line. */
+.tab-string::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: color-mix(in oklab, var(--color-foreground) 38%, transparent);
+}
+
+/* Luthier pictures: each step's labels arrive with a short pop; this step's wires show the signal flowing. */
+@keyframes lw-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes lw-flow {
+  to { stroke-dashoffset: -22; }
+}
+@keyframes lw-text {
+  from { opacity: 0; transform: translateX(6px); }
+  to { opacity: 1; transform: none; }
+}
+.lw-layer > * { animation: lw-in 0.32s ease-out both; }
+.lw-flow { animation: lw-flow 0.9s linear infinite; }
+.lw-step-text { animation: lw-text 0.25s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .lw-layer > *, .lw-flow, .lw-step-text { animation: none; }
+}

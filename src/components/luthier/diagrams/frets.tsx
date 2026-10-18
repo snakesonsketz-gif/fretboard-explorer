@@ -19,14 +19,14 @@ export function FretLevelDiagram() {
       ]}
       note="StewMac: aim to remove under about 0.008–0.010 in in total, and under roughly 20% of the fret's height. Frets under about 0.038 in tall are too low to level — refret instead."
     >
-      <rect x={20} y={120} width={330} height={30} fill={C.wood} stroke={C.woodDark} />
+      <rect x={20} y={120} width={330} height={30} fill={C.woodFill} stroke={C.woodDark} />
       <T x={185} y={160} anchor="middle" size={8}>fretboard, side view (heights exaggerated)</T>
       {frets.map((x, i) => {
         const y = fretTop(i);
         const inked = i !== high;
         return (
           <g key={x}>
-            <path d={`M ${x - 5} 120 Q ${x} ${2 * y - 120} ${x + 5} 120 Z`} fill={C.metal} stroke={C.line} />
+            <path d={`M ${x - 5} 120 Q ${x} ${2 * y - 120} ${x + 5} 120 Z`} fill={C.metalFill} stroke={C.line} />
             {inked ? (
               <At n={[2, 3, 4]}>
                 <path d={`M ${x - 3} ${inkY(y)} Q ${x} ${2 * (y + 1) - inkY(y)} ${x + 3} ${inkY(y)}`} fill="none" stroke="#3b6cff" strokeWidth={2.2} />
@@ -57,8 +57,8 @@ export function FretLevelDiagram() {
         <Arrow x1={110} y1={74} x2={260} y2={74} both />
         <Tag x={185} y={58} anchor="middle">long, light strokes along the strings</Tag>
         <Zoom x={318} y={44} r={28} cx={frets[high]!} cy={108} scale={2.6} label="high fret: ink gone first" labelAt="above">
-          <rect x={frets[high]! - 14} y={120} width={28} height={10} fill={C.wood} />
-          <path d={`M ${frets[high]! - 5} 120 Q ${frets[high]!} 92 ${frets[high]! + 5} 120 Z`} fill={C.metal} stroke={C.line} />
+          <rect x={frets[high]! - 14} y={120} width={28} height={10} fill={C.woodFill} />
+          <path d={`M ${frets[high]! - 5} 120 Q ${frets[high]!} 92 ${frets[high]! + 5} 120 Z`} fill={C.metalFill} stroke={C.line} />
           <rect x={frets[high]! - 14} y={103.5} width={28} height={2.5} fill="#8a7e6a" />
           <rect x={frets[high]! - 14} y={96} width={28} height={7.5} fill="#c5cbd2" />
         </Zoom>
@@ -83,8 +83,8 @@ export function FretCrownDiagram() {
     const top = kind === "flat" ? `M ${x - 22} 130 L ${x - 18} 100 L ${x + 18} 100 L ${x + 22} 130 Z` : `M ${x - 22} 130 C ${x - 20} 95 ${x + 20} 95 ${x + 22} 130 Z`;
     return (
       <g>
-        <rect x={x - 32} y={130} width={64} height={22} fill={C.wood} stroke={C.woodDark} />
-        <path d={top} fill={C.metal} stroke={C.line} />
+        <rect x={x - 32} y={130} width={64} height={22} fill={C.woodFill} stroke={C.woodDark} />
+        <path d={top} fill={C.metalFill} stroke={C.line} />
       </g>
     );
   };
@@ -154,16 +154,16 @@ export function FretEndDiagram() {
       ]}
       note="StewMac's written guide: 30–35°; their video: 35–45°."
     >
-      <rect x={60} y={90} width={240} height={60} fill={C.wood} stroke={C.woodDark} />
+      <rect x={60} y={90} width={240} height={60} fill={C.woodFill} stroke={C.woodDark} />
       <T x={180} y={164} anchor="middle" size={9}>fretboard and fret, looking along the neck</T>
       <At n={1}>
-        <path d="M 70 90 L 312 90 L 312 70 L 70 70 Z" fill={C.metal} stroke={C.line} />
+        <path d="M 70 90 L 312 90 L 312 70 L 70 70 Z" fill={C.metalFill} stroke={C.line} />
         <rect x={300} y={70} width={12} height={20} fill={C.bad} opacity={0.6} />
         <Tag x={312} y={52} anchor="end" color={C.bad}>fret sticks out past the board</Tag>
         <Tag x={120} y={30} anchor="middle">humidify to 45–55% RH first</Tag>
       </At>
       <At n={[2, 3, 4]}>
-        <path d="M 70 90 L 270 90 L 300 70 L 70 70 Z" fill={C.metal} stroke={C.line} />
+        <path d="M 70 90 L 270 90 L 300 70 L 70 70 Z" fill={C.metalFill} stroke={C.line} />
       </At>
       <At n={2}>
         <rect x={290} y={90} width={14} height={60} fill="#e8d36a" opacity={0.7} />
@@ -178,7 +178,7 @@ export function FretEndDiagram() {
       </Hl>
       <At n={3}>
         <Zoom x={110} y={50} r={30} cx={278} cy={76} scale={3} label="corner rounded off" labelAt="above">
-          <path d="M 260 90 L 270 90 L 284 80 Q 288 76 284 72 L 260 70 Z" fill={C.metal} stroke={C.line} />
+          <path d="M 260 90 L 270 90 L 284 80 Q 288 76 284 72 L 260 70 Z" fill={C.metalFill} stroke={C.line} />
         </Zoom>
         <circle cx={276} cy={78} r={6} fill="none" stroke={C.good} strokeWidth={1.5} />
       </At>
@@ -206,9 +206,9 @@ export function NutSlotDiagram() {
       ]}
       note="A slot that pinches or is too narrow makes strings ping and stick when you tune. A pencil-lead (graphite) rub in the slot helps strings slide."
     >
-      <rect x={160} y={110} width={190} height={30} fill={C.wood} stroke={C.woodDark} />
+      <rect x={160} y={110} width={190} height={30} fill={C.woodFill} stroke={C.woodDark} />
       <T x={260} y={152} anchor="middle" size={9}>fretboard →</T>
-      <path d="M 10 100 L 140 122 L 140 152 L 10 130 Z" fill={C.woodDark} />
+      <path d="M 10 100 L 140 122 L 140 152 L 10 130 Z" fill={C.woodDarkFill} />
       <T x={60} y={150} size={9}>← headstock</T>
       <Hl n={[1, 3]}>
         <path d="M 140 85 L 162 85 L 162 140 L 140 140 Z" fill="#f1ead8" stroke={C.line} />
@@ -217,7 +217,7 @@ export function NutSlotDiagram() {
         <path d="M 140 104 L 162 96" stroke={C.accent} strokeWidth={3} />
       </Hl>
       <T x={150} y={76} anchor="middle" color={C.ink}>nut</T>
-      <path d="M 210 110 Q 216 102 222 110 Z" fill={C.metal} />
+      <path d="M 210 110 Q 216 102 222 110 Z" fill={C.metalFill} />
       <line x1={20} y1={125} x2={162} y2={95} stroke={C.string} strokeWidth={2.5} />
       <line x1={162} y1={95} x2={350} y2={92} stroke={C.string} strokeWidth={2.5} />
       <At n={1}>
@@ -226,7 +226,7 @@ export function NutSlotDiagram() {
         <Arrow x1={210} y1={69} x2={166} y2={92} color={C.good} />
         <Zoom x={70} y={50} r={30} cx={155} cy={98} scale={3.5} label="no contact behind it" labelAt="above">
           <path d="M 140 85 L 162 85 L 162 140 L 140 140 Z" fill="#f1ead8" />
-          <path d="M 140 104 L 162 96 L 162 100 L 140 108 Z" fill={C.woodDark} opacity={0.5} />
+          <path d="M 140 104 L 162 96 L 162 100 L 140 108 Z" fill={C.woodDarkFill} opacity={0.5} />
           <line x1={130} y1={103} x2={162} y2={95} stroke={C.string} strokeWidth={2.5} />
         </Zoom>
       </At>
@@ -265,9 +265,9 @@ export function StringWrapDiagram() {
         "Downward wraps increase the break angle over the nut. Stretch the new string gently along its length and retune a few times.",
       ]}
     >
-      <rect x={30} y={40} width={140} height={140} rx={14} fill={C.woodDark} />
+      <rect x={30} y={40} width={140} height={140} rx={14} fill={C.woodDarkFill} />
       <T x={100} y={30} anchor="middle">headstock</T>
-      <rect x={90} y={70} width={24} height={80} rx={4} fill={C.metal} stroke={C.line} />
+      <rect x={90} y={70} width={24} height={80} rx={4} fill={C.metalFill} stroke={C.line} />
       <T x={102} y={166} anchor="middle" color={C.ink} size={9}>post (side view)</T>
       <At n={1}>
         <line x1={102} y1={80} x2={340} y2={100} stroke={C.string} strokeWidth={2.2} />

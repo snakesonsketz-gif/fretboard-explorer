@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BookOpen, Ear, FlaskConical, Gamepad2, Gauge, Hammer, Music2, Search, SlidersHorizontal } from "lucide-react";
+import { BookOpen, Ear, FileMusic, FlaskConical, Gamepad2, Gauge, Hammer, Music2, Search, SlidersHorizontal } from "lucide-react";
 import { setDevMode, useDevMode } from "@/lib/devMode";
 import { engine } from "@/lib/engine";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ const TABS = [
   { to: "/", label: "Explore", icon: Search },
   { to: "/grimoire", label: "Grimoire", icon: BookOpen },
   { to: "/tuner", label: "Tuner", icon: Gauge },
+  { to: "/tabs", label: "Tabs", icon: FileMusic },
   { to: "/sequencer", label: "Sequencer", icon: SlidersHorizontal },
   { to: "/listen", label: "Listen", icon: Ear },
   { to: "/play", label: "Play", icon: Gamepad2 },

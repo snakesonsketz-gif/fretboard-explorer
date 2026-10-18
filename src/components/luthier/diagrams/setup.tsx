@@ -9,7 +9,7 @@ import { Arrow, At, C, Figure, fretXs, Gap, Hl, N, T, Tag, Turn, Zoom } from "./
 
 /** A fret seen from the side: a crowned bead of wire sitting on the board. */
 const Fret = ({ x, y, w = 5, h = 6 }: { x: number; y: number; w?: number; h?: number }) => (
-  <path d={`M ${x - w / 2} ${y} C ${x - w / 2} ${y - h}, ${x + w / 2} ${y - h}, ${x + w / 2} ${y} Z`} fill={C.metal} stroke="#8d939b" strokeWidth={0.6} />
+  <path d={`M ${x - w / 2} ${y} C ${x - w / 2} ${y - h}, ${x + w / 2} ${y - h}, ${x + w / 2} ${y} Z`} fill={C.metalFill} stroke="#8d939b" strokeWidth={0.6} />
 );
 const Finger = ({ x, y }: { x: number; y: number }) => <path d={`M ${x - 9} ${y - 22} Q ${x - 10} ${y - 2} ${x} ${y} Q ${x + 10} ${y - 2} ${x + 9} ${y - 22} Z`} fill="#d9a77c" stroke="#9a6a45" strokeWidth={0.8} />;
 const Capo = ({ x, y }: { x: number; y: number }) => (
@@ -64,9 +64,9 @@ export function ReliefDiagram() {
       note="The bow is drawn hugely exaggerated — real relief is about the thickness of two or three sheets of paper."
     >
       {/* headstock, neck and body */}
-      <path d="M 8 118 L 30 124 L 30 150 L 8 146 Z" fill={C.woodDark} />
-      <path d={`${board} L 320 162 L 36 162 Z`} fill={C.wood} stroke={C.woodDark} />
-      <path d="M 300 120 Q 330 110 352 120 L 352 175 L 300 175 Z" fill={C.woodDark} opacity={0.7} />
+      <path d="M 8 118 L 30 124 L 30 150 L 8 146 Z" fill={C.woodDarkFill} />
+      <path d={`${board} L 320 162 L 36 162 Z`} fill={C.woodFill} stroke={C.woodDark} />
+      <path d="M 300 120 Q 330 110 352 120 L 352 175 L 300 175 Z" fill={C.woodDarkFill} opacity={0.7} />
       <T x={330} y={186} anchor="middle" size={8}>body</T>
       <rect x={30} y={115} width={7} height={18} fill="#f1ead8" stroke={C.line} />
       {xs.slice(1).map((x, i) => (
@@ -101,7 +101,7 @@ export function ReliefDiagram() {
         <rect x={f8 - 2} y={sy(f8) + 1.2} width={4} height={top(8) - sy(f8) - 1.6} fill={C.accent} />
       </Hl>
       <Zoom n={[3, 4]} x={262} y={60} r={36} cx={f8} cy={(sy(f8) + top(8)) / 2} scale={2.6} label="8th fret, close up" labelAt="above">
-        <rect x={f8 - 20} y={boardY(f8)} width={40} height={10} fill={C.wood} />
+        <rect x={f8 - 20} y={boardY(f8)} width={40} height={10} fill={C.woodFill} />
         <Fret x={f8} y={boardY(f8)} />
         <line x1={f8 - 20} y1={sy(f8 - 20)} x2={f8 + 20} y2={sy(f8 + 20)} stroke={C.string} strokeWidth={1.4} />
         <rect x={f8 - 9} y={sy(f8) + 1.1} width={18} height={top(8) - sy(f8) - 1.4} fill={C.accent} opacity={0.85} />
@@ -136,7 +136,7 @@ export function ActionDiagram() {
       ]}
       note="Fender 9.5–12 in radius: 4/64 in (1.6 mm) at the 17th fret on both E strings. Gibson Les Paul (DeCola): 5/64 in low E, 3/64 in high E at the 12th."
     >
-      <rect x={10} y={150} width={340} height={22} fill={C.wood} stroke={C.woodDark} />
+      <rect x={10} y={150} width={340} height={22} fill={C.woodFill} stroke={C.woodDark} />
       {[60, f, 280].map((x) => (
         <Hl key={x} n={x === f ? 1 : 99}>
           <Fret x={x} y={150} w={7} h={9} />
@@ -188,7 +188,7 @@ export function NutCheckDiagram() {
   const y = (x: number) => nutTop + ((x - 60) / (f[2]! - 60)) * (pressY - nutTop);
   const mini = (x: number, gap: number, label: string, color: string) => (
     <g>
-      <rect x={x - 34} y={36} width={68} height={10} fill={C.wood} />
+      <rect x={x - 34} y={36} width={68} height={10} fill={C.woodFill} />
       <Fret x={x} y={36} w={5} h={5} />
       <line x1={x - 34} y1={31 - gap} x2={x + 34} y2={31 - gap + 2} stroke={C.string} strokeWidth={1.6} />
       <T x={x} y={58} anchor="middle" size={8} color={color} weight={700}>
@@ -207,8 +207,8 @@ export function NutCheckDiagram() {
       ]}
       note="StewMac's target for open strings over the 1st fret: plain 0.007–0.012 in, wound 0.013–0.020 in."
     >
-      <path d="M 6 118 L 58 124 L 58 150 L 6 146 Z" fill={C.woodDark} />
-      <rect x={58} y={127} width={292} height={23} fill={C.wood} stroke={C.woodDark} />
+      <path d="M 6 118 L 58 124 L 58 150 L 6 146 Z" fill={C.woodDarkFill} />
+      <rect x={58} y={127} width={292} height={23} fill={C.woodFill} stroke={C.woodDark} />
       <rect x={52} y={nutTop} width={9} height={37} fill="#f1ead8" stroke={C.line} />
       <T x={56} y={101} anchor="middle" size={9}>nut</T>
       {f.map((x, i) => (
@@ -230,7 +230,7 @@ export function NutCheckDiagram() {
       <Tag x={f[2]! + 10} y={50} n={1} anchor="middle">press just behind the 3rd fret</Tag>
       <N n={1} x={f[2]! - 8} y={80} />
       <Zoom n={2} x={300} y={64} r={36} cx={f[0]!} cy={y(f[0]!) + 3} scale={4} label="gap over the 1st fret" labelAt="above">
-        <rect x={f[0]! - 15} y={127} width={30} height={10} fill={C.wood} />
+        <rect x={f[0]! - 15} y={127} width={30} height={10} fill={C.woodFill} />
         <Fret x={f[0]!} y={127} w={6} h={7} />
         <line x1={f[0]! - 15} y1={y(f[0]! - 15)} x2={f[0]! + 15} y2={y(f[0]! + 15)} stroke={C.string} strokeWidth={2} />
       </Zoom>
@@ -286,13 +286,13 @@ export function TrussRodDiagram() {
       {panel(5, 11, "Too much relief", 1)}
       {panel(190, -11, "Back-bow", 2)}
       <At n={1}>
-        <polygon points={hex(90, 152, 13)} fill={C.metal} stroke={C.line} />
+        <polygon points={hex(90, 152, 13)} fill={C.metalFill} stroke={C.line} />
         <circle cx={90} cy={152} r={5} fill="#2a2d31" />
         <Turn cx={90} cy={152} r={22} cw color={C.good} />
         <Tag x={90} y={196} anchor="middle" color={C.good}>tighten: clockwise ↻</Tag>
       </At>
       <At n={2}>
-        <polygon points={hex(275, 152, 13)} fill={C.metal} stroke={C.line} />
+        <polygon points={hex(275, 152, 13)} fill={C.metalFill} stroke={C.line} />
         <circle cx={275} cy={152} r={5} fill="#2a2d31" />
         <Turn cx={275} cy={152} r={22} cw={false} color={C.bad} />
         <Tag x={275} y={196} anchor="middle" color={C.bad}>loosen: anticlockwise ↺</Tag>
@@ -301,7 +301,7 @@ export function TrussRodDiagram() {
         <rect x={10} y={130} width={340} height={76} rx={8} fill="var(--color-card)" stroke={C.line} />
         <Eye x={60} y={168} />
         <line x1={76} y1={168} x2={150} y2={168} stroke={C.ink} strokeDasharray="3 3" />
-        <polygon points={hex(180, 168, 16)} fill={C.metal} stroke={C.line} />
+        <polygon points={hex(180, 168, 16)} fill={C.metalFill} stroke={C.line} />
         <circle cx={180} cy={168} r={6} fill="#2a2d31" />
         <Turn cx={180} cy={168} r={26} cw color={C.good} />
         <T x={214} y={150} size={9} color={C.ink} weight={700}>look straight at the nut:</T>
@@ -341,17 +341,17 @@ export function IntonationDiagram() {
       ]}
       note="Saddles usually end up in a stagger: thicker strings further back. Set intonation after the action, because changing height changes intonation."
     >
-      <rect x={20} y={86} width={170} height={44} fill={C.wood} stroke={C.woodDark} />
+      <rect x={20} y={86} width={170} height={44} fill={C.woodFill} stroke={C.woodDark} />
       <rect x={14} y={86} width={7} height={44} fill="#f1ead8" stroke={C.line} />
       <T x={17} y={78} anchor="middle" size={9}>nut</T>
       <Hl n={2}>
-        <rect x={182} y={82} width={5} height={52} fill={C.metal} />
+        <rect x={182} y={82} width={5} height={52} fill={C.metalFill} />
       </Hl>
       <T x={185} y={146} anchor="middle" size={9} color={C.ink} weight={700}>12th fret (halfway)</T>
-      <rect x={196} y={96} width={140} height={30} rx={6} fill={C.woodDark} opacity={0.5} />
+      <rect x={196} y={96} width={140} height={30} rx={6} fill={C.woodDarkFill} opacity={0.5} />
       <T x={300} y={146} anchor="middle" size={9}>bridge</T>
       <Hl n={3}>
-        <rect x={262} y={98} width={26} height={24} rx={3} fill={C.metal} stroke={C.line} />
+        <rect x={262} y={98} width={26} height={24} rx={3} fill={C.metalFill} stroke={C.line} />
         <line x1={288} y1={110} x2={330} y2={110} stroke="#8d939b" strokeWidth={2} />
         <circle cx={331} cy={110} r={3.5} fill="#8d939b" />
       </Hl>
@@ -406,7 +406,7 @@ export function RadiusDiagram() {
       ]}
       note="Common radii: vintage Fender 7.25 in, modern Fender 9.5 in, Gibson 12 in, many superstrats 15–17 in or compound."
     >
-      <path d={`M 60 ${arcY(60)} ${Array.from({ length: 31 }, (_, i) => `L ${60 + i * 8} ${arcY(60 + i * 8)}`).join(" ")} L 300 182 L 60 182 Z`} fill={C.wood} stroke={C.woodDark} />
+      <path d={`M 60 ${arcY(60)} ${Array.from({ length: 31 }, (_, i) => `L ${60 + i * 8} ${arcY(60 + i * 8)}`).join(" ")} L 300 182 L 60 182 Z`} fill={C.woodFill} stroke={C.woodDark} />
       <path d={`M 64 ${arcY(64, 2)} ${Array.from({ length: 30 }, (_, i) => `L ${64 + i * 8} ${arcY(64 + i * 8, 2)}`).join(" ")}`} fill="none" stroke={C.metal} strokeWidth={3} />
       <T x={180} y={166} anchor="middle" size={9} color={C.ink}>fretboard and fret (end view)</T>
       <At n={[2, 3]}>
@@ -510,11 +510,11 @@ export function SaddleRuleDiagram() {
       ]}
       note="Frets.com and Taylor's 2:1 rule. Check humidity first: a dry guitar reads low and a damp one high."
     >
-      <rect x={10} y={130} width={330} height={14} fill={C.wood} stroke={C.woodDark} />
+      <rect x={10} y={130} width={330} height={14} fill={C.woodFill} stroke={C.woodDark} />
       <T x={20} y={155} size={9}>nut</T>
       <T x={175} y={155} anchor="middle" size={9} color={C.ink}>12th fret</T>
       <Fret x={175} y={130} w={6} h={7} />
-      <rect x={300} y={100} width={50} height={30} rx={3} fill={C.woodDark} />
+      <rect x={300} y={100} width={50} height={30} rx={3} fill={C.woodDarkFill} />
       <T x={325} y={160} anchor="middle" size={9}>bridge</T>
       <At n={[2, 3, 4]}>
         <rect x={326} y={hi.y} width={8} height={130 - hi.y} fill="#f1ead8" stroke={C.line} opacity={0.3} strokeDasharray="3 2" />
@@ -580,12 +580,12 @@ export function NeckShimDiagram() {
         "A full-pocket tapered shim supports the whole heel better than a small strip. Fender: a 0.010 in strip raises the action about 1/32 in; on Micro-Tilt necks, 1/4 turn of the hex screw does the same.",
       ]}
     >
-      <rect x={150} y={100} width={200} height={60} fill={C.wood} stroke={C.woodDark} />
+      <rect x={150} y={100} width={200} height={60} fill={C.woodFill} stroke={C.woodDark} />
       <T x={300} y={175} anchor="middle" size={9}>body</T>
       <rect x={150} y={100} width={90} height={10} fill="var(--color-card)" />
       <T x={300} y={124} anchor="middle" size={9}>neck pocket</T>
       <At n={1}>
-        <rect x={286} y={78} width={22} height={14} rx={2} fill={C.metal} stroke={C.line} />
+        <rect x={286} y={78} width={22} height={14} rx={2} fill={C.metalFill} stroke={C.line} />
         <line x1={292} y1={92} x2={292} y2={100} stroke="#8d939b" strokeWidth={2} />
         <line x1={302} y1={92} x2={302} y2={100} stroke="#8d939b" strokeWidth={2} />
         <T x={297} y={70} anchor="middle" size={8}>saddle</T>
@@ -594,7 +594,7 @@ export function NeckShimDiagram() {
       </At>
       <Hl n={[2, 3]}>
         <g transform={`translate(0 ${0}) rotate(${-3} 240 100)`}>
-          <rect x={10} y={84} width={230} height={16} rx={2} fill={C.woodDark} />
+          <rect x={10} y={84} width={230} height={16} rx={2} fill={C.woodDarkFill} />
         </g>
       </Hl>
       <At n={2}>
@@ -644,11 +644,11 @@ export function TremFloatDiagram() {
       ]}
       note="Changing string gauge or tuning changes the balance; re-set the float afterwards. Three springs is the usual starting point."
     >
-      <rect x={10} y={80} width={340} height={92} fill={C.wood} stroke={C.woodDark} />
+      <rect x={10} y={80} width={340} height={92} fill={C.woodFill} stroke={C.woodDark} />
       <rect x={60} y={120} width={250} height={42} rx={3} fill="#25282d" stroke={C.line} />
       <T x={185} y={186} anchor="middle" size={8}>side view — spring cavity in the back of the body</T>
       <g transform="rotate(-6 210 78)">
-        <rect x={210} y={70} width={110} height={8} fill={C.metal} stroke={C.line} />
+        <rect x={210} y={70} width={110} height={8} fill={C.metalFill} stroke={C.line} />
         <rect x={232} y={78} width={22} height={72} fill="#9aa1aa" stroke={C.line} />
       </g>
       <circle cx={210} cy={78} r={3} fill={C.ink} />
@@ -660,7 +660,7 @@ export function TremFloatDiagram() {
         ))}
       </Hl>
       <Hl n={3}>
-        <rect x={80} y={126} width={10} height={26} fill={C.metal} stroke={C.line} />
+        <rect x={80} y={126} width={10} height={26} fill={C.metalFill} stroke={C.line} />
         <line x1={72} y1={132} x2={44} y2={132} stroke={C.ink} strokeWidth={2.4} />
         <line x1={72} y1={146} x2={44} y2={146} stroke={C.ink} strokeWidth={2.4} />
       </Hl>
@@ -707,7 +707,7 @@ export function FloydLevelDiagram() {
       ]}
       note="Action on a Floyd is set at the two front studs (no individual saddle heights). On Ibanez Edge bridges loosen the stud lock screws first."
     >
-      <rect x={10} y={110} width={340} height={62} fill={C.wood} stroke={C.woodDark} />
+      <rect x={10} y={110} width={340} height={62} fill={C.woodFill} stroke={C.woodDark} />
       <T x={180} y={184} anchor="middle" size={8}>side view</T>
       <circle cx={75} cy={98} r={4} fill={C.ink} />
       <T x={70} y={80} anchor="middle" size={8}>knife edge on stud</T>
@@ -716,7 +716,7 @@ export function FloydLevelDiagram() {
       </Hl>
       <Tag x={180} y={34} n={1} anchor="middle" color={C.good}>base plate parallel to the body</Tag>
       <g transform={undefined}>
-        <rect x={70} y={88} width={210} height={10} fill={C.metal} stroke={C.line} />
+        <rect x={70} y={88} width={210} height={10} fill={C.metalFill} stroke={C.line} />
         <rect x={150} y={98} width={40} height={60} fill="#9aa1aa" stroke={C.line} />
         {[250, 262, 274].map((x) => (
           <rect key={x} x={x - 3} y={78} width={6} height={10} rx={2} fill="#b8bec6" />
@@ -768,10 +768,10 @@ export function TomDiagram() {
       ]}
       note="Gibson Les Paul starting point (Jim DeCola): 5/64 in low E, 3/64 in high E at the 12th fret. Saddle intonation screws should face the pickups."
     >
-      <rect x={10} y={146} width={340} height={36} fill={C.wood} stroke={C.woodDark} />
+      <rect x={10} y={146} width={340} height={36} fill={C.woodFill} stroke={C.woodDark} />
       <T x={180} y={192} anchor="middle" size={8}>front view, looking from the neck</T>
       <Hl n={3}>
-        <path d="M 70 98 Q 184 76 298 98 L 298 114 L 70 114 Z" fill={C.metal} stroke={C.line} />
+        <path d="M 70 98 Q 184 76 298 98 L 298 114 L 70 114 Z" fill={C.metalFill} stroke={C.line} />
         {strings.map((s, i) => (
           <rect key={i} x={s.x - 9} y={94 + s.dy} width={18} height={10} rx={2} fill="#b8bec6" stroke={C.line} />
         ))}
@@ -781,7 +781,7 @@ export function TomDiagram() {
       ))}
       {[80, 288].map((x) => (
         <Hl key={x} n={2}>
-          <rect x={x - 3} y={114} width={6} height={32} fill={C.metal} />
+          <rect x={x - 3} y={114} width={6} height={32} fill={C.metalFill} />
           <rect x={x - 15} y={116} width={30} height={9} rx={2} fill="#b8bec6" stroke={C.line} />
         </Hl>
       ))}
@@ -826,11 +826,11 @@ export function BridgeLiftDiagram() {
       note="Don't push glue into the gap: a proper reglue means removing the bridge, cleaning both surfaces and clamping it (luthier job)."
     >
 
-      <rect x={10} y={120} width={340} height={30} fill={C.wood} stroke={C.woodDark} />
+      <rect x={10} y={120} width={340} height={30} fill={C.woodFill} stroke={C.woodDark} />
       <T x={30} y={164} size={9}>top (soundboard), side view</T>
       <T x={340} y={164} anchor="end" size={9}>end pin →</T>
       <Hl n={[1, 2]}>
-        <polygon points="140,120 150,100 270,100 280,112 280,114 140,120" fill={C.woodDark} />
+        <polygon points="140,120 150,100 270,100 280,112 280,114 140,120" fill={C.woodDarkFill} />
       </Hl>
       <rect x={186} y={88} width={6} height={12} fill="#f1ead8" />
       <T x={205} y={80} anchor="middle" size={9}>bridge</T>
@@ -839,8 +839,8 @@ export function BridgeLiftDiagram() {
         <circle cx={330} cy={60} r={9} fill="#f6e27a" />
         <line x1={322} y1={66} x2={286} y2={110} stroke="#f6e27a" strokeWidth={1} strokeDasharray="2 2" />
         <Zoom x={80} y={56} r={30} cx={276} cy={116} scale={4} label="light under the back edge = gap" labelAt="above">
-          <rect x={250} y={120} width={40} height={10} fill={C.wood} />
-          <polygon points="250,104 280,112 280,114 250,120" fill={C.woodDark} />
+          <rect x={250} y={120} width={40} height={10} fill={C.woodFill} />
+          <polygon points="250,104 280,112 280,114 250,120" fill={C.woodDarkFill} />
           <polygon points="262,119 280,114 280,120" fill="#f6e27a" opacity={0.8} />
         </Zoom>
       </At>

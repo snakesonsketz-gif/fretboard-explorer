@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import type { ColorScheme } from "@/lib/luthier/types";
 import { swatch } from "@/lib/luthier/types";
-import { At, C, Figure, Hl, N, T, Tag, Zoom, type StepTag } from "./kit";
+import { At, C, Figure, Hl, N, T, Tag, useActive, Zoom, type StepTag } from "./kit";
 
 type P = readonly [number, number];
 export interface Schemes {
@@ -51,10 +51,10 @@ export function pot(x: number, y: number) {
 function Pot({ p, label }: { p: ReturnType<typeof pot>; label: string }) {
   return (
     <g>
-      <circle cx={p.x} cy={p.y} r={22} fill="#59606a" stroke={C.line} />
+      <circle cx={p.x} cy={p.y} r={22} fill={C.potFill} stroke={C.line} />
       {[p.l1, p.l2, p.l3].map(([x, y], i) => (
         <g key={i}>
-          <rect x={x - 3} y={y} width={6} height={9} fill={C.metal} stroke={C.line} />
+          <rect x={x - 3} y={y} width={6} height={9} fill={C.metalFill} stroke={C.line} />
           <T x={x} y={y - 7} anchor="middle" size={8}>
             {i + 1}
           </T>
@@ -75,9 +75,9 @@ export function jack(x: number, y: number) {
 function Jack({ j }: { j: ReturnType<typeof jack> }) {
   return (
     <g>
-      <rect x={j.x - 18} y={j.y - 8} width={36} height={20} rx={4} fill="#59606a" stroke={C.line} />
-      <circle cx={j.tip[0]} cy={j.tip[1]} r={3.5} fill={C.metal} />
-      <circle cx={j.sleeve[0]} cy={j.sleeve[1]} r={3.5} fill={C.metal} />
+      <rect x={j.x - 18} y={j.y - 8} width={36} height={20} rx={4} fill={C.potFill} stroke={C.line} />
+      <circle cx={j.tip[0]} cy={j.tip[1]} r={3.5} fill={C.metalFill} />
+      <circle cx={j.sleeve[0]} cy={j.sleeve[1]} r={3.5} fill={C.metalFill} />
       <T x={j.tip[0]} y={j.y + 22} anchor="middle" size={8}>tip</T>
       <T x={j.sleeve[0]} y={j.y + 22} anchor="middle" size={8}>sleeve</T>
       <T x={j.x} y={j.y + 3} anchor="middle" color={C.ink} weight={700} size={9}>jack</T>
@@ -124,9 +124,9 @@ export function toggle3(x: number, y: number) {
 function Toggle3({ t }: { t: ReturnType<typeof toggle3> }) {
   return (
     <g>
-      <rect x={t.x - 30} y={t.y - 6} width={60} height={36} rx={4} fill="#59606a" stroke={C.line} />
+      <rect x={t.x - 30} y={t.y - 6} width={60} height={36} rx={4} fill={C.potFill} stroke={C.line} />
       {[t.rhythm, t.treble, t.out, t.gnd].map(([x, y], i) => (
-        <rect key={i} x={x - 3} y={y - 3} width={6} height={6} fill={C.metal} />
+        <rect key={i} x={x - 3} y={y - 3} width={6} height={6} fill={C.metalFill} />
       ))}
       <T x={t.rhythm[0]} y={t.y - 14} anchor="middle" size={8}>rhythm</T>
       <T x={t.treble[0]} y={t.y - 14} anchor="middle" size={8}>treble</T>
@@ -148,7 +148,7 @@ function Lever({ l, label }: { l: ReturnType<typeof lever>; label: string }) {
       {(["A", "B"] as const).map((d) =>
         Object.entries(l[d]).map(([n, [x, y]]) => (
           <g key={d + n}>
-            <rect x={x - 3} y={y - 3} width={6} height={6} fill={C.metal} />
+            <rect x={x - 3} y={y - 3} width={6} height={6} fill={C.metalFill} />
             <T x={x} y={y + 10} anchor="middle" size={7} color="#d0d4da">
               {n === "C" ? "com" : n}
             </T>
@@ -188,10 +188,13 @@ function Wire({ w, s }: { w: WireDef; s: Schemes }) {
   const { color } = roleColor(w.role, s);
   const d = w.pts.map(([x, y], i) => `${i ? "L" : "M"} ${x} ${y}`).join(" ");
   const end = w.pts[w.pts.length - 1]!;
+  const active = useActive(w.n);
   return (
     <InStep n={w.n}>
       <path d={d} fill="none" stroke={outlineFor(color)} strokeWidth={4.4} strokeLinejoin="round" strokeLinecap="round" />
       <path d={d} fill="none" stroke={color} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
+      {/* the wires soldered in this step: a pulse runs along them, start to end */}
+      {active ? <path d={d} className="lw-flow" fill="none" stroke="#fff" strokeOpacity={0.75} strokeWidth={1.2} strokeDasharray="2 9" strokeLinecap="round" strokeLinejoin="round" /> : null}
       <circle cx={end[0]} cy={end[1]} r={2.4} fill="#d8dce0" stroke="#2b2f35" />
     </InStep>
   );
@@ -571,10 +574,10 @@ export function CoilSplitWiring({ s }: { s: Schemes }) {
       <rect x={v.x - 30} y={188} width={60} height={40} rx={4} fill="#4a5058" stroke={C.line} />
       <T x={v.x} y={240} anchor="middle" size={8} color={C.ink} weight={700}>push-pull switch (under the pot)</T>
       {[row.down, row.com, row.up].map(([x, y], i) => (
-        <rect key={i} x={x - 3} y={y - 3} width={6} height={6} fill={C.metal} />
+        <rect key={i} x={x - 3} y={y - 3} width={6} height={6} fill={C.metalFill} />
       ))}
       {[row.down, row.com, row.up].map(([x, y], i) => (
-        <rect key={`b${i}`} x={x - 3} y={y - 19} width={6} height={6} fill={C.metal} opacity={0.5} />
+        <rect key={`b${i}`} x={x - 3} y={y - 19} width={6} height={6} fill={C.metalFill} opacity={0.5} />
       ))}
       <Jack j={j} />
       <Rail x1={20} x2={330} y={rail} n={[1, 3]} />
@@ -700,9 +703,9 @@ export function TrebleBleedWiring({ s }: { s: Schemes }) {
             <>
               {cap}
               <Zoom x={290} y={150} r={40} cx={v.x + 7} cy={v.l2[1] - 4} scale={2.6} label="cap across lug 3 ↔ lug 2">
-                <circle cx={v.x} cy={v.y} r={22} fill="#59606a" />
+                <circle cx={v.x} cy={v.y} r={22} fill={C.potFill} />
                 {[v.l1, v.l2, v.l3].map(([x, y], i) => (
-                  <rect key={i} x={x - 3} y={y} width={6} height={9} fill={C.metal} stroke={C.line} strokeWidth={0.4} />
+                  <rect key={i} x={x - 3} y={y} width={6} height={9} fill={C.metalFill} stroke={C.line} strokeWidth={0.4} />
                 ))}
                 {cap}
               </Zoom>

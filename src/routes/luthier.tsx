@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, Image as ImageIcon, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { diagramsFor } from "@/components/luthier/diagrams";
+import { LuthierPaints } from "@/components/luthier/diagrams/kit";
 import { Difficulty, GuideView } from "@/components/luthier/GuideView";
 import { HowToUse } from "@/components/luthier/HowToUse";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,7 @@ export function LuthierPage() {
   return (
     <AppShell>
       <main className="mx-auto max-w-4xl space-y-4 px-3 py-4 sm:px-4" data-testid="luthier">
+        <LuthierPaints />
         <div ref={top} className="scroll-mt-4" />
         {guide ? (
           <GuideView guide={guide} byId={byId} colors={data?.colors ?? []} onOpen={open} onBack={() => open(null)} />

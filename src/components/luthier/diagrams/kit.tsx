@@ -8,19 +8,27 @@
  * Any annotation can belong to a step with `n` (a step number or a list of them); without `n` it
  * shows in every step. `Hl` lights its children up in its step(s) and fades them in the others.
  */
-import { createContext, useContext, useEffect, useId, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, LayoutList, ListOrdered } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutList, ListOrdered, Maximize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const WOOD = "color-mix(in oklab, #b07a45 70%, var(--color-card))";
+const WOOD_DARK = "color-mix(in oklab, #6b4426 75%, var(--color-card))";
 
 export const C = {
   ink: "var(--color-foreground)",
   dim: "var(--color-muted-foreground)",
   line: "color-mix(in oklab, var(--color-foreground) 55%, transparent)",
   faint: "color-mix(in oklab, var(--color-foreground) 18%, transparent)",
-  wood: "color-mix(in oklab, #b07a45 70%, var(--color-card))",
-  woodDark: "color-mix(in oklab, #6b4426 75%, var(--color-card))",
+  wood: WOOD,
+  woodDark: WOOD_DARK,
   metal: "#c9cdd3",
+  /** Fills with texture (wood grain, brushed metal): only for shapes with area, never strokes. */
+  woodFill: "url(#lw-wood)",
+  woodDarkFill: "url(#lw-wood-dark)",
+  metalFill: "url(#lw-metal)",
+  potFill: "url(#lw-pot)",
   string: "#e9e2cf",
   accent: "var(--color-primary)",
   good: "var(--color-extension)",
@@ -37,6 +45,12 @@ export const useStep = () => useContext(StepCtx).step;
 const matches = (step: number | null, n: StepTag | undefined) => n === undefined || step === null || (typeof n === "number" ? n === step : n.includes(step));
 /** Is something tagged `n` visible in the current picture? */
 export const useShown = (n: StepTag | undefined) => matches(useStep(), n);
+
+/** True only in a step picture that this tag belongs to (not in pictures without steps). */
+export const useActive = (n: StepTag | undefined) => {
+  const step = useStep();
+  return n !== undefined && step !== null && matches(step, n);
+};
 
 /** Shows its children only in the given step(s) (and in the all-steps view). */
 export function At({ n, children }: { n: StepTag; children: ReactNode }) {
@@ -82,13 +96,30 @@ function loadMode(): Mode {
 
 /**
  * A diagram with its title and numbered instructions. Step by step: one picture per instruction,
- * with Back/Next. All at once: the full picture and the whole numbered list.
+ * with Back/Next (or swipe the picture, or use the arrow keys). All at once: every step's picture
+ * as a storyboard. The expand button opens the picture full screen.
  */
 export function Figure({ title, children, how, note, viewBox = "0 0 360 200", testId }: { title: string; children: ReactNode; how: ReactNode[]; note?: ReactNode; viewBox?: string; testId?: string }) {
   const glow = `glow${useId().replace(/:/g, "")}`;
   const [mode, setMode] = useState<Mode>("steps");
   const [i, setI] = useState(0);
+  const [big, setBig] = useState(false);
   useEffect(() => setMode(loadMode()), []);
+  useEffect(() => {
+    if (!big) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setBig(false);
+      else if (e.key === "ArrowRight") setI((v) => Math.min(how.length - 1, v + 1));
+      else if (e.key === "ArrowLeft") setI((v) => Math.max(0, v - 1));
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [big, how.length]);
   const pick = (m: Mode) => {
     setMode(m);
     try {
@@ -97,11 +128,15 @@ export function Figure({ title, children, how, note, viewBox = "0 0 360 200", te
       /* storage unavailable */
     }
   };
-  const step = mode === "steps" ? i + 1 : null;
-  const last = how.length - 1;
+
+  const steps = (large: boolean) => (
+    <StepView i={i} setI={setI} how={how} glow={large ? `${glow}big` : glow} viewBox={viewBox} title={title} large={large}>
+      {children}
+    </StepView>
+  );
 
   return (
-    <figure className="space-y-2 rounded-xl border border-border bg-background/40 p-3" data-testid={testId ?? "luthier-diagram"} data-mode={mode}>
+    <figure className="lw-figure space-y-2 rounded-xl border border-border bg-gradient-to-b from-card/70 to-background/40 p-3 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]" data-testid={testId ?? "luthier-diagram"} data-mode={mode}>
       <div className="flex items-start gap-2">
         <figcaption className="flex-1 font-display text-sm font-bold leading-snug">{title}</figcaption>
         <div className="inline-flex shrink-0 rounded-md bg-secondary/60 p-0.5" role="radiogroup" aria-label="Picture view">
@@ -112,44 +147,23 @@ export function Figure({ title, children, how, note, viewBox = "0 0 360 200", te
             <LayoutList className="h-3 w-3" /> All
           </button>
         </div>
+        <button type="button" onClick={() => setBig(true)} className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-secondary/60 text-muted-foreground hover:text-foreground" title="Full screen" aria-label="Show this picture full screen" data-testid="luthier-expand">
+          <Maximize2 className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       {mode === "steps" ? (
-        <div className="space-y-2">
-          <Picture step={step!} glow={glow} viewBox={viewBox} title={title}>
-            {children}
-          </Picture>
-          <div className="flex gap-2.5 rounded-lg bg-secondary/40 p-2.5" data-testid="luthier-diagram-step">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{i + 1}</span>
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Step {i + 1} of {how.length}
-              </p>
-              <p className="text-[13px] leading-snug text-foreground">{how[i]}</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <button type="button" onClick={() => setI((v) => Math.max(0, v - 1))} disabled={i === 0} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Previous step" data-testid="luthier-step-prev">
-              <ChevronLeft className="h-4 w-4" /> Back
-            </button>
-            <div className="flex gap-1.5" role="tablist" aria-label="Steps">
-              {how.map((_, k) => (
-                <button key={k} type="button" role="tab" aria-selected={k === i} aria-label={`Step ${k + 1}`} onClick={() => setI(k)} className={cn("h-2.5 rounded-full transition-all", k === i ? "w-6 bg-primary" : "w-2.5 bg-border hover:bg-primary/50")} />
-              ))}
-            </div>
-            <button type="button" onClick={() => setI((v) => Math.min(last, v + 1))} disabled={i === last} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-primary hover:text-foreground disabled:opacity-30" aria-label="Next step" data-testid="luthier-step-next">
-              Next <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+        steps(false)
       ) : (
         <div className="@container">
           <ol className="grid gap-3 @lg:grid-cols-2" data-testid="luthier-storyboard">
             {how.map((h, k) => (
               <li key={k} className="space-y-1.5">
-                <Picture step={k + 1} glow={`${glow}s${k}`} viewBox={viewBox} title={title}>
-                  {children}
-                </Picture>
+                <button type="button" className="block w-full text-left" onClick={() => (setI(k), setBig(true))} aria-label={`Open step ${k + 1} full screen`}>
+                  <Picture step={k + 1} glow={`${glow}s${k}`} viewBox={viewBox} title={title}>
+                    {children}
+                  </Picture>
+                </button>
                 <div className="flex gap-2 text-[12px] leading-snug">
                   <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">{k + 1}</span>
                   <span className="text-muted-foreground">{h}</span>
@@ -160,26 +174,141 @@ export function Figure({ title, children, how, note, viewBox = "0 0 360 200", te
         </div>
       )}
       {note ? <div className="rounded-md bg-secondary/50 px-2 py-1.5 text-xs text-muted-foreground">{note}</div> : null}
+
+      {big ? (
+        <div className="fixed inset-0 z-50 flex flex-col bg-background/[0.97] backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={title} data-testid="luthier-fullscreen">
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+            <p className="min-w-0 flex-1 truncate font-display text-sm font-bold">{title}</p>
+            <button type="button" onClick={() => setBig(false)} className="grid h-9 w-9 place-items-center rounded-md bg-secondary text-foreground" aria-label="Close full screen" data-testid="luthier-fullscreen-close">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center overflow-y-auto p-3">
+            {steps(true)}
+            <p className="mt-3 text-center text-[11px] text-muted-foreground sm:hidden">Swipe the picture to change step · turn your phone sideways for a bigger picture</p>
+          </div>
+        </div>
+      ) : null}
     </figure>
   );
 }
 
+/** The step-by-step view: picture (swipe it), the step's instruction, Back / dots / Next. */
+function StepView({ i, setI, how, glow, viewBox, title, large, children }: { i: number; setI: (f: (v: number) => number) => void; how: ReactNode[]; glow: string; viewBox: string; title: string; large: boolean; children: ReactNode }) {
+  const last = how.length - 1;
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const go = (d: number) => setI((v) => Math.max(0, Math.min(last, v + d)));
+  return (
+    <div className="space-y-2">
+      <div
+        className="touch-pan-y"
+        onPointerDown={(e) => (touch.current = { x: e.clientX, y: e.clientY })}
+        onPointerUp={(e) => {
+          const t = touch.current;
+          touch.current = null;
+          if (!t) return;
+          const dx = e.clientX - t.x;
+          if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(e.clientY - t.y) * 1.5) go(dx < 0 ? 1 : -1);
+        }}
+      >
+        <Picture key={i} step={i + 1} glow={glow} viewBox={viewBox} title={title} large={large}>
+          {children}
+        </Picture>
+      </div>
+      <div className={cn("flex gap-2.5 rounded-lg border border-primary/25 bg-secondary/40 p-2.5", large && "p-3.5")} data-testid="luthier-diagram-step">
+        <span className={cn("grid shrink-0 place-items-center rounded-full bg-primary font-bold text-primary-foreground shadow-[0_0_12px_-2px_var(--color-primary)]", large ? "h-9 w-9 text-base" : "h-7 w-7 text-sm")}>{i + 1}</span>
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            Step {i + 1} of {how.length}
+          </p>
+          <p key={i} className={cn("lw-step-text leading-snug text-foreground", large ? "text-base" : "text-[13px]")}>
+            {how[i]}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" onClick={() => go(-1)} disabled={i === 0} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Previous step" data-testid="luthier-step-prev">
+          <ChevronLeft className="h-4 w-4" /> Back
+        </button>
+        <div className="flex gap-1.5" role="tablist" aria-label="Steps">
+          {how.map((_, k) => (
+            <button key={k} type="button" role="tab" aria-selected={k === i} aria-label={`Step ${k + 1}`} onClick={() => setI(() => k)} className={cn("h-2.5 rounded-full transition-all", k === i ? "w-6 bg-primary" : k < i ? "w-2.5 bg-primary/45" : "w-2.5 bg-border hover:bg-primary/50")} />
+          ))}
+        </div>
+        <button type="button" onClick={() => go(1)} disabled={i === last} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-primary hover:text-foreground disabled:opacity-30" aria-label="Next step" data-testid="luthier-step-next">
+          Next <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** One step's picture: the drawing rendered with that step's labels and highlights. */
-function Picture({ step, glow, viewBox, title, children }: { step: number; glow: string; viewBox: string; title: string; children: ReactNode }) {
+function Picture({ step, glow, viewBox, title, large = false, children }: { step: number; glow: string; viewBox: string; title: string; large?: boolean; children: ReactNode }) {
   const [layer, setLayer] = useState<SVGGElement | null>(null);
   const width = Number(viewBox.split(/\s+/)[2]) || 360;
   return (
     <StepCtx.Provider value={{ step, glow, layer, width }}>
-      <svg viewBox={viewBox} className="w-full rounded-lg bg-black/10" role="img" aria-label={`${title} — step ${step}`} style={{ fontFamily: "var(--font-sans)" }} data-step={step}>
+      <svg
+        viewBox={viewBox}
+        className={cn("lw-picture w-full rounded-lg", large && "max-h-[62vh]")}
+        role="img"
+        aria-label={`${title} — step ${step}`}
+        style={{ fontFamily: "var(--font-sans)", background: "radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--color-primary) 7%, transparent), transparent 60%), rgba(0,0,0,0.18)" }}
+        data-step={step}
+      >
         <defs>
           <filter id={glow} x="-30%" y="-30%" width="160%" height="160%">
             <feDropShadow dx="0" dy="0" stdDeviation="1.6" style={{ floodColor: "var(--color-primary)", floodOpacity: 0.65 }} />
           </filter>
         </defs>
-        {children}
-        <g ref={setLayer} />
+        {/* faint drafting grid */}
+        <g opacity={0.05} stroke="currentColor" strokeWidth={0.5} className="text-foreground" aria-hidden>
+          {Array.from({ length: Math.ceil(width / 20) }, (_, k) => (
+            <line key={`v${k}`} x1={k * 20} y1={0} x2={k * 20} y2={400} />
+          ))}
+          {Array.from({ length: 20 }, (_, k) => (
+            <line key={`h${k}`} x1={0} y1={k * 20} x2={width} y2={k * 20} />
+          ))}
+        </g>
+        <g className="lw-drawing">{children}</g>
+        <g ref={setLayer} className="lw-layer" />
       </svg>
     </StepCtx.Provider>
+  );
+}
+
+/**
+ * Shared paints for every diagram: wood with grain, brushed metal, a pot casing. Rendered once
+ * on the Luthier page (not inside a picture, so a hidden picture never takes them away).
+ */
+export function LuthierPaints() {
+  return (
+    <svg width="0" height="0" style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }} aria-hidden focusable="false">
+      <defs>
+        <pattern id="lw-wood" patternUnits="userSpaceOnUse" width="80" height="16">
+          <rect width="80" height="16" fill={WOOD} />
+          <path d="M0 3 Q20 1.5 40 3.5 T80 3" fill="none" stroke="#5a3a1e" strokeOpacity="0.28" strokeWidth="0.8" />
+          <path d="M0 9 Q25 11 45 8.5 T80 9" fill="none" stroke="#5a3a1e" strokeOpacity="0.22" strokeWidth="0.7" />
+          <path d="M0 13.5 Q30 12 50 14 T80 13.5" fill="none" stroke="#f0c48f" strokeOpacity="0.12" strokeWidth="0.8" />
+        </pattern>
+        <pattern id="lw-wood-dark" patternUnits="userSpaceOnUse" width="70" height="14">
+          <rect width="70" height="14" fill={WOOD_DARK} />
+          <path d="M0 4 Q18 2.5 35 4.5 T70 4" fill="none" stroke="#2a180a" strokeOpacity="0.35" strokeWidth="0.8" />
+          <path d="M0 10 Q22 12 40 9.5 T70 10" fill="none" stroke="#2a180a" strokeOpacity="0.3" strokeWidth="0.7" />
+        </pattern>
+        <linearGradient id="lw-metal" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#f6f8fa" />
+          <stop offset="0.45" stopColor="#cfd4da" />
+          <stop offset="1" stopColor="#8e959d" />
+        </linearGradient>
+        <radialGradient id="lw-pot" cx="0.38" cy="0.32" r="0.8">
+          <stop offset="0" stopColor="#7d858f" />
+          <stop offset="0.6" stopColor="#59606a" />
+          <stop offset="1" stopColor="#3d434b" />
+        </radialGradient>
+      </defs>
+    </svg>
   );
 }
 

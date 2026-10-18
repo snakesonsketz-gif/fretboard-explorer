@@ -14,7 +14,7 @@ export function DropFillDiagram() {
         "Level with fine paper on a small block, then buff and polish until the repair disappears into the gloss.",
       ]}
     >
-      <rect x={20} y={124} width={320} height={50} fill={C.wood} stroke={C.woodDark} />
+      <rect x={20} y={124} width={320} height={50} fill={C.woodFill} stroke={C.woodDark} />
       <rect x={20} y={100} width={320} height={24} fill="#c0392b" opacity={0.85} />
       <rect x={20} y={100} width={320} height={6} fill="#e8f1f7" opacity={0.5} />
       <T x={330} y={112} anchor="end" size={8} color="#fff">finish</T>

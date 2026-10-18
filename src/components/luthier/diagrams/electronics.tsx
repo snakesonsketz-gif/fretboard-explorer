@@ -8,10 +8,10 @@ export function PotLugsDiagram() {
   const t = pot(260, 120);
   const body = (p: ReturnType<typeof pot>) => (
     <g>
-      <circle cx={p.x} cy={p.y} r={30} fill="#59606a" stroke={C.line} />
+      <circle cx={p.x} cy={p.y} r={30} fill={C.potFill} stroke={C.line} />
       {[p.l1, p.l2, p.l3].map(([x, y], i) => (
         <g key={i}>
-          <rect x={x - 3.5} y={y - 6} width={7} height={13} fill={C.metal} stroke={C.line} />
+          <rect x={x - 3.5} y={y - 6} width={7} height={13} fill={C.metalFill} stroke={C.line} />
           <T x={x} y={y - 14} anchor="middle" color={C.ink} weight={700}>
             {i + 1}
           </T>
@@ -77,7 +77,7 @@ export function PotLugsDiagram() {
 }
 
 export function SolderJointDiagram() {
-  const lug = (x: number) => <rect x={x - 4} y={70} width={8} height={70} fill={C.metal} stroke={C.line} />;
+  const lug = (x: number) => <rect x={x - 4} y={70} width={8} height={70} fill={C.metalFill} stroke={C.line} />;
   return (
     <Figure
       title="Good and bad solder joints"
@@ -340,14 +340,14 @@ export function DcrAtJackDiagram() {
       note="Typical figures: vintage Strat 5.8–6.3 kΩ, Tele bridge 6.2–6.6 kΩ, Gibson PAF about 8.4 kΩ, Seymour Duncan JB 16.4 kΩ, Fender Jazz Bass 8.5 kΩ. Active pickups can't be measured this way."
     >
       <Hl n={1}>
-        <rect x={6} y={60} width={40} height={54} rx={10} fill={C.wood} stroke={C.woodDark} />
+        <rect x={6} y={60} width={40} height={54} rx={10} fill={C.woodFill} stroke={C.woodDark} />
         <circle cx={34} cy={87} r={7} fill="#2b2f35" stroke={C.line} />
         <rect x={20} y={80} width={140} height={14} rx={7} fill="#2b2f35" />
       </Hl>
       <T x={26} y={126} anchor="middle" size={8}>guitar</T>
       <rect x={160} y={78} width={40} height={18} rx={3} fill="#9aa1aa" />
       <Hl n={2}>
-        <rect x={200} y={82} width={30} height={10} fill={C.metal} />
+        <rect x={200} y={82} width={30} height={10} fill={C.metalFill} />
         <rect x={230} y={83} width={12} height={8} rx={4} fill="#d8b04a" />
       </Hl>
       <T x={236} y={70} anchor="middle" color={C.ink} size={9}>tip</T>
@@ -407,7 +407,7 @@ export function StarGroundDiagram() {
       ]}
     >
       <Hl n={1}>
-        <circle cx={180} cy={120} r={26} fill="#59606a" stroke={C.line} />
+        <circle cx={180} cy={120} r={26} fill={C.potFill} stroke={C.line} />
       </Hl>
       <T x={180} y={120} anchor="middle" color={C.ink} weight={700} size={9}>volume back</T>
       {spokes.map((sp) => {
@@ -419,7 +419,7 @@ export function StarGroundDiagram() {
             <Hl n={2}>
               <line x1={180 + 26 * Math.cos(r)} y1={120 + 26 * Math.sin(r)} x2={x2} y2={y2} stroke="#7c8591" strokeWidth={2.4} />
             </Hl>
-            <circle cx={x2} cy={y2} r={3} fill={C.metal} />
+            <circle cx={x2} cy={y2} r={3} fill={C.metalFill} />
             <T x={x2 + (Math.cos(r) >= 0 ? 6 : -6)} y={y2} anchor={Math.cos(r) >= 0 ? "start" : "end"} size={9} color={C.ink}>
               {sp.l}
             </T>
@@ -563,7 +563,7 @@ export function CrackCleatDiagram() {
       ]}
       note="Mirror and light help you see inside. Long or open cracks, or ones near the bridge, are luthier work."
     >
-      <rect x={20} y={30} width={320} height={150} rx={10} fill={C.wood} stroke={C.woodDark} />
+      <rect x={20} y={30} width={320} height={150} rx={10} fill={C.woodFill} stroke={C.woodDark} />
       {Array.from({ length: 12 }, (_, i) => (
         <line key={i} x1={20} y1={40 + i * 12} x2={340} y2={40 + i * 12} stroke={C.woodDark} strokeWidth={0.6} opacity={0.5} />
       ))}
@@ -581,7 +581,7 @@ export function CrackCleatDiagram() {
         <path d="M 60 104 L 120 101 L 180 106 L 240 102 L 300 105" stroke="#f3e9c6" strokeWidth={1.4} fill="none" strokeDasharray="2 3" />
         <Tag x={180} y={60} anchor="middle">glue in, clamp both sides level</Tag>
         <Zoom x={300} y={60} r={26} cx={120} cy={101} scale={3} label="no step">
-          <rect x={100} y={92} width={40} height={20} fill={C.wood} />
+          <rect x={100} y={92} width={40} height={20} fill={C.woodFill} />
           <line x1={100} y1={101} x2={140} y2={101} stroke="#222" strokeWidth={1.2} />
         </Zoom>
         <Tag x={180} y={160} anchor="middle" color={C.dim}>wait 24 h before restringing</Tag>
@@ -621,13 +621,13 @@ export function DowelPlugDiagram() {
       ]}
       note="Toothpicks and glue work in a pinch, but a dowel gives the screw solid long-grain wood to bite."
     >
-      <rect x={20} y={90} width={320} height={90} fill={C.wood} stroke={C.woodDark} />
+      <rect x={20} y={90} width={320} height={90} fill={C.woodFill} stroke={C.woodDark} />
       <T x={30} y={190} size={8}>cut-away view of the wood</T>
       {/* hole, as it is in each step */}
       <At n={1}>
         <path d="M 172 90 L 188 90 L 186 150 L 174 150 Z" fill="#2a1f14" />
         <path d="M 172 90 L 168 96 M 188 90 L 192 97 M 174 110 L 170 114 M 186 120 L 190 124" stroke="#2a1f14" strokeWidth={2} />
-        <rect x={160} y={42} width={40} height={10} rx={3} fill={C.metal} stroke={C.line} />
+        <rect x={160} y={42} width={40} height={10} rx={3} fill={C.metalFill} stroke={C.line} />
         <rect x={155} y={20} width={50} height={22} rx={10} fill="#3a3f46" />
         <Tag x={260} y={60}>stripped: screw spins</Tag>
         <path d="M 180 48 L 180 120" stroke="#9aa1aa" strokeWidth={4} strokeDasharray="2 2" />
@@ -658,7 +658,7 @@ export function DowelPlugDiagram() {
         <Tag x={260} y={60}>7/64 in pilot, dead centre</Tag>
         <Tag x={260} y={84} color={C.bad}>don't overtighten</Tag>
         <Zoom x={70} y={50} r={30} cx={180} cy={110} scale={2} label="solid long grain">
-          <rect x={160} y={90} width={40} height={40} fill={C.wood} />
+          <rect x={160} y={90} width={40} height={40} fill={C.woodFill} />
           <rect x={171} y={90} width={18} height={40} fill="#e3c38d" />
           <rect x={178} y={90} width={4} height={40} fill="#3a2a1a" />
         </Zoom>

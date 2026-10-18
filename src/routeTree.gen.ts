@@ -16,6 +16,7 @@ import { Route as ListenRouteImport } from './routes/listen'
 import { Route as LuthierRouteImport } from './routes/luthier'
 import { Route as PlayRouteImport } from './routes/play'
 import { Route as SequencerRouteImport } from './routes/sequencer'
+import { Route as TabsRouteImport } from './routes/tabs'
 import { Route as TunerRouteImport } from './routes/tuner'
 
 const IndexRoute = IndexRouteImport.update({
@@ -53,6 +54,11 @@ const SequencerRoute = SequencerRouteImport.update({
   path: '/sequencer',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TabsRoute = TabsRouteImport.update({
+  id: '/tabs',
+  path: '/tabs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TunerRoute = TunerRouteImport.update({
   id: '/tuner',
   path: '/tuner',
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/luthier': typeof LuthierRoute
   '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
+  '/tabs': typeof TabsRoute
   '/tuner': typeof TunerRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/luthier': typeof LuthierRoute
   '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
+  '/tabs': typeof TabsRoute
   '/tuner': typeof TunerRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/luthier': typeof LuthierRoute
   '/play': typeof PlayRoute
   '/sequencer': typeof SequencerRoute
+  '/tabs': typeof TabsRoute
   '/tuner': typeof TunerRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/luthier'
     | '/play'
     | '/sequencer'
+    | '/tabs'
     | '/tuner'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/luthier'
     | '/play'
     | '/sequencer'
+    | '/tabs'
     | '/tuner'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/luthier'
     | '/play'
     | '/sequencer'
+    | '/tabs'
     | '/tuner'
   fileRoutesById: FileRoutesById
 }
@@ -131,6 +143,7 @@ export interface RootRouteChildren {
   LuthierRoute: typeof LuthierRoute
   PlayRoute: typeof PlayRoute
   SequencerRoute: typeof SequencerRoute
+  TabsRoute: typeof TabsRoute
   TunerRoute: typeof TunerRoute
 }
 
@@ -185,6 +198,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SequencerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tabs': {
+      id: '/tabs'
+      path: '/tabs'
+      fullPath: '/tabs'
+      preLoaderRoute: typeof TabsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tuner': {
       id: '/tuner'
       path: '/tuner'
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   LuthierRoute: LuthierRoute,
   PlayRoute: PlayRoute,
   SequencerRoute: SequencerRoute,
+  TabsRoute: TabsRoute,
   TunerRoute: TunerRoute,
 }
 export const routeTree = rootRouteImport
