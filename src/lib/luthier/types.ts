@@ -162,16 +162,18 @@ export function searchText(g: Guide): string {
   );
 }
 
-/** Guides matching every word of the query, best (title) matches first. */
+/** Guides matching every word of the query (as the start of a word: "pot" finds pots, not spots), best title matches first. */
 export function search(guides: Guide[], query: string): Guide[] {
   const words = norm(query).split(/\s+/).filter(Boolean);
   if (!words.length) return guides;
+  const res = words.map((w) => new RegExp(`(^|\\s)${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   const scored: { g: Guide; s: number }[] = [];
   for (const g of guides) {
     const text = searchText(g);
-    if (!words.every((w) => text.includes(w))) continue;
+    if (!res.every((r) => r.test(text))) continue;
     const title = norm(g.title);
-    const s = words.reduce((n, w) => n + (title.includes(w) ? 3 : 0) + (norm(g.summary).includes(w) ? 1 : 0), 0);
+    const summary = norm(g.summary);
+    const s = res.reduce((n, r) => n + (r.test(title) ? 3 : 0) + (r.test(summary) ? 1 : 0), 0);
     scored.push({ g, s });
   }
   return scored.sort((a, b) => b.s - a.s).map((x) => x.g);

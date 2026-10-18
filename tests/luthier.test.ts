@@ -95,3 +95,11 @@ describe("luthier helpers", () => {
     expect(list.filter((x) => appliesTo(x, "dreadnought")).map((x) => x.id)).toEqual(["xx-b", "xx-c"]);
   });
 });
+
+describe("luthier search", () => {
+  test("words match from their start, so 'pot' finds pot guides, not dead spots", () => {
+    const top = search(guides, "pot").slice(0, 6).map((g) => g.title.toLowerCase());
+    expect(top.every((t) => !t.includes("dead spot"))).toBe(true);
+    expect(search(guides, "volume knob")[0]!.id).toBe("ef-volume-knob-fix");
+  });
+});
