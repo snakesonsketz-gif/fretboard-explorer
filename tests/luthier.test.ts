@@ -104,3 +104,20 @@ describe("luthier search", () => {
     for (const q of ["lower action", "raise action", "string height"]) expect(search(guides, q)[0]!.id, q).toBe("dx-raise-lower-action");
   });
 });
+
+describe("fret, pickup and bridge sections", () => {
+  test("frets have their own category with every fret job in it", () => {
+    const frets = guides.filter((g) => g.category === "frets");
+    expect(frets.length).toBeGreaterThanOrEqual(15);
+    for (const id of ["fn-fret-level-crown-polish", "fn-fret-reseat-replace", "fn-refret-maple", "fr-find-high-fret", "fr-install-frets", "fr-remove-frets"]) expect(frets.some((g) => g.id === id), id).toBe(true);
+  });
+  test("there is a guide on raising pickups", () => {
+    const g = guides.find((x) => x.id === "pu-raise-lower-pickups");
+    expect(g).toBeDefined();
+    expect(JSON.stringify(g).toLowerCase()).toContain("clockwise");
+  });
+  test("every bridge family has an intonation guide", () => {
+    for (const id of ["br-intonate-any-bridge", "br-intonate-strat-hardtail", "br-intonate-tele", "br-intonate-tom-wraparound", "br-intonate-floating-vintage", "br-intonate-bass", "br-intonate-acoustic-classical"]) expect(ids.has(id), id).toBe(true);
+    for (const id of ["br-bridge-doctor", "br-tom-collapse-fix", "br-bridge-rattle-buzz"]) expect(ids.has(id), id).toBe(true);
+  });
+});

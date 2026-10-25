@@ -6,8 +6,9 @@
 
 export const CATEGORIES = [
   { id: "diagnose", name: "Diagnose a problem" },
+  { id: "frets", name: "Frets: fix anything" },
   { id: "setup", name: "Setup" },
-  { id: "frets-nut", name: "Frets & nut" },
+  { id: "frets-nut", name: "Nut & zero fret" },
   { id: "neck", name: "Neck & truss rod" },
   { id: "bridges-trem", name: "Bridges, trems & tuners" },
   { id: "acoustic", name: "Acoustic & classical" },

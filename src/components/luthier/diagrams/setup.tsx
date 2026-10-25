@@ -450,7 +450,7 @@ export function PickupHeightDiagram() {
       how={[
         "Hold the low E and the high E down at the LAST fret (that's where the string sits closest to the pickup).",
         "Measure from the top of the pole piece to the bottom of the string, on the bass side and the treble side.",
-        "Turn the pickup's height screws: clockwise lowers on most pickups. Bass side usually sits a little lower (further away) than the treble side.",
+        "Turn the height screws. When the screws go through the pickguard, ring or bridge plate into the pickup (Strat, humbucker rings, Tele bridge), clockwise RAISES it. When they go through the pickup into the wood (direct-mount, P-90 soapbar, Jazzmaster, P and J bass), clockwise LOWERS it. The bass side usually sits a little lower than the treble side.",
         "Listen: too close gives a warbly, out-of-tune sound on the low strings and buzz; too far is weak. Balance the pickups' volumes by ear.",
       ]}
       note="Fender American/Mexican Standard single coils: 5/64 in bass side, 4/64 in treble side. Fender humbuckers: 4/64 in. Seymour Duncan: start around 1/8 in bass, 1/16 in treble."
@@ -483,7 +483,7 @@ export function PickupHeightDiagram() {
       <At n={3}>
         <Turn cx={44} cy={98} r={10} cw />
         <Turn cx={316} cy={98} r={10} cw />
-        <Tag x={180} y={28} anchor="middle">screws clockwise = pickup DOWN</Tag>
+        <Tag x={180} y={28} anchor="middle">pickguard screws: clockwise = pickup UP</Tag>
       </At>
       <N n={3} x={44} y={66} />
       <Tag x={180} y={28} n={4} anchor="middle">too close: warble & buzz · too far: weak</Tag>

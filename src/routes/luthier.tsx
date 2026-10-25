@@ -4,6 +4,8 @@ import { Clock, Image as ImageIcon, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { diagramsFor } from "@/components/luthier/diagrams";
 import { LuthierPaints } from "@/components/luthier/diagrams/kit";
+import { BridgeDoctor } from "@/components/luthier/BridgeDoctor";
+import { FretDoctor } from "@/components/luthier/FretDoctor";
 import { Difficulty, GuideView } from "@/components/luthier/GuideView";
 import { HowToUse } from "@/components/luthier/HowToUse";
 import { Button } from "@/components/ui/button";
@@ -159,6 +161,14 @@ export function LuthierPage() {
                 </button>
               </div>
             </section>
+
+            {data && !query && (!cat || cat === "frets") ? (
+              <FretDoctor byId={byId} onOpen={open} count={counts.get("frets") ?? 0} onSeeAll={() => {
+                  setCat("frets");
+                  setTimeout(() => document.querySelector('[data-testid="luthier-list"]')?.scrollIntoView({ block: "start", behavior: "smooth" }), 0);
+                }} />
+            ) : null}
+            {data && !query && (!cat || cat === "bridges-trem") ? <BridgeDoctor byId={byId} onOpen={open} /> : null}
 
             <HowToUse onOpen={open} />
 
