@@ -22,7 +22,7 @@ import { ChordLab } from "@/components/ChordLab";
 import { AdvancedTheory } from "@/components/TheoryPanels";
 import { SongWorkspace } from "@/components/SongWorkspace";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
-import { analyzeShape, everyVoicing, FINGER_NAME, fingering, inversionName, inversionOrder, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
+import { analyzeShape, bookFingering, everyVoicing, FINGER_NAME, fingering, inversionName, inversionOrder, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
 import { neckPatterns } from "@/lib/patterns";
 import { ShapeCycler } from "@/components/ShapeCycler";
 import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
@@ -453,10 +453,16 @@ export function Workstation() {
     return () => window.cancelAnimationFrame(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewKey]);
-  const shapeFingers = useMemo(() => (shape ? fingering(shape) : null), [shape]);
+  /** The chord book's fingering when the shape is in the books, otherwise the worked-out one. */
+  const fingeringOf = (sh: Shape) => {
+    const v = voicings.find((x) => x.bookFingers && sameShape(x.shape, sh));
+    return v?.bookFingers ? bookFingering(sh, v.bookFingers) : fingering(sh);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const shapeFingers = useMemo(() => (shape ? fingeringOf(shape) : null), [shape, voicings]);
   /** "Fingers x32010 · index barre on fret 1 (A–high E)" */
   const fingerText = (sh: Shape) => {
-    const fg = fingering(sh);
+    const fg = fingeringOf(sh);
     const last = tuning.strings.length - 1;
     const dup = tuning.strings[0]!.note === tuning.strings[last]!.note;
     const name = (si: number) => (dup && si === 0 ? "low " : dup && si === last ? "high " : "") + pretty(tuning.strings[si]!.note);
@@ -719,7 +725,7 @@ export function Workstation() {
                   v.minFret ? `frets ${v.minFret}–${v.minFret + v.span}${v.shape.includes(0) ? " + open" : ""}` : "open strings",
                   `${v.sounding} strings`,
                   v.omitted.length ? "no 5th" : "",
-                  v.marked ? "you marked it impossible" : v.level === "impossible" ? (v.doubtful ? "needs more than 4 fingers or a blocked barre" : "6+ fret reach") : v.level === "stretch" ? "5-fret reach" : "",
+                  v.marked ? "you marked it impossible" : v.level === "known" ? (v.bookName?.includes(" ") ? v.bookName : "from the chord books") : v.why,
                 ]
                   .filter(Boolean)
                   .join(" · "),
@@ -1009,7 +1015,7 @@ export function Workstation() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-                  Every shape on the neck ({voicings.length}) · playable first, impossible last
+                  Every shape on the neck ({voicings.length}) · chord-book shapes first, impossible last
                 </p>
                 <Button size="sm" variant={bassMode === "root" ? "default" : "secondary"} onClick={() => setBassMode("root")}>Root in bass</Button>
                 <Button size="sm" variant={bassMode === "any" ? "default" : "secondary"} onClick={() => setBassMode("any")}>Inversions too</Button>
@@ -1044,8 +1050,8 @@ export function Workstation() {
                       key={v.shape.join(",")}
                       size="sm"
                       variant={(pinned ? sameShape(v.shape, pinned) : i === shapeIdx) ? "default" : "secondary"}
-                      className={cn("font-mono", v.level === "impossible" && "border border-dashed border-red-500/60", v.level === "stretch" && "border border-dashed border-amber-500/60")}
-                      title={v.level === "impossible" ? "Impossible for a human hand: more than four fingers, a barre across an open or muted string, or a six-fret reach." : v.level === "stretch" ? "A big five-fret stretch." : undefined}
+                      className={cn("font-mono", v.level === "known" && "border border-sky-500/60", v.level === "impossible" && "border border-dashed border-red-500/60", v.level === "stretch" && "border border-dashed border-amber-500/60")}
+                      title={v.level === "known" ? `In the chord books: ${v.bookName ?? ""}` : v.level === "impossible" ? `Impossible for a human hand: ${v.why}` : v.level === "stretch" ? `Hard: ${v.why}` : undefined}
                       data-doubtful={v.doubtful || undefined}
                       data-level={v.level}
                       onClick={() => pickVoicing(i)}
@@ -1066,9 +1072,9 @@ export function Workstation() {
                   {listAll ? `Show the first ${LIST_MAX}` : `Show all ${voicings.length}`}
                 </Button>
               ) : null}
-              {voicings.some((v) => v.level !== "easy") ? (
+              {voicings.length ? (
                 <p className="text-[11px] text-muted-foreground">
-                  Dashed amber = a big five-fret stretch. <span className="text-red-400">⚠</span> = impossible for a human hand (more than four fingers, a barre across an open or muted string, or a six-fret reach). Both come after the playable shapes.
+                  Blue = the standard shapes from chord books, CAGED forms and drop-2/drop-3 and triad voicings (listed first). Dashed amber = hard (a long reach, a muted string in the middle, a second barre). <span className="text-red-400">⚠</span> = impossible for a human hand. Hard and impossible come last.
                 </p>
               ) : null}
               {impossible.length ? (

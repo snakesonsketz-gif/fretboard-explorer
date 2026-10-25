@@ -52,18 +52,22 @@ describe("every way to play it", () => {
   test("every chord shape on the neck, impossible ones last", () => {
     const vs = everyVoicing({ tuning: std, rootPc: 0, pcs: C, fretFrom: 0, fretTo: 24, bass: "any" });
     expect(vs.length).toBeGreaterThan(200);
-    const order = { easy: 0, stretch: 1, impossible: 2 } as const;
+    const order = { known: 0, easy: 1, stretch: 2, impossible: 3 } as const;
     for (let i = 1; i < vs.length; i++) expect(order[vs[i]!.level]).toBeGreaterThanOrEqual(order[vs[i - 1]!.level]);
     expect(vs.some((v) => v.level === "impossible")).toBe(true);
+    // chord-book shapes come first
+    expect(vs[0]!.level).toBe("known");
+    for (const k of [",3,2,0,1,0", ",3,5,5,5,3", "8,10,10,9,8,8"]) expect(vs.find((v) => v.shape.join(",") === k)?.level, k).toBe("known");
     expect(vs.some((v) => v.shape.join(",") === ",3,2,0,1,0")).toBe(true); // open C
     expect(vs.some((v) => v.shape.join(",") === "8,10,10,9,8,8")).toBe(true); // E-shape barre at 8
     expect(vs.slice(0, 5).some((v) => v.shape.join(",") === ",3,2,0,1,0")).toBe(true);
     for (const v of vs) {
       if (v.level !== "impossible") expect(fingersNeeded(v.shape)).toBeLessThanOrEqual(4);
-      expect(v.level).toBe(voicingLevel(v));
+      if (v.level !== "known") expect(v.level).toBe(voicingLevel(v));
     }
-    // a 6-fret reach is never called playable
-    expect(vs.filter((v) => v.span >= 5).every((v) => v.level === "impossible")).toBe(true);
+    // a 6-fret reach is never called playable; neither is a muted string in the middle
+    expect(vs.filter((v) => v.span >= 5 && v.level !== "known").every((v) => v.level === "impossible")).toBe(true);
+    expect(vs.filter((v) => v.level === "easy").every((v) => !/\d,,+\d/.test(v.shape.join(",")))).toBe(true);
   });
   test("scales and arpeggios: position boxes and per-string patterns all over the neck", () => {
     const major = [0, 2, 4, 5, 7, 9, 11];
@@ -78,7 +82,7 @@ describe("every way to play it", () => {
     }
     const arp = neckPatterns(std, 0, [0, 4, 7, 11], 24).filter((p) => p.kind === "per-string");
     for (const p of arp) expect(p.notes.length).toBe(12);
-    const order = { easy: 0, stretch: 1, impossible: 2 } as const;
+    const order = { known: 0, easy: 1, stretch: 2, impossible: 3 } as const;
     for (let i = 1; i < ps.length; i++) expect(order[ps[i]!.level]).toBeGreaterThanOrEqual(order[ps[i - 1]!.level]);
   });
 });

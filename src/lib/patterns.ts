@@ -104,6 +104,6 @@ export function neckPatterns(tuning: Tuning, rootPc: number, pcs: number[], maxF
       out.push({ kind: "per-string", id: `nps${per}-${f0}`, name: `${per} per string`, startPc: pc0, from: Math.min(...frets), to: Math.max(...frets), notes, level: levelFor(reach), reach });
     }
 
-  const order: Record<VoicingLevel, number> = { easy: 0, stretch: 1, impossible: 2 };
+  const order: Record<VoicingLevel, number> = { known: 0, easy: 1, stretch: 2, impossible: 3 };
   return out.sort((a, b) => order[a.level] - order[b.level] || (a.kind === b.kind ? 0 : a.kind === "position" ? -1 : 1) || a.from - b.from);
 }

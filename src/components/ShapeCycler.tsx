@@ -21,6 +21,7 @@ export interface CyclerItem {
 }
 
 const LEVEL_STYLE: Record<VoicingLevel, string> = {
+  known: "bg-sky-500/15 text-sky-300 border-sky-500/40",
   easy: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
   stretch: "bg-amber-500/15 text-amber-300 border-amber-500/40",
   impossible: "bg-red-500/15 text-red-300 border-red-500/50",
@@ -56,7 +57,7 @@ export function ShapeCycler({
       onChange(next < 0 || next >= n ? null : next);
     }
   };
-  const counts = { easy: 0, stretch: 0, impossible: 0 } as Record<VoicingLevel, number>;
+  const counts = { known: 0, easy: 0, stretch: 0, impossible: 0 } as Record<VoicingLevel, number>;
   for (const l of levels) counts[l]++;
   const first = (l: VoicingLevel) => levels.indexOf(l);
 
@@ -127,7 +128,7 @@ export function ShapeCycler({
       </Button>
       {n ? (
         <div className="flex w-full flex-wrap items-center justify-center gap-1 text-[11px]">
-          {(["easy", "stretch", "impossible"] as const).map((l) =>
+          {(["known", "easy", "stretch", "impossible"] as const).map((l) =>
             counts[l] ? (
               <button
                 key={l}

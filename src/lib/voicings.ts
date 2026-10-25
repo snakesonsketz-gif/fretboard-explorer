@@ -1,5 +1,7 @@
 import type { Tuning } from "./fretboard";
+import KNOWN from "./known-chords.json";
 import {
+  pretty,
   ROOTS,
   bestRootFor,
   chromaticName,
@@ -173,43 +175,249 @@ export function inversionOrder(lowToHigh: string[]): string {
   return `The ${bass} is now the lowest note instead of the 1 (order low → high ${first.join("–")}).${rootPart}`;
 }
 
-/** How hard a shape is for a human hand. */
-export type VoicingLevel = "easy" | "stretch" | "impossible";
-
-export const LEVEL_NAME: Record<VoicingLevel, string> = { easy: "Playable", stretch: "Big stretch", impossible: "Impossible" };
-
 /**
- * Easy: four fingers (a barre counts as one) inside four frets. Stretch: it needs a five-fret
- * reach. Impossible: more than four fingers, a barre across an open or muted string, or a reach
- * of six frets or more — no hand can hold it.
+ * How a shape rates for a human hand:
+ * known = a shape printed in chord books (the standard ways people actually play it);
+ * easy = four fingers (a barre counts as one) inside four frets, no muted string in the middle;
+ * stretch = hard: a five-fret reach, a four-fret reach down by the nut, or a muted string in the
+ * middle that another finger has to deaden; impossible = more than four fingers, a barre across
+ * an open or muted string, or a reach of six frets or more.
  */
-export function voicingLevel(v: Pick<Voicing, "span" | "doubtful">): VoicingLevel {
-  if (v.doubtful || v.span >= 5) return "impossible";
-  return v.span === 4 ? "stretch" : "easy";
+export type VoicingLevel = "known" | "easy" | "stretch" | "impossible";
+
+export const LEVEL_NAME: Record<VoicingLevel, string> = { known: "Chord-book shape", easy: "Playable", stretch: "Hard / stretch", impossible: "Impossible" };
+
+const gapsIn = (shape: readonly (number | null)[]) => {
+  const played = shape.map((f, i) => (f === null ? -1 : i)).filter((i) => i >= 0);
+  let gaps = 0;
+  if (played.length) for (let i = played[0]!; i <= played[played.length - 1]!; i++) if (shape[i] === null) gaps++;
+  return gaps;
+};
+
+/** Why a shape is hard or impossible (empty when it's comfortable). */
+export function hardReason(v: Pick<Voicing, "shape" | "span" | "minFret" | "doubtful">): string {
+  if (v.doubtful) return fingersNeeded(v.shape) === Infinity || fingering(v.shape).count > 4 ? "needs more than 4 fingers or a barre over an open or muted string" : "a barre would lie over an open or muted string";
+  if (v.span >= 5) return `${v.span + 1}-fret reach`;
+  if (v.span === 4) return "5-fret reach";
+  if (v.span === 3 && v.minFret > 0 && v.minFret <= 3) return "4-fret reach down by the nut, where frets are widest";
+  if (gapsIn(v.shape)) return "a muted string in the middle — another finger has to deaden it";
+  const fg = fingering(v.shape);
+  const second = fg.barres.find((b) => b.finger >= 2);
+  if (second && fg.count >= 4) return `needs a second barre with the ${FINGER_NAME[second.finger] ?? "pinky"} as well as three other fingers`;
+  // Two fingers on the same fret far apart, with lower notes fretted between them.
+  const byFret = new Map<number, number[]>();
+  v.shape.forEach((f, i) => {
+    if (f !== null && f > v.minFret && fg.fingers[i] !== null) byFret.set(f, [...(byFret.get(f) ?? []), i]);
+  });
+  for (const [f, ss] of byFret) {
+    const lo = Math.min(...ss), hi = Math.max(...ss);
+    const fingersHere = new Set(ss.map((i) => fg.fingers[i]));
+    if (fingersHere.size > 1 && hi - lo >= 3 && v.shape.some((g, i) => i > lo && i < hi && g !== null && g > 0 && g < f)) return "two fingers on the same fret far apart, reaching around the others";
+  }
+  return "";
 }
 
-const LEVEL_ORDER: Record<VoicingLevel, number> = { easy: 0, stretch: 1, impossible: 2 };
+export function voicingLevel(v: Pick<Voicing, "shape" | "span" | "minFret" | "doubtful">): VoicingLevel {
+  if (v.doubtful || v.span >= 5) return "impossible";
+  return hardReason(v) ? "stretch" : "easy";
+}
+
+export const LEVEL_ORDER: Record<VoicingLevel, number> = { known: 0, easy: 1, stretch: 2, impossible: 3 };
+
+/** Standard tuning (E A D G B E) — the chord-book shapes are written for it. */
+const isStandard = (t: Tuning) => t.strings.map((x) => x.pc + (x.octave + 1) * 12).join() === "40,45,50,55,59,64";
 
 /**
- * Every way to play the chord on the whole neck (or the given frets): playable shapes first,
- * then big stretches, then the shapes no human hand can hold. Inside each group the easiest and
- * most common come first.
+ * The CAGED forms: the open C, A, G, E and D chord shapes, which slide up the neck with the
+ * index finger (or a barre) taking the nut's place. Written in standard tuning as open chords;
+ * `root` is the open chord's root pitch class and `iv` the chord's intervals.
  */
-export function everyVoicing(o: Omit<VoicingOptions, "maxSpan" | "limit" | "allowExtraFingers">): (Voicing & { level: VoicingLevel })[] {
+export const CAGED_TEMPLATES: { quality: string; iv: number[]; forms: [form: string, root: number, frets: string][] }[] = [
+  { quality: "major", iv: [0, 4, 7], forms: [["C", 0, "x32010"], ["A", 9, "x02220"], ["G", 7, "320003"], ["E", 4, "022100"], ["D", 2, "xx0232"]] },
+  { quality: "minor", iv: [0, 3, 7], forms: [["A", 9, "x02210"], ["E", 4, "022000"], ["D", 2, "xx0231"]] },
+  { quality: "7", iv: [0, 4, 7, 10], forms: [["C", 0, "x32310"], ["A", 9, "x02020"], ["G", 7, "320001"], ["E", 4, "020100"], ["D", 2, "xx0212"]] },
+  { quality: "maj7", iv: [0, 4, 7, 11], forms: [["C", 0, "x32000"], ["A", 9, "x02120"], ["E", 4, "021100"], ["D", 2, "xx0222"]] },
+  { quality: "m7", iv: [0, 3, 7, 10], forms: [["A", 9, "x02010"], ["E", 4, "020000"], ["D", 2, "xx0211"]] },
+  { quality: "sus4", iv: [0, 5, 7], forms: [["A", 9, "x02230"], ["E", 4, "022200"], ["D", 2, "xx0233"]] },
+  { quality: "sus2", iv: [0, 2, 7], forms: [["A", 9, "x02200"], ["D", 2, "xx0230"]] },
+  { quality: "6", iv: [0, 4, 7, 9], forms: [["C", 0, "x32210"], ["A", 9, "x02222"], ["D", 2, "xx0202"]] },
+  { quality: "m6", iv: [0, 3, 7, 9], forms: [["A", 9, "x02212"], ["D", 2, "xx0201"]] },
+  { quality: "dim7", iv: [0, 3, 6, 9], forms: [["D", 2, "xx0101"]] },
+];
+
+/** CAGED shapes for a chord (its root and interval set), every place they fit on the neck. */
+export function cagedShapes(rootPc: number, ivs: Set<number>, maxFret = 24): { shape: Shape; name: string }[] {
+  const out: { shape: Shape; name: string }[] = [];
+  for (const t of CAGED_TEMPLATES) {
+    if (t.iv.length !== ivs.size || !t.iv.every((x) => ivs.has(x))) continue;
+    for (const [form, r, frets] of t.forms) {
+      const base = [...frets].map((c) => (c === "x" ? null : Number(c)));
+      for (let n = (rootPc - r + 12) % 12; n <= maxFret; n += 12) {
+        const shape = base.map((f) => (f === null ? null : f + n));
+        if (shape.some((f) => f !== null && f > maxFret)) continue;
+        out.push({ shape, name: n === 0 ? `open ${form} shape (CAGED)` : `${form} shape (CAGED), slid up ${n}` });
+      }
+    }
+  }
+  return out;
+}
+
+/** Book shapes for a root: frets and the book's fingering. */
+const BOOK: { rootPc: number; shape: Shape; fingers: (number | null)[]; name: string }[] = (KNOWN.shapes as [number, string, string, string][]).map(([rootPc, fr, fg, name]) => {
+  const shape = [...fr].map((c) => (c === "x" ? null : parseInt(c, 36)));
+  return { rootPc, shape, fingers: [...fg].map((c, i) => (shape[i] === null ? null : Number(c))), name };
+});
+
+/**
+ * A book shape belongs to the chord when it's filed under the same root, plays only notes of the
+ * chord, and has every note except the ones chord books leave out: the 5th, the 9th under an 11
+ * or 13, the 11th under a 13, and the 3rd under an 11.
+ */
+function bookFits(shape: Shape, tuning: Tuning, set: Set<number>, rootPc: number) {
+  const present = new Set<number>();
+  for (let i = 0; i < shape.length; i++) if (shape[i] !== null) present.add((tuning.strings[i]!.pc + shape[i]!) % 12);
+  for (const p of present) if (!set.has(p)) return false;
+  const rel = (iv: number) => (rootPc + iv) % 12;
+  const optional = new Set([rel(7)]);
+  if (set.has(rel(9)) || set.has(rel(5))) optional.add(rel(2));
+  if (set.has(rel(9))) optional.add(rel(5));
+  if (set.has(rel(5)) && set.has(rel(4))) optional.add(rel(4));
+  for (const p of set) if (!present.has(p) && !optional.has(p)) return false;
+  return present.size >= Math.min(3, set.size);
+}
+
+export type RatedVoicing = Voicing & { level: VoicingLevel; why: string; bookFingers?: (number | null)[] | undefined; bookName?: string | undefined };
+
+/**
+ * Every way to play the chord on the whole neck (or the given frets): chord-book shapes first,
+ * then other playable shapes, then hard ones and stretches, then the shapes no human hand can
+ * hold. Inside each group the most familiar come first.
+ */
+export function everyVoicing(o: Omit<VoicingOptions, "maxSpan" | "limit" | "allowExtraFingers">): RatedVoicing[] {
   const all = findVoicings({ ...o, maxSpan: 5, limit: Infinity, allowExtraFingers: true });
+  const rootPc = ((o.rootPc % 12) + 12) % 12;
+  const key = (sh: readonly (number | null)[]) => sh.map((x) => (x === null ? "x" : x)).join(",");
+  const byKey = new Map(all.map((v) => [key(v.shape), v]));
+  const rated: RatedVoicing[] = all.map((v) => {
+    const why = hardReason(v);
+    return { ...v, level: v.doubtful || v.span >= 5 ? "impossible" : why ? "stretch" : "easy", why };
+  });
+  const index = new Map(rated.map((v, i) => [key(v.shape), i]));
+  if (isStandard(o.tuning)) {
+    const set = new Set(o.pcs.map((p) => ((p % 12) + 12) % 12));
+    for (const b of BOOK) {
+      if (b.rootPc !== rootPc || !bookFits(b.shape, o.tuning, set, rootPc)) continue;
+      if (b.shape.some((f) => f !== null && (f < o.fretFrom || f > o.fretTo) && f !== 0)) continue;
+      const k = key(b.shape);
+      const lo = b.shape.findIndex((f) => f !== null);
+      const bassPc = (o.tuning.strings[lo]!.pc + b.shape[lo]!) % 12;
+      if (o.bass === "root" && bassPc !== rootPc) continue;
+      const at = index.get(k);
+      if (at !== undefined) {
+        rated[at] = { ...rated[at]!, level: "known", bookFingers: b.fingers, bookName: b.name };
+        continue;
+      }
+      // A book shape the search didn't reach (e.g. two muted strings inside): add it.
+      const fretted = b.shape.filter((f): f is number => f !== null && f > 0);
+      const minFret = fretted.length ? Math.min(...fretted) : 0;
+      const present = new Set(b.shape.map((f, i) => (f === null ? -1 : (o.tuning.strings[i]!.pc + f) % 12)).filter((p) => p >= 0));
+      const v: Voicing = {
+        shape: [...b.shape],
+        bassPc,
+        minFret,
+        span: fretted.length ? Math.max(...fretted) - minFret : 0,
+        sounding: b.shape.filter((f) => f !== null).length,
+        omitted: [...set].filter((p) => !present.has(p)),
+        doubtful: fingersNeeded(b.shape) > 4,
+      };
+      if (!byKey.has(k)) {
+        index.set(k, rated.length);
+        rated.push({ ...v, level: "known", why: "", bookFingers: b.fingers, bookName: b.name });
+      }
+    }
+  }
+  // CAGED forms of the chord (standard tuning).
+  if (isStandard(o.tuning)) {
+    const ivs = new Set(o.pcs.map((p) => (((p - rootPc) % 12) + 12) % 12));
+    for (const c of cagedShapes(rootPc, ivs, o.fretTo)) {
+      const k = key(c.shape);
+      const lo = c.shape.findIndex((f) => f !== null);
+      const bassPc = (o.tuning.strings[lo]!.pc + c.shape[lo]!) % 12;
+      if (o.bass === "root" && bassPc !== rootPc) continue;
+      const at = index.get(k);
+      if (at !== undefined) {
+        if (rated[at]!.level !== "known") rated[at] = { ...rated[at]!, level: "known", bookName: c.name, why: "" };
+        continue;
+      }
+      const fretted = c.shape.filter((f): f is number => f !== null && f > 0);
+      const minFret = fretted.length ? Math.min(...fretted) : 0;
+      index.set(k, rated.length);
+      rated.push({ shape: c.shape, bassPc, minFret, span: fretted.length ? Math.max(...fretted) - minFret : 0, sounding: c.shape.filter((f) => f !== null).length, omitted: [], doubtful: fingersNeeded(c.shape) > 4, level: "known", why: "", bookName: c.name });
+    }
+  }
+  // The voicing systems teachers publish for every chord: close triads on three adjacent strings,
+  // and drop-2 / drop-3 voicings of four-note chords — every inversion on every string set.
+  for (let i = 0; i < rated.length; i++) {
+    const v = rated[i]!;
+    if (v.level === "known" || v.level === "impossible") continue;
+    const sys = voicingSystem(v.shape, o.tuning, o.pcs.length);
+    if (sys) rated[i] = { ...v, level: "known", bookName: sys, why: "" };
+  }
   // Familiar shapes first: compact, full, no gaps, and open strings only down by the nut.
   const score = (v: Voicing) => {
-    const played = v.shape.map((f, i) => (f === null ? -1 : i)).filter((i) => i >= 0);
-    let gaps = 0;
-    for (let i = played[0]!; i <= played[played.length - 1]!; i++) if (v.shape[i] === null) gaps++;
     const top = Math.max(0, ...v.shape.map((f) => f ?? 0));
     const farOpen = v.shape.includes(0) && top > 5 ? 3 + (top - 5) * 0.3 : 0;
-    const inverted = v.bassPc !== ((o.rootPc % 12) + 12) % 12 ? 2 : 0;
-    return v.span * 1.2 + v.minFret * 0.12 - v.sounding * 0.8 + v.omitted.length * 1.5 + gaps * 2.5 + farOpen + inverted;
+    const inverted = v.bassPc !== rootPc ? 2 : 0;
+    // Above the 12th fret the same shapes repeat an octave up.
+    const high = v.minFret > 12 ? 3 : 0;
+    return high + v.span * 1.2 + v.minFret * 0.12 - v.sounding * 0.8 + v.omitted.length * 1.5 + gapsIn(v.shape) * 2.5 + farOpen + inverted;
   };
-  return all
-    .map((v) => ({ ...v, level: voicingLevel(v) }))
-    .sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || score(a) - score(b));
+  return rated.sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || score(a) - score(b));
+}
+
+/**
+ * Names a shape that follows a standard voicing system: a close triad (three adjacent strings,
+ * inside an octave), a drop-2 (four adjacent strings: a close chord with its second-highest note
+ * dropped an octave) or a drop-3 (a close chord with its third-highest note dropped, skipping one
+ * string). Returns "" for anything else.
+ */
+export function voicingSystem(shape: readonly (number | null)[], tuning: Tuning, setSize: number): string {
+  const strings = shape.map((f, i) => (f === null ? -1 : i)).filter((i) => i >= 0);
+  const midis = strings.map((i) => tuning.strings[i]!.pc + (tuning.strings[i]!.octave + 1) * 12 + shape[i]!);
+  const pcs = new Set(midis.map((m) => m % 12));
+  if (pcs.size !== strings.length || pcs.size !== setSize) return "";
+  const sorted = [...midis].sort((a, b) => a - b);
+  const close = (ms: number[]) => {
+    const t = [...ms].sort((a, b) => a - b);
+    return t[t.length - 1]! - t[0]! < 12;
+  };
+  const adjacent = strings.every((s, k) => k === 0 || s === strings[k - 1]! + 1);
+  const set = `${pretty(tuning.strings[strings[0]!]!.note)}–${pretty(tuning.strings[strings[strings.length - 1]!]!.note)} strings`;
+  if (setSize === 3 && adjacent && close(midis)) return `close triad, ${set}`;
+  if (setSize === 4) {
+    if (adjacent && close(midis)) return `close voicing, ${set}`;
+    const raised = [sorted[0]! + 12, ...sorted.slice(1)];
+    if (close(raised)) {
+      const pos = [...raised].sort((a, b) => a - b).indexOf(sorted[0]! + 12);
+      if (adjacent && pos === 2) return `drop 2, ${set}`;
+      const gapOne = strings.length === 4 && strings[1] === strings[0]! + 2 && strings[2] === strings[1]! + 1 && strings[3] === strings[2]! + 1;
+      if (gapOne && pos === 1) return `drop 3, ${set}`;
+    }
+  }
+  return "";
+}
+
+/** The fingering printed in the chord book (barres where one finger covers several strings). */
+export function bookFingering(shape: readonly (number | null)[], fingers: readonly (number | null)[]): Fingering {
+  const fs: (number | null)[] = shape.map((f, i) => (f === null ? null : f === 0 ? 0 : (fingers[i] ?? null)));
+  const barres: Fingering["barres"] = [];
+  const used = new Set<number>();
+  for (let k = 1; k <= 4; k++) {
+    const on = fs.map((f, i) => (f === k ? i : -1)).filter((i) => i >= 0);
+    if (on.length) used.add(k);
+    if (on.length > 1) barres.push({ finger: k, fret: shape[on[0]!]!, from: on[0]!, to: on[on.length - 1]! });
+  }
+  return { fingers: fs, barres, count: used.size };
 }
 
 /**
