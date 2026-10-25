@@ -123,3 +123,23 @@ describe("finger placement", () => {
     expect(Math.max(...g.fingers.map((x) => x ?? 0))).toBe(5);
   });
 });
+
+import { matchesPlacement } from "../src/components/NotePlacement";
+describe("note placement filter", () => {
+  test("only shapes with the chosen note on the chosen string", () => {
+    const vs = everyVoicing({ tuning: std, rootPc: 0, pcs: [0, 4, 7], fretFrom: 0, fretTo: 24, bass: "any" });
+    const deg = (d: string) => ({ "1": 0, "3": 4, "5": 7 })[d] ?? null;
+    // 5th on the G string (index 3)
+    const want = [null, null, null, "5", null, null];
+    const got = vs.filter((v) => matchesPlacement(v.shape, want, std, 0, deg));
+    expect(got.length).toBeGreaterThan(10);
+    for (const v of got) expect((std.strings[3]!.pc + v.shape[3]!) % 12).toBe(7);
+    expect(got.some((v) => v.shape.join(",") === ",3,2,0,1,0")).toBe(true); // open C has G on the G string
+    // root on the low E and the high E not played
+    const want2 = ["1", null, null, null, null, "x"];
+    for (const v of vs.filter((x) => matchesPlacement(x.shape, want2, std, 0, deg))) {
+      expect([8, 20]).toContain(v.shape[0]);
+      expect(v.shape[5]).toBeNull();
+    }
+  });
+});

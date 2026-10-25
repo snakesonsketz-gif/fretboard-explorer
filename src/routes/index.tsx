@@ -25,6 +25,7 @@ import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { analyzeShape, bookFingering, everyVoicing, FINGER_NAME, fingering, inversionName, inversionOrder, LEVEL_NAME, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
 import { neckPatterns } from "@/lib/patterns";
 import { LEVEL_STYLE, ShapeCycler } from "@/components/ShapeCycler";
+import { matchesPlacement, NotePlacement, type Placement } from "@/components/NotePlacement";
 import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
 import { useDevMode } from "@/lib/devMode";
 import { voicingTab, type SlotVoicing } from "@/lib/song";
@@ -389,12 +390,21 @@ export function Workstation() {
   const [impNote, setImpNote] = useState<string | null>(null);
   // Every way to play it on the whole neck: playable first, big stretches next, impossible last
   // (shapes marked impossible in developer mode go to the very end).
-  const voicings = useMemo(() => {
+  // Where the user wants each chord note (per string); only matching shapes are shown.
+  const [placement, setPlacement] = useState<Placement>([]);
+  const allVoicings = useMemo(() => {
     if (mode === "scale" || degrees.length > tuning.strings.length) return [];
     const all = everyVoicing({ tuning, rootPc: root.pc, pcs: degreesToPitchClasses(degrees).map((p) => p + root.pc), fretFrom: 0, fretTo: 24, bass: bassMode });
     const marked = all.filter((v) => isMarkedImpossible(impossible, v.shape, tuning.id)).map((v) => ({ ...v, level: "impossible" as VoicingLevel, marked: true }));
     return [...all.filter((v) => !isMarkedImpossible(impossible, v.shape, tuning.id)).map((v) => ({ ...v, marked: false })), ...marked];
   }, [mode, tuning, root.pc, degrees, bassMode, impossible]);
+  const voicings = useMemo(() => {
+    if (!placement.some((p) => p !== null)) return allVoicings;
+    const degPc = (d: string) => (degrees.includes(d as Degree) ? pcOf(d as Degree) : null);
+    return allVoicings.filter((v) => matchesPlacement(v.shape, placement, tuning, root.pc, degPc));
+  }, [allVoicings, placement, degrees, tuning, root.pc]);
+  // A new tuning (different strings) starts with no placement.
+  useEffect(() => setPlacement([]), [tuning.id]);
   useEffect(() => {
     setShapeIdx(null);
     setListLevel(null);
@@ -724,36 +734,52 @@ export function Workstation() {
         {/* ------------------------------------------------ fretboard */}
         <section id="fretboard" className="panel space-y-3 p-3 sm:p-4">
           {mode === "chord" ? (
-            <ShapeCycler
-              what="shape"
-              levels={voicingLevels}
-              describe={(i) => {
-                const v = voicings[i]!;
-                const low = shapeMidis(v.shape, tuning).sort((x, y) => x - y);
-                const degs = low.map((m) => degreeOfPc(m % 12) ?? "?");
-                const inv = inversionName(degs[0] ?? "1");
-                return {
-                label: shapeToTab(v.shape),
-                level: v.level,
-                fingers: fingerText(v.shape),
-                note: degs[0] && degs[0] !== "1"
-                  ? `${inv.name}. Low → high: ${low.map((m) => pretty(spellDegree(root, degreeOfPc(m % 12) ?? "1"))).join(" ")} (${degs.map(pretty).join(" ")}). ${inversionOrder(degs.map(pretty))}`
-                  : `Root position. Low → high: ${low.map((m) => pretty(spellDegree(root, degreeOfPc(m % 12) ?? "1"))).join(" ")} (${degs.map(pretty).join(" ")}).`,
-                detail: [
-                  degs[0] && degs[0] !== "1" ? inv.short : "",
-                  v.minFret ? `frets ${v.minFret}–${v.minFret + v.span}${v.shape.includes(0) ? " + open" : ""}` : "open strings",
-                  `${v.sounding} strings`,
-                  v.omitted.length ? "no 5th" : "",
-                  v.marked ? "you marked it impossible" : v.level === "known" ? (v.bookName?.includes(" ") ? v.bookName : "from the chord books") : v.why,
-                ]
-                  .filter(Boolean)
-                  .join(" · "),
-                };
-              }}
-              index={pinned ? (voicings.findIndex((v) => sameShape(v.shape, pinned)) >= 0 ? voicings.findIndex((v) => sameShape(v.shape, pinned)) : null) : shapeIdx}
-              onChange={(i) => pickVoicing(i)}
-              onPlay={shape ? () => playSequence(shapeMidis(shape, tuning), 0.05) : undefined}
-            />
+            <>
+              <ShapeCycler
+                what="shape"
+                levels={voicingLevels}
+                describe={(i) => {
+                  const v = voicings[i]!;
+                  const low = shapeMidis(v.shape, tuning).sort((x, y) => x - y);
+                  const degs = low.map((m) => degreeOfPc(m % 12) ?? "?");
+                  const inv = inversionName(degs[0] ?? "1");
+                  return {
+                  label: shapeToTab(v.shape),
+                  level: v.level,
+                  fingers: fingerText(v.shape),
+                  note: degs[0] && degs[0] !== "1"
+                    ? `${inv.name}. Low → high: ${low.map((m) => pretty(spellDegree(root, degreeOfPc(m % 12) ?? "1"))).join(" ")} (${degs.map(pretty).join(" ")}). ${inversionOrder(degs.map(pretty))}`
+                    : `Root position. Low → high: ${low.map((m) => pretty(spellDegree(root, degreeOfPc(m % 12) ?? "1"))).join(" ")} (${degs.map(pretty).join(" ")}).`,
+                  detail: [
+                    degs[0] && degs[0] !== "1" ? inv.short : "",
+                    v.minFret ? `frets ${v.minFret}–${v.minFret + v.span}${v.shape.includes(0) ? " + open" : ""}` : "open strings",
+                    `${v.sounding} strings`,
+                    v.omitted.length ? "no 5th" : "",
+                    v.marked ? "you marked it impossible" : v.level === "known" ? (v.bookName?.includes(" ") ? v.bookName : "from the chord books") : v.why,
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
+                  };
+                }}
+                index={pinned ? (voicings.findIndex((v) => sameShape(v.shape, pinned)) >= 0 ? voicings.findIndex((v) => sameShape(v.shape, pinned)) : null) : shapeIdx}
+                onChange={(i) => pickVoicing(i)}
+                onPlay={shape ? () => playSequence(shapeMidis(shape, tuning), 0.05) : undefined}
+              />
+              <NotePlacement
+                tuning={tuning}
+                root={root}
+                degrees={degrees}
+                value={placement}
+                onChange={setPlacement}
+                matches={voicings.length}
+                total={allVoicings.length}
+              />
+              {placement.some((p) => p !== null) && !voicings.length ? (
+                <p className="text-xs text-third" data-testid="placement-none">
+                  No shape puts those notes there{bassMode === "root" ? " with the root in the bass — try Inversions too, or" : " —"} change a string or two.
+                </p>
+              ) : null}
+            </>
           ) : (
             <ShapeCycler
               what="pattern"
