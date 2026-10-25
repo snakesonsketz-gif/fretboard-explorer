@@ -20,7 +20,7 @@ export interface CyclerItem {
   level: VoicingLevel;
 }
 
-const LEVEL_STYLE: Record<VoicingLevel, string> = {
+export const LEVEL_STYLE: Record<VoicingLevel, string> = {
   known: "bg-sky-500/15 text-sky-300 border-sky-500/40",
   easy: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
   stretch: "bg-amber-500/15 text-amber-300 border-amber-500/40",

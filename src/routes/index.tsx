@@ -22,9 +22,9 @@ import { ChordLab } from "@/components/ChordLab";
 import { AdvancedTheory } from "@/components/TheoryPanels";
 import { SongWorkspace } from "@/components/SongWorkspace";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
-import { analyzeShape, bookFingering, everyVoicing, FINGER_NAME, fingering, inversionName, inversionOrder, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
+import { analyzeShape, bookFingering, everyVoicing, FINGER_NAME, fingering, inversionName, inversionOrder, LEVEL_NAME, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
 import { neckPatterns } from "@/lib/patterns";
-import { ShapeCycler } from "@/components/ShapeCycler";
+import { LEVEL_STYLE, ShapeCycler } from "@/components/ShapeCycler";
 import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
 import { useDevMode } from "@/lib/devMode";
 import { voicingTab, type SlotVoicing } from "@/lib/song";
@@ -375,6 +375,8 @@ export function Workstation() {
 
   const [bassMode, setBassMode] = useState<"root" | "any">("any");
   const [shapeIdx, setShapeIdx] = useState<number | null>(null);
+  /** Which section the shape list shows (Chord-book / Playable / Hard / Impossible); follows the arrows. */
+  const [listLevel, setListLevel] = useState<VoicingLevel | null>(null);
   const dev = useDevMode();
   // Shapes marked "impossible" in developer mode are never suggested again.
   const [impossible, setImpossible] = useState<ImpossibleShape[]>([]);
@@ -393,7 +395,10 @@ export function Workstation() {
     const marked = all.filter((v) => isMarkedImpossible(impossible, v.shape, tuning.id)).map((v) => ({ ...v, level: "impossible" as VoicingLevel, marked: true }));
     return [...all.filter((v) => !isMarkedImpossible(impossible, v.shape, tuning.id)).map((v) => ({ ...v, marked: false })), ...marked];
   }, [mode, tuning, root.pc, degrees, bassMode, impossible]);
-  useEffect(() => setShapeIdx(null), [voicings]);
+  useEffect(() => {
+    setShapeIdx(null);
+    setListLevel(null);
+  }, [voicings]);
   // A shape brought back from a saved chord or a song chord stays shown while that chord is on
   // (it needn't be in the list of suggested shapes).
   const [pin, setPin] = useState<{ key: string; shape: Shape; tuningId: string } | null>(null);
@@ -419,6 +424,7 @@ export function Workstation() {
     setShapeIdx(i);
     const v = i !== null ? voicings[i] : undefined;
     if (!v) return;
+    setListLevel(v.level);
     const frets = v.shape.filter((f): f is number => f !== null);
     if (frets.length) showFrets(Math.min(...frets), Math.max(...frets));
     if (sound) playSequence(shapeMidis(v.shape, tuning), 0.05);
@@ -477,6 +483,19 @@ export function Workstation() {
   // The button list shows the first few; the arrows above the fretboard reach every one.
   const [listAll, setListAll] = useState(false);
   const LIST_MAX = 48;
+  const section: VoicingLevel = listLevel ?? voicings[0]?.level ?? "known";
+  const sectionItems = useMemo(() => voicings.map((v, i) => ({ v, i })).filter((x) => x.v.level === section), [voicings, section]);
+  const levelCounts = useMemo(() => {
+    const c: Record<VoicingLevel, number> = { known: 0, easy: 0, stretch: 0, impossible: 0 };
+    for (const v of voicings) c[v.level]++;
+    return c;
+  }, [voicings]);
+  const showSection = (l: VoicingLevel) => {
+    setListLevel(l);
+    setListAll(false);
+    const first = voicings.findIndex((v) => v.level === l);
+    if (first >= 0) pickVoicing(first, false);
+  };
   /** The shape picked for the current chord, kept when the chord is saved or added to a song. */
   const currentVoicing = shape && mode !== "scale" ? { shape: [...shape], tuningId: tuning.id, midis: shapeMidis(shape, tuning) } : undefined;
 
@@ -1015,7 +1034,7 @@ export function Workstation() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-                  Every shape on the neck ({voicings.length}) · chord-book shapes first, impossible last
+                  Every shape on the neck ({voicings.length}) · showing {LEVEL_NAME[section]} ({sectionItems.length})
                 </p>
                 <Button size="sm" variant={bassMode === "root" ? "default" : "secondary"} onClick={() => setBassMode("root")}>Root in bass</Button>
                 <Button size="sm" variant={bassMode === "any" ? "default" : "secondary"} onClick={() => setBassMode("any")}>Inversions too</Button>
@@ -1041,11 +1060,30 @@ export function Workstation() {
                 ) : null}
               </div>
               {impNote ? <p role="status" className="rounded-md bg-red-500/15 px-2 py-1 text-xs font-semibold text-red-300" data-testid="impossible-note">{impNote}</p> : null}
+              {voicings.length ? (
+                <div className="flex flex-wrap gap-1" role="tablist" aria-label="Shape section" data-testid="voicing-sections">
+                  {(["known", "easy", "stretch", "impossible"] as const).map((l) =>
+                    levelCounts[l] ? (
+                      <button
+                        key={l}
+                        type="button"
+                        role="tab"
+                        aria-selected={section === l}
+                        onClick={() => showSection(l)}
+                        className={cn("rounded-full border px-2.5 py-1 text-xs font-semibold", LEVEL_STYLE[l], section === l ? "ring-2 ring-current" : "opacity-70 hover:opacity-100")}
+                        data-testid={`voicing-section-${l}`}
+                      >
+                        {LEVEL_NAME[l]} {levelCounts[l]}
+                      </button>
+                    ) : null,
+                  )}
+                </div>
+              ) : null}
               <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto pr-1" data-testid="voicing-list">
                 {voicings.length === 0 ? (
                   <span className="text-sm text-muted-foreground">No shape found — try allowing inversions.</span>
                 ) : (
-                  (listAll ? voicings : voicings.slice(0, LIST_MAX)).map((v, i) => (
+                  (listAll ? sectionItems : sectionItems.slice(0, LIST_MAX)).map(({ v, i }) => (
                     <Button
                       key={v.shape.join(",")}
                       size="sm"
@@ -1067,14 +1105,20 @@ export function Workstation() {
                   ))
                 )}
               </div>
-              {voicings.length > LIST_MAX ? (
+              {sectionItems.length > LIST_MAX ? (
                 <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setListAll((x) => !x)} data-testid="voicing-list-all">
-                  {listAll ? `Show the first ${LIST_MAX}` : `Show all ${voicings.length}`}
+                  {listAll ? `Show the first ${LIST_MAX}` : `Show all ${sectionItems.length}`}
                 </Button>
               ) : null}
               {voicings.length ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Blue = the standard shapes from chord books, CAGED forms and drop-2/drop-3 and triad voicings (listed first). Dashed amber = hard (a long reach, a muted string in the middle, a second barre). <span className="text-red-400">⚠</span> = impossible for a human hand. Hard and impossible come last.
+                <p className="text-[11px] text-muted-foreground" data-testid="voicing-section-about">
+                  {section === "known"
+                    ? "Chord-book shapes: the standard ways from chord books, the CAGED forms up the neck, and drop-2 / drop-3 and triad voicings."
+                    : section === "easy"
+                      ? "Playable: four fingers or fewer (a barre counts as one) inside four frets, nothing muted in the middle."
+                      : section === "stretch"
+                        ? "Hard / stretch: playable but awkward — a long reach, a muted string in the middle, a second barre, or fingers far apart on one fret. Each says why."
+                        : "Impossible: no human hand can hold these — more than four fingers, a barre over an open or muted string, or a six-fret reach."}
                 </p>
               ) : null}
               {impossible.length ? (
