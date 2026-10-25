@@ -41,6 +41,8 @@ export interface VoicingOptions {
   /** Max fret stretch between lowest and highest fretted (non-open) note. */
   maxSpan: number;
   limit?: number;
+  /** Keep shapes that need more than four fingers (they come back flagged `doubtful`). */
+  allowExtraFingers?: boolean;
 }
 
 /**
@@ -127,7 +129,7 @@ function evaluate(
 
   // Lenient count (notes on the lowest fret as one barre); the strict check only flags.
   const atMin = fretted.filter((f) => f === minFret).length;
-  if ((atMin >= 2 ? fretted.length - atMin + 1 : fretted.length) > 4) return null;
+  if (!o.allowExtraFingers && (atMin >= 2 ? fretted.length - atMin + 1 : fretted.length) > 4) return null;
 
   return {
     shape: [...cur],
@@ -138,6 +140,76 @@ function evaluate(
     omitted: [...set].filter((p) => !present.has(p)),
     doubtful: fingersNeeded(cur) > 4,
   };
+}
+
+/**
+ * Which inversion a chord is in, from the degree in its bass: the 3rd (or b3) = 1st inversion,
+ * the 5th = 2nd, the 7th = 3rd; any other note (a 9, 11, sus 4…) is named as "the 9 in the bass".
+ */
+export function inversionName(bassDegree: string): { name: string; short: string } {
+  const num = Number(bassDegree.replace(/[^0-9]/g, ""));
+  if (num === 1) return { name: "Root position", short: "root position" };
+  const ord = num === 3 ? 1 : num === 5 ? 2 : num === 7 ? 3 : 0;
+  const what = num === 3 ? "3rd" : num === 5 ? "5th" : num === 7 ? "7th" : bassDegree;
+  if (ord) {
+    const o = ["", "1st", "2nd", "3rd"][ord]!;
+    return { name: `${o} inversion — the ${what} in the bass`, short: `${o} inversion` };
+  }
+  return { name: `The ${bassDegree} in the bass (slash chord)`, short: `${bassDegree} in the bass` };
+}
+
+/**
+ * How the note order changes: the degrees low to high, and a sentence comparing it with root
+ * position (where the 1 is lowest and the rest stack above it).
+ */
+export function inversionOrder(lowToHigh: string[]): string {
+  const first: string[] = [];
+  for (const d of lowToHigh) if (!first.includes(d)) first.push(d);
+  const bass = first[0];
+  if (!bass) return "";
+  if (bass === "1") return `Root position: the 1 is the lowest note, the other notes stack above it (${first.join("–")}).`;
+  const below = first.slice(0, first.indexOf("1") < 0 ? first.length : first.indexOf("1"));
+  const rootPart = first.includes("1") ? ` The 1 has moved up above ${below.length > 1 ? `the ${below.slice(0, -1).join(", ")} and ${below[below.length - 1]}` : `the ${bass}`}.` : " The 1 isn't played.";
+  return `The ${bass} is now the lowest note instead of the 1 (order low → high ${first.join("–")}).${rootPart}`;
+}
+
+/** How hard a shape is for a human hand. */
+export type VoicingLevel = "easy" | "stretch" | "impossible";
+
+export const LEVEL_NAME: Record<VoicingLevel, string> = { easy: "Playable", stretch: "Big stretch", impossible: "Impossible" };
+
+/**
+ * Easy: four fingers (a barre counts as one) inside four frets. Stretch: it needs a five-fret
+ * reach. Impossible: more than four fingers, a barre across an open or muted string, or a reach
+ * of six frets or more — no hand can hold it.
+ */
+export function voicingLevel(v: Pick<Voicing, "span" | "doubtful">): VoicingLevel {
+  if (v.doubtful || v.span >= 5) return "impossible";
+  return v.span === 4 ? "stretch" : "easy";
+}
+
+const LEVEL_ORDER: Record<VoicingLevel, number> = { easy: 0, stretch: 1, impossible: 2 };
+
+/**
+ * Every way to play the chord on the whole neck (or the given frets): playable shapes first,
+ * then big stretches, then the shapes no human hand can hold. Inside each group the easiest and
+ * most common come first.
+ */
+export function everyVoicing(o: Omit<VoicingOptions, "maxSpan" | "limit" | "allowExtraFingers">): (Voicing & { level: VoicingLevel })[] {
+  const all = findVoicings({ ...o, maxSpan: 5, limit: Infinity, allowExtraFingers: true });
+  // Familiar shapes first: compact, full, no gaps, and open strings only down by the nut.
+  const score = (v: Voicing) => {
+    const played = v.shape.map((f, i) => (f === null ? -1 : i)).filter((i) => i >= 0);
+    let gaps = 0;
+    for (let i = played[0]!; i <= played[played.length - 1]!; i++) if (v.shape[i] === null) gaps++;
+    const top = Math.max(0, ...v.shape.map((f) => f ?? 0));
+    const farOpen = v.shape.includes(0) && top > 5 ? 3 + (top - 5) * 0.3 : 0;
+    const inverted = v.bassPc !== ((o.rootPc % 12) + 12) % 12 ? 2 : 0;
+    return v.span * 1.2 + v.minFret * 0.12 - v.sounding * 0.8 + v.omitted.length * 1.5 + gaps * 2.5 + farOpen + inverted;
+  };
+  return all
+    .map((v) => ({ ...v, level: voicingLevel(v) }))
+    .sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || score(a) - score(b));
 }
 
 /**

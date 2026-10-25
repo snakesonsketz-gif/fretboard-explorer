@@ -22,7 +22,9 @@ import { ChordLab } from "@/components/ChordLab";
 import { AdvancedTheory } from "@/components/TheoryPanels";
 import { SongWorkspace } from "@/components/SongWorkspace";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
-import { analyzeShape, findVoicings, shapeMidis, shapeToTab, type Shape } from "@/lib/voicings";
+import { analyzeShape, everyVoicing, inversionName, inversionOrder, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
+import { neckPatterns } from "@/lib/patterns";
+import { ShapeCycler } from "@/components/ShapeCycler";
 import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
 import { useDevMode } from "@/lib/devMode";
 import { voicingTab, type SlotVoicing } from "@/lib/song";
@@ -371,7 +373,7 @@ export function Workstation() {
     restoreShape(r, d, voicing);
   };
 
-  const [bassMode, setBassMode] = useState<"root" | "any">("root");
+  const [bassMode, setBassMode] = useState<"root" | "any">("any");
   const [shapeIdx, setShapeIdx] = useState<number | null>(null);
   const dev = useDevMode();
   // Shapes marked "impossible" in developer mode are never suggested again.
@@ -383,28 +385,80 @@ export function Workstation() {
     return () => window.removeEventListener("fretlab-impossible", load);
   }, []);
   const [impNote, setImpNote] = useState<string | null>(null);
-  const voicings = useMemo(
-    () =>
-      (degrees.length <= tuning.strings.length
-        ? findVoicings({
-            tuning,
-            rootPc: root.pc,
-            pcs: degreesToPitchClasses(degrees).map((p) => p + root.pc),
-            fretFrom,
-            fretTo,
-            bass: bassMode,
-            maxSpan: 3,
-            limit: 30,
-          }).filter((v) => !isMarkedImpossible(impossible, v.shape, tuning.id)).slice(0, 24)
-        : []),
-    [tuning, root.pc, degrees, fretFrom, fretTo, bassMode, impossible],
-  );
+  // Every way to play it on the whole neck: playable first, big stretches next, impossible last
+  // (shapes marked impossible in developer mode go to the very end).
+  const voicings = useMemo(() => {
+    if (mode === "scale" || degrees.length > tuning.strings.length) return [];
+    const all = everyVoicing({ tuning, rootPc: root.pc, pcs: degreesToPitchClasses(degrees).map((p) => p + root.pc), fretFrom: 0, fretTo: 24, bass: bassMode });
+    const marked = all.filter((v) => isMarkedImpossible(impossible, v.shape, tuning.id)).map((v) => ({ ...v, level: "impossible" as VoicingLevel, marked: true }));
+    return [...all.filter((v) => !isMarkedImpossible(impossible, v.shape, tuning.id)).map((v) => ({ ...v, marked: false })), ...marked];
+  }, [mode, tuning, root.pc, degrees, bassMode, impossible]);
   useEffect(() => setShapeIdx(null), [voicings]);
   // A shape brought back from a saved chord or a song chord stays shown while that chord is on
   // (it needn't be in the list of suggested shapes).
   const [pin, setPin] = useState<{ key: string; shape: Shape; tuningId: string } | null>(null);
   const pinned = pin && mode !== "scale" && pin.tuningId === tuning.id && pin.key === chordKey(root.name, degrees) ? pin.shape : null;
   const shape = pinned ?? (shapeIdx !== null ? voicings[shapeIdx]?.shape : undefined);
+  // Scales and arpeggios: every position box and N-per-string pattern on the neck.
+  const patterns = useMemo(
+    () => (mode === "chord" ? [] : neckPatterns(tuning, root.pc, degreesToPitchClasses(degrees).map((p) => p + root.pc), 24)),
+    [mode, tuning, root.pc, degrees],
+  );
+  const [patIdx, setPatIdx] = useState<number | null>(null);
+  useEffect(() => setPatIdx(null), [patterns]);
+  /** Make sure frets lo..hi are on screen, keeping the zoom width when it can. */
+  const showFrets = (lo: number, hi: number) => {
+    if (lo >= fretFrom && hi <= fretTo) return;
+    const width = Math.max(fretTo - fretFrom, hi - lo + 2, 4);
+    const from = lo === 0 ? 0 : Math.max(0, Math.min(lo - 1, 24 - width));
+    setFretFrom(from);
+    setFretTo(Math.min(24, Math.max(from + width, hi + 1)));
+  };
+  const pickVoicing = (i: number | null, sound = true) => {
+    setPin(null);
+    setShapeIdx(i);
+    const v = i !== null ? voicings[i] : undefined;
+    if (!v) return;
+    const frets = v.shape.filter((f): f is number => f !== null);
+    if (frets.length) showFrets(Math.min(...frets), Math.max(...frets));
+    if (sound) playSequence(shapeMidis(v.shape, tuning), 0.05);
+  };
+  const pat = patIdx !== null && !cagedOn && pathway === "none" && !posWin ? patterns[patIdx] : undefined;
+  const patKeys = useMemo(() => (pat ? new Set(pat.notes.map((x) => `${x.string}-${x.fret}`)) : undefined), [pat]);
+  const pickPattern = (i: number | null) => {
+    setCagedOn(false);
+    setPathway("none");
+    setPosWin(null);
+    setShapeIdx(null);
+    setPin(null);
+    setPatIdx(i);
+    const p = i !== null ? patterns[i] : undefined;
+    if (p) showFrets(p.from, p.to);
+  };
+  // On a phone the neck scrolls sideways: bring the picked shape or pattern into view.
+  const viewKey = pat ? `p${pat.from}-${pat.to}` : shape ? `s${shape.join(",")}` : "";
+  useEffect(() => {
+    if (!viewKey) return;
+    const frets = pat ? [pat.from, pat.to] : (shape ?? []).filter((f): f is number => f !== null);
+    if (!frets.length) return;
+    const mid = Math.round((Math.min(...frets) + Math.max(...frets)) / 2);
+    const id = window.requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`#fretboard [data-fret="${mid}"]`);
+      const box = el?.closest<HTMLElement>(".overflow-x-auto");
+      if (!el || !box) return;
+      const r = el.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      box.scrollTo({ left: box.scrollLeft + r.left - b.left - b.width / 2 + r.width / 2, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewKey]);
+  const degreeOfPc = (pc: number) => degrees.find((d) => (root.pc + pcOf(d)) % 12 === pc);
+  const voicingLevels = useMemo(() => voicings.map((v) => v.level), [voicings]);
+  const patternLevels = useMemo(() => patterns.map((p) => p.level), [patterns]);
+  // The button list shows the first few; the arrows above the fretboard reach every one.
+  const [listAll, setListAll] = useState(false);
+  const LIST_MAX = 48;
   /** The shape picked for the current chord, kept when the chord is saved or added to a song. */
   const currentVoicing = shape && mode !== "scale" ? { shape: [...shape], tuningId: tuning.id, midis: shapeMidis(shape, tuning) } : undefined;
 
@@ -632,15 +686,63 @@ export function Workstation() {
 
         {/* ------------------------------------------------ fretboard */}
         <section id="fretboard" className="panel space-y-3 p-3 sm:p-4">
+          {mode === "chord" ? (
+            <ShapeCycler
+              what="shape"
+              levels={voicingLevels}
+              describe={(i) => {
+                const v = voicings[i]!;
+                const low = shapeMidis(v.shape, tuning).sort((x, y) => x - y);
+                const degs = low.map((m) => degreeOfPc(m % 12) ?? "?");
+                const inv = inversionName(degs[0] ?? "1");
+                return {
+                label: shapeToTab(v.shape),
+                level: v.level,
+                note: degs[0] && degs[0] !== "1"
+                  ? `${inv.name}. Low → high: ${low.map((m) => pretty(spellDegree(root, degreeOfPc(m % 12) ?? "1"))).join(" ")} (${degs.map(pretty).join(" ")}). ${inversionOrder(degs.map(pretty))}`
+                  : `Root position. Low → high: ${low.map((m) => pretty(spellDegree(root, degreeOfPc(m % 12) ?? "1"))).join(" ")} (${degs.map(pretty).join(" ")}).`,
+                detail: [
+                  degs[0] && degs[0] !== "1" ? inv.short : "",
+                  v.minFret ? `frets ${v.minFret}–${v.minFret + v.span}${v.shape.includes(0) ? " + open" : ""}` : "open strings",
+                  `${v.sounding} strings`,
+                  v.omitted.length ? "no 5th" : "",
+                  v.marked ? "you marked it impossible" : v.level === "impossible" ? (v.doubtful ? "needs more than 4 fingers or a blocked barre" : "6+ fret reach") : v.level === "stretch" ? "5-fret reach" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+                };
+              }}
+              index={pinned ? (voicings.findIndex((v) => sameShape(v.shape, pinned)) >= 0 ? voicings.findIndex((v) => sameShape(v.shape, pinned)) : null) : shapeIdx}
+              onChange={(i) => pickVoicing(i)}
+              onPlay={shape ? () => playSequence(shapeMidis(shape, tuning), 0.05) : undefined}
+            />
+          ) : (
+            <ShapeCycler
+              what="pattern"
+              levels={patternLevels}
+              describe={(i) => {
+                const p = patterns[i]!;
+                const d = degreeOfPc(p.startPc);
+                return {
+                  label: `${p.name} · frets ${p.from}–${p.to}`,
+                  level: p.level,
+                  detail: [p.kind === "position" ? "position box" : d ? `starts on the ${pretty(d)}` : "", `${p.notes.length} notes`, `reach ${p.reach} frets`].filter(Boolean).join(" · "),
+                };
+              }}
+              index={pat ? patIdx : null}
+              onChange={pickPattern}
+              onPlay={pat ? () => playSequence(pat.notes.map((x) => x.midi), 0.14) : undefined}
+            />
+          )}
           <Fretboard
-            shape={markMode ? userShape : shape}
+            shape={markMode ? userShape : pat ? undefined : shape}
             tuning={tuning}
             root={root}
             degrees={fbDegrees}
-            focus={focus}
-            neighbors={neighbors}
-            pathKeys={pathKeys}
-            pathOrder={pathway === "none" ? undefined : pathOrder}
+            focus={pat ? { from: pat.from, to: pat.to, label: pat.name } : focus}
+            neighbors={pat ? undefined : neighbors}
+            pathKeys={pat ? patKeys : pathKeys}
+            pathOrder={pat || pathway === "none" ? undefined : pathOrder}
             fretFrom={fretFrom}
             fretTo={fretTo}
             leftHanded={leftHanded}
@@ -893,7 +995,7 @@ export function Workstation() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-                  Playable shapes in frets {fretFrom}–{fretTo} ({voicings.length})
+                  Every shape on the neck ({voicings.length}) · playable first, impossible last
                 </p>
                 <Button size="sm" variant={bassMode === "root" ? "default" : "secondary"} onClick={() => setBassMode("root")}>Root in bass</Button>
                 <Button size="sm" variant={bassMode === "any" ? "default" : "secondary"} onClick={() => setBassMode("any")}>Inversions too</Button>
@@ -908,7 +1010,7 @@ export function Workstation() {
                     title="Developer mode: this shape can't actually be played — never suggest it again (listed in Develop)"
                     onClick={() => {
                       markImpossible(shape, tuning.id, title, root.name, degrees);
-                      setImpNote(`Marked ${shapeToTab(shape)} (${pretty(title)}) as impossible — it won't be suggested again. It's kept at the bottom of this list, under Marked impossible.`);
+                      setImpNote(`Marked ${shapeToTab(shape)} (${pretty(title)}) as impossible — it now sits at the very end of the list with the other impossible shapes.`);
                       window.setTimeout(() => setImpNote(null), 4000);
                       setShapeIdx(null);
                       setPin(null);
@@ -919,40 +1021,46 @@ export function Workstation() {
                 ) : null}
               </div>
               {impNote ? <p role="status" className="rounded-md bg-red-500/15 px-2 py-1 text-xs font-semibold text-red-300" data-testid="impossible-note">{impNote}</p> : null}
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto pr-1" data-testid="voicing-list">
                 {voicings.length === 0 ? (
-                  <span className="text-sm text-muted-foreground">No 4-finger shape found here — widen the fret range or allow inversions.</span>
+                  <span className="text-sm text-muted-foreground">No shape found — try allowing inversions.</span>
                 ) : (
-                  voicings.map((v, i) => (
+                  (listAll ? voicings : voicings.slice(0, LIST_MAX)).map((v, i) => (
                     <Button
-                      key={i}
+                      key={v.shape.join(",")}
                       size="sm"
                       variant={(pinned ? sameShape(v.shape, pinned) : i === shapeIdx) ? "default" : "secondary"}
-                      className={cn("font-mono", v.doubtful && "border border-dashed border-red-500/60")}
-                      title={v.doubtful ? "Probably not playable: it needs a barre that would also lie across an open or muted string. You decide — mark it Impossible chord in developer mode if so." : undefined}
+                      className={cn("font-mono", v.level === "impossible" && "border border-dashed border-red-500/60", v.level === "stretch" && "border border-dashed border-amber-500/60")}
+                      title={v.level === "impossible" ? "Impossible for a human hand: more than four fingers, a barre across an open or muted string, or a six-fret reach." : v.level === "stretch" ? "A big five-fret stretch." : undefined}
                       data-doubtful={v.doubtful || undefined}
-                      onClick={() => {
-                        setPin(null);
-                        setShapeIdx(i);
-                        playSequence(shapeMidis(v.shape, tuning), 0.05);
-                      }}
+                      data-level={v.level}
+                      onClick={() => pickVoicing(i)}
                     >
-                      {v.doubtful ? <span aria-hidden className="mr-1 text-red-400">⚠</span> : null}
+                      {v.level === "impossible" ? <span aria-hidden className="mr-1 text-red-400">⚠</span> : null}
                       {shapeToTab(v.shape)}
                       {v.omitted.length ? " (no 5)" : ""}
+                      {(() => {
+                        const d = degreeOfPc(v.bassPc);
+                        return d && d !== "1" ? <span className="ml-1 font-sans text-[10px] opacity-75">{inversionName(d).short}</span> : null;
+                      })()}
                     </Button>
                   ))
                 )}
               </div>
-              {voicings.some((v) => v.doubtful) ? (
+              {voicings.length > LIST_MAX ? (
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setListAll((x) => !x)} data-testid="voicing-list-all">
+                  {listAll ? `Show the first ${LIST_MAX}` : `Show all ${voicings.length}`}
+                </Button>
+              ) : null}
+              {voicings.some((v) => v.level !== "easy") ? (
                 <p className="text-[11px] text-muted-foreground">
-                  <span className="text-red-400">⚠</span> = probably can't be held: a barre would have to lie across an open or muted string. They're listed last — your call.
+                  Dashed amber = a big five-fret stretch. <span className="text-red-400">⚠</span> = impossible for a human hand (more than four fingers, a barre across an open or muted string, or a six-fret reach). Both come after the playable shapes.
                 </p>
               ) : null}
               {impossible.length ? (
                 <details className="rounded-md border border-red-500/30 bg-red-500/5 px-2 py-1" data-testid="impossible-hidden">
                   <summary className="cursor-pointer text-[11px] uppercase tracking-widest text-red-300/90">
-                    Marked impossible ({impossible.length}) — hidden from the shapes above
+                    Marked impossible ({impossible.length}) — moved to the end of the list
                   </summary>
                   <p className="mt-1 text-[11px] text-muted-foreground">Tap one to look at it on the fretboard. Undo if it's playable after all.</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5 pb-1">

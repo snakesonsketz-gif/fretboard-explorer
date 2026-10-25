@@ -43,3 +43,59 @@ describe("shape finder: only shapes a hand can hold", () => {
           expect(v.doubtful || fingersNeeded(v.shape) <= 4).toBe(true);
   });
 });
+
+import { everyVoicing, voicingLevel } from "../src/lib/voicings";
+import { neckPatterns } from "../src/lib/patterns";
+
+describe("every way to play it", () => {
+  const C = [0, 4, 7];
+  test("every chord shape on the neck, impossible ones last", () => {
+    const vs = everyVoicing({ tuning: std, rootPc: 0, pcs: C, fretFrom: 0, fretTo: 24, bass: "any" });
+    expect(vs.length).toBeGreaterThan(200);
+    const order = { easy: 0, stretch: 1, impossible: 2 } as const;
+    for (let i = 1; i < vs.length; i++) expect(order[vs[i]!.level]).toBeGreaterThanOrEqual(order[vs[i - 1]!.level]);
+    expect(vs.some((v) => v.level === "impossible")).toBe(true);
+    expect(vs.some((v) => v.shape.join(",") === ",3,2,0,1,0")).toBe(true); // open C
+    expect(vs.some((v) => v.shape.join(",") === "8,10,10,9,8,8")).toBe(true); // E-shape barre at 8
+    expect(vs.slice(0, 5).some((v) => v.shape.join(",") === ",3,2,0,1,0")).toBe(true);
+    for (const v of vs) {
+      if (v.level !== "impossible") expect(fingersNeeded(v.shape)).toBeLessThanOrEqual(4);
+      expect(v.level).toBe(voicingLevel(v));
+    }
+    // a 6-fret reach is never called playable
+    expect(vs.filter((v) => v.span >= 5).every((v) => v.level === "impossible")).toBe(true);
+  });
+  test("scales and arpeggios: position boxes and per-string patterns all over the neck", () => {
+    const major = [0, 2, 4, 5, 7, 9, 11];
+    const ps = neckPatterns(std, 0, major, 24);
+    expect(ps.filter((p) => p.kind === "position").length).toBeGreaterThanOrEqual(5);
+    const nps = ps.filter((p) => p.kind === "per-string");
+    expect(nps.length).toBeGreaterThanOrEqual(7);
+    for (const p of nps) {
+      expect(p.notes.length).toBe(18);
+      for (let s = 0; s < 6; s++) expect(p.notes.filter((x) => x.string === s).length).toBe(3);
+      for (const x of p.notes) expect(major).toContain(x.pc);
+    }
+    const arp = neckPatterns(std, 0, [0, 4, 7, 11], 24).filter((p) => p.kind === "per-string");
+    for (const p of arp) expect(p.notes.length).toBe(12);
+    const order = { easy: 0, stretch: 1, impossible: 2 } as const;
+    for (let i = 1; i < ps.length; i++) expect(order[ps[i]!.level]).toBeGreaterThanOrEqual(order[ps[i - 1]!.level]);
+  });
+});
+
+import { inversionName, inversionOrder } from "../src/lib/voicings";
+describe("inversions", () => {
+  test("names the inversion from the bass note", () => {
+    expect(inversionName("1").short).toBe("root position");
+    expect(inversionName("3").short).toBe("1st inversion");
+    expect(inversionName("b3").short).toBe("1st inversion");
+    expect(inversionName("5").short).toBe("2nd inversion");
+    expect(inversionName("b7").short).toBe("3rd inversion");
+    expect(inversionName("9").short).toBe("9 in the bass");
+  });
+  test("explains how the note order changed", () => {
+    expect(inversionOrder(["3", "5", "1", "3"])).toContain("3–5–1");
+    expect(inversionOrder(["3", "5", "1", "3"])).toContain("The 1 has moved up above the 3 and 5");
+    expect(inversionOrder(["5", "1", "3"])).toContain("above the 5");
+  });
+});
