@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Heart, HeartOff, Star, X } from "lucide-react";
@@ -25,6 +25,7 @@ import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { analyzeShape, bookFingering, everyVoicing, FINGER_NAME, fingering, inversionName, inversionOrder, LEVEL_NAME, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
 import { neckPatterns, onePerString, type ExtraNotes } from "@/lib/patterns";
 import { LEVEL_STYLE, ShapeCycler } from "@/components/ShapeCycler";
+import { OPEN_EVENT, takePendingChord, type ExploreChord } from "@/lib/exploreLink";
 import { matchesPlacement, NotePlacement, type Placement } from "@/components/NotePlacement";
 import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
 import { useDevMode } from "@/lib/devMode";
@@ -373,6 +374,27 @@ export function Workstation() {
     setSel(null);
     restoreShape(r, d, voicing);
   };
+
+  // A chord sent over from the chord finder ("Show … in Explore").
+  const loadRef = useRef(loadChord);
+  loadRef.current = loadChord;
+  useEffect(() => {
+    const apply = (c: ExploreChord) => {
+      if (TUNINGS.some((t) => t.id === c.tuningId)) setTuningId(c.tuningId);
+      setMode("chord");
+      // After the tuning has switched, so the shape is pinned in the right tuning.
+      window.setTimeout(() => loadRef.current(c.rootName, c.degrees as Degree[], c.shape ? { shape: c.shape, tuningId: c.tuningId, midis: [] } : undefined), 0);
+      window.setTimeout(() => document.getElementById("fretboard")?.scrollIntoView({ block: "start", behavior: "smooth" }), 50);
+    };
+    const pending = takePendingChord();
+    if (pending) apply(pending);
+    const on = (e: Event) => {
+      takePendingChord();
+      apply((e as CustomEvent<ExploreChord>).detail);
+    };
+    window.addEventListener(OPEN_EVENT, on);
+    return () => window.removeEventListener(OPEN_EVENT, on);
+  }, []);
 
   const [bassMode, setBassMode] = useState<"root" | "any">("any");
   const [shapeIdx, setShapeIdx] = useState<number | null>(null);
@@ -1077,6 +1099,9 @@ export function Workstation() {
               <Switch id="markmode" checked={markMode} onCheckedChange={setMarkMode} aria-label="Mark a shape" />
               <Label htmlFor="markmode" className="text-xs uppercase tracking-widest">Mark a shape</Label>
             </div>
+            <Link to="/finder" className="ml-auto inline-flex items-center gap-1 rounded-full border border-primary/50 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/10" data-testid="open-chord-finder">
+              Chord finder: tap notes, get every chord name →
+            </Link>
             {markMode ? (
               <>
                 <span className="text-xs text-muted-foreground">One fret per string · tap again to unmark</span>

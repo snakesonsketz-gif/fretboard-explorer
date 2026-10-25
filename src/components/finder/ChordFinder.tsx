@@ -3,7 +3,9 @@
  * see every chord the shape could be, most likely first, with the reasons behind each guess.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Eraser, Volume2 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Eraser, ExternalLink, Volume2 } from "lucide-react";
+import { openInExplore } from "@/lib/exploreLink";
 import { Neck, type NeckDot } from "@/components/Neck";
 import { TuningSelect } from "@/components/TuningSelect";
 import { Button } from "@/components/ui/button";
@@ -40,6 +42,10 @@ export function ChordFinder() {
   const [pick, setPick] = useState(0);
   const [all, setAll] = useState(false);
   const [typed, setTyped] = useState("");
+  /** "string" = one note per string (a chord shape); "any" = notes anywhere, several on a string. */
+  const [pickMode, setPickMode] = useState<"string" | "any">("string");
+  const [free, setFree] = useState<{ s: number; fret: number }[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     try {
@@ -62,12 +68,23 @@ export function ChordFinder() {
     setShape((sh) => (sh.length === n ? sh : Array.from({ length: n }, (_, i) => sh[i - (n - sh.length)] ?? null)));
   }, [n]);
 
-  const notes = useMemo(() => shape.map((f, s) => (f === null || f === undefined ? null : { s, fret: f, midi: tuning.midis[s]! + f })).filter((x): x is { s: number; fret: number; midi: number } => !!x), [shape, tuning]);
+  const notes = useMemo(
+    () =>
+      pickMode === "any"
+        ? free.filter((x) => x.s < n).map((x) => ({ s: x.s, fret: x.fret, midi: tuning.midis[x.s]! + x.fret }))
+        : shape.map((f, s) => (f === null || f === undefined ? null : { s, fret: f, midi: tuning.midis[s]! + f })).filter((x): x is { s: number; fret: number; midi: number } => !!x),
+    [pickMode, free, shape, tuning, n],
+  );
   const readings = useMemo(() => findChords(notes, 80), [notes]);
   const cur: ChordReading | undefined = readings[pick] ?? readings[0];
   useEffect(() => setPick(0), [notes.length, shape]);
 
   const tap = (s: number, f: number) => {
+    if (pickMode === "any") {
+      setFree((xs) => (xs.some((x) => x.s === s && x.fret === f) ? xs.filter((x) => !(x.s === s && x.fret === f)) : [...xs, { s, fret: f }]));
+      pluck(tuning.midis[s]! + f);
+      return;
+    }
     setShape((sh) => {
       const next = [...sh];
       next[s] = sh[s] === f ? null : f;
@@ -80,7 +97,7 @@ export function ChordFinder() {
     const text = label === "degree" && deg ? (deg === "1" ? "R" : pretty(deg)) : cur && deg ? pretty(spellDegree(cur.root, deg)) : SHARP[nt.midi % 12]!;
     return { s: nt.s, fret: nt.fret, tone: "pick", label: text, ring: deg === "1" };
   });
-  const muted = shape.map((f, s) => (f === null ? s : -1)).filter((s) => s >= 0);
+  const muted = pickMode === "any" ? [] : shape.map((f, s) => (f === null ? s : -1)).filter((s) => s >= 0);
   const play = () => playChord([...notes].sort((a, b) => a.midi - b.midi).map((x) => x.midi));
   const list = all ? readings : readings.slice(0, 8);
 
@@ -101,20 +118,40 @@ export function ChordFinder() {
         <Button size="sm" variant="secondary" onClick={play} disabled={!notes.length} className="gap-1.5">
           <Volume2 className="h-4 w-4" /> Hear it
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => setShape(new Array(n).fill(null))} disabled={!notes.length} className="gap-1.5">
+        <Button size="sm" variant="ghost" onClick={() => (pickMode === "any" ? setFree([]) : setShape(new Array(n).fill(null)))} disabled={!notes.length} className="gap-1.5">
           <Eraser className="h-4 w-4" /> Clear
         </Button>
       </div>
 
-      <Neck midis={tuning.midis} names={tuning.names} from={0} to={toFret} dots={dots} muted={muted} onTap={tap} onName={(s) => setShape((sh) => sh.map((f, i) => (i === s ? null : f)))} testId="finder-neck" ariaLabel="Tap frets to build a chord" />
+      <div className="inline-flex rounded-md bg-secondary/60 p-0.5 text-xs" role="radiogroup" aria-label="How to place notes" data-testid="finder-pick-mode">
+        {(
+          [
+            ["string", "One note per string (a chord shape)"],
+            ["any", "Notes anywhere"],
+          ] as const
+        ).map(([m, t]) => (
+          <button key={m} type="button" role="radio" aria-checked={pickMode === m} onClick={() => setPickMode(m)} className={cn("rounded px-2.5 py-1.5 font-semibold", pickMode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground")} data-testid={`finder-mode-${m}`}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <Neck midis={tuning.midis} names={tuning.names} from={0} to={toFret} dots={dots} muted={muted} onTap={tap} onName={(s) => (pickMode === "any" ? setFree((xs) => xs.filter((x) => x.s !== s)) : setShape((sh) => sh.map((f, i) => (i === s ? null : f))))} testId="finder-neck" ariaLabel="Tap frets to build a chord" />
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-mono text-sm font-bold text-foreground" data-testid="finder-shape">
-          {shapeText(shape)}
-        </span>
+        {pickMode === "string" ? (
+          <span className="font-mono text-sm font-bold text-foreground" data-testid="finder-shape">
+            {shapeText(shape)}
+          </span>
+        ) : null}
         <span className="text-muted-foreground">
-          {notes.length ? [...notes].sort((a, b) => a.midi - b.midi).map((x) => SHARP[x.midi % 12]).join(" · ") : "Tap a fret on each string you play. Tap a string's name to leave it out."}
+          {notes.length
+            ? [...notes].sort((a, b) => a.midi - b.midi).map((x) => SHARP[x.midi % 12]).join(" · ")
+            : pickMode === "any"
+              ? "Tap any frets — as many as you like, anywhere on the neck. Tap a note again to take it off."
+              : "Tap a fret on each string you play. Tap a string's name to leave it out."}
         </span>
+        {pickMode === "string" ? (
         <form
           className="ml-auto flex items-center gap-1"
           onSubmit={(e) => {
@@ -131,8 +168,9 @@ export function ChordFinder() {
             Go
           </Button>
         </form>
+        ) : null}
       </div>
-      {n === 6 ? (
+      {n === 6 && pickMode === "string" ? (
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <span className="text-muted-foreground">Try:</span>
           {TRY.map((t) => (
@@ -157,6 +195,19 @@ export function ChordFinder() {
             <p className="text-xs text-muted-foreground">
               {readings[0]!.def.name} · {readings[0]!.position} · {Math.round(readings[0]!.likelihood * 100)}% likely
             </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="mt-2 gap-1.5"
+              data-testid="finder-open-explore"
+              onClick={() => {
+                const r = cur ?? readings[0]!;
+                openInExplore({ rootName: r.root.name, degrees: [...r.def.degrees], tuningId, shape: pickMode === "string" ? [...shape] : undefined });
+                void navigate({ to: "/" });
+              }}
+            >
+              <ExternalLink className="h-4 w-4" /> Show {pretty((cur ?? readings[0]!).base)} in Explore
+            </Button>
           </div>
           <ol className="space-y-1">
             {list.map((r, i) => (
