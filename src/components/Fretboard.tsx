@@ -44,7 +44,7 @@ export interface FretboardProps {
   /** "string-fret" keys of a visual pathway; set notes off the path are dimmed. */
   pathKeys?: Set<string> | undefined;
   /** "string-fret" -> 1-based step number of an ordered pathway. */
-  pathOrder?: Map<string, number> | undefined;
+  pathOrder?: Map<string, number | string> | undefined;
 }
 
 /** Color role for a degree, using semantic tokens only. */

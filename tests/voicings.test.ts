@@ -143,3 +143,29 @@ describe("note placement filter", () => {
     }
   });
 });
+
+import { onePerString } from "../src/lib/patterns";
+describe("one note per string arpeggios", () => {
+  const Am = [9, 0, 4];
+  test("each string gets one chord tone, climbing in order", () => {
+    const ps = onePerString(std, Am, 24, "off");
+    expect(ps.length).toBeGreaterThan(10);
+    for (const p of ps) {
+      const strings = p.notes.map((x) => x.string);
+      expect(new Set(strings).size).toBe(strings.length);
+      for (let k = 1; k < p.notes.length; k++) expect(p.notes[k]!.midi).toBeGreaterThan(p.notes[k - 1]!.midi);
+      for (const x of p.notes) expect(Am).toContain(x.pc);
+    }
+    // the classic 6-string A minor sweep at the 12th fret
+    expect(ps.some((p) => p.notes.map((x) => x.fret).join(",") === "12,12,10,9,10,8")).toBe(true);
+  });
+  test("extra notes add hammer-ons on the top string", () => {
+    const ps = onePerString(std, Am, 24, "top");
+    const sweep = ps.find((p) => p.notes.map((x) => x.fret).join(",") === "12,12,10,9,10,8,12");
+    expect(sweep).toBeDefined();
+    expect(sweep!.extras?.has("5-12")).toBe(true);
+    const fit = onePerString(std, Am, 24, "fit");
+    expect(fit.some((p) => (p.extras?.size ?? 0) >= 2)).toBe(true);
+    for (const p of fit.filter((x) => x.level === "easy")) expect(p.to - p.from).toBeLessThanOrEqual(4);
+  });
+});

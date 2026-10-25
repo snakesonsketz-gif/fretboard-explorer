@@ -23,7 +23,7 @@ import { AdvancedTheory } from "@/components/TheoryPanels";
 import { SongWorkspace } from "@/components/SongWorkspace";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
 import { analyzeShape, bookFingering, everyVoicing, FINGER_NAME, fingering, inversionName, inversionOrder, LEVEL_NAME, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
-import { neckPatterns } from "@/lib/patterns";
+import { neckPatterns, onePerString, type ExtraNotes } from "@/lib/patterns";
 import { LEVEL_STYLE, ShapeCycler } from "@/components/ShapeCycler";
 import { matchesPlacement, NotePlacement, type Placement } from "@/components/NotePlacement";
 import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
@@ -415,12 +415,26 @@ export function Workstation() {
   const pinned = pin && mode !== "scale" && pin.tuningId === tuning.id && pin.key === chordKey(root.name, degrees) ? pin.shape : null;
   const shape = pinned ?? (shapeIdx !== null ? voicings[shapeIdx]?.shape : undefined);
   // Scales and arpeggios: every position box and N-per-string pattern on the neck.
-  const patterns = useMemo(
-    () => (mode === "chord" ? [] : neckPatterns(tuning, root.pc, degreesToPitchClasses(degrees).map((p) => p + root.pc), 24)),
-    [mode, tuning, root.pc, degrees],
-  );
+  // Arpeggios can also be played one note per string (sweep shapes), with optional extra notes
+  // for hammer-ons and pull-offs.
+  const [arpShapes, setArpShapes] = useState<"all" | "one">("all");
+  const [extraNotes, setExtraNotes] = useState<ExtraNotes>("off");
+  const patterns = useMemo(() => {
+    if (mode === "chord") return [];
+    const pcs = degreesToPitchClasses(degrees).map((p) => p + root.pc);
+    if (mode === "arpeggio" && arpShapes === "one") return onePerString(tuning, pcs, 24, extraNotes);
+    const base = neckPatterns(tuning, root.pc, pcs, 24);
+    if (mode !== "arpeggio") return base;
+    const order = { known: 0, easy: 1, stretch: 2, impossible: 3 } as const;
+    return [...base, ...onePerString(tuning, pcs, 24, "off")].sort((a, b) => order[a.level] - order[b.level]);
+  }, [mode, tuning, root.pc, degrees, arpShapes, extraNotes]);
   const [patIdx, setPatIdx] = useState<number | null>(null);
-  useEffect(() => setPatIdx(null), [patterns]);
+  // Switching to one-note-per-string shows the first shape straight away.
+  useEffect(() => {
+    if (mode === "arpeggio" && arpShapes === "one" && patterns.length) pickPattern(0);
+    else setPatIdx(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patterns]);
   /** Make sure frets lo..hi are on screen, keeping the zoom width when it can. */
   const showFrets = (lo: number, hi: number) => {
     if (lo >= fretFrom && hi <= fretTo) return;
@@ -441,6 +455,11 @@ export function Workstation() {
   };
   const pat = patIdx !== null && !cagedOn && pathway === "none" && !posWin ? patterns[patIdx] : undefined;
   const patKeys = useMemo(() => (pat ? new Set(pat.notes.map((x) => `${x.string}-${x.fret}`)) : undefined), [pat]);
+  // One-per-string shapes show the picking order; hammer-on / pull-off notes are marked "h".
+  const patOrder = useMemo(() => {
+    if (!pat || pat.kind !== "one-per-string") return undefined;
+    return new Map<string, number | string>(pat.notes.map((x, k) => [`${x.string}-${x.fret}`, pat.extras?.has(`${x.string}-${x.fret}`) ? `${k + 1}h` : k + 1]));
+  }, [pat]);
   const pickPattern = (i: number | null) => {
     setCagedOn(false);
     setPathway("none");
@@ -790,14 +809,44 @@ export function Workstation() {
                 return {
                   label: `${p.name} · frets ${p.from}–${p.to}`,
                   level: p.level,
-                  detail: [p.kind === "position" ? "position box" : d ? `starts on the ${pretty(d)}` : "", `${p.notes.length} notes`, `reach ${p.reach} frets`].filter(Boolean).join(" · "),
+                  detail: [
+                    p.kind === "position" ? "position box" : d ? `starts on the ${pretty(d)}` : "",
+                    `${p.notes.length} notes`,
+                    p.kind === "one-per-string" ? `frets ${p.from}–${p.to}` : `reach ${p.reach} frets`,
+                    p.extras?.size
+                      ? `hammer-on going up, pull-off coming down on the ${[...new Set([...p.extras].map((k) => Number(k.split("-")[0])))].map((si) => (tuning.strings[0]!.note === tuning.strings[tuning.strings.length - 1]!.note ? (si === 0 ? "low " : si === tuning.strings.length - 1 ? "high " : "") : "") + pretty(tuning.strings[si]!.note)).join(", ")} string${p.extras.size > 1 ? "s" : ""}`
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
                 };
               }}
               index={pat ? patIdx : null}
               onChange={pickPattern}
-              onPlay={pat ? () => playSequence(pat.notes.map((x) => x.midi), 0.14) : undefined}
+              onPlay={pat ? () => playSequence(pat.kind === "one-per-string" ? [...pat.notes.map((x) => x.midi), ...pat.notes.map((x) => x.midi).reverse().slice(1)] : pat.notes.map((x) => x.midi), 0.14) : undefined}
             />
           )}
+          {mode === "arpeggio" ? (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs" data-testid="arp-shape-options">
+              <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Arpeggio shapes</span>
+              {(["all", "one"] as const).map((k) => (
+                <Button key={k} size="sm" variant={arpShapes === k ? "default" : "secondary"} className="h-7 px-2 text-xs" onClick={() => setArpShapes(k)} data-testid={`arp-shapes-${k}`}>
+                  {k === "all" ? "All" : "1 note per string"}
+                </Button>
+              ))}
+              {arpShapes === "one" ? (
+                <>
+                  <span className="mx-1 h-5 w-px bg-border" />
+                  <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Extra notes (hammer-on / pull-off)</span>
+                  {(["off", "top", "fit"] as const).map((k) => (
+                    <Button key={k} size="sm" variant={extraNotes === k ? "default" : "secondary"} className="h-7 px-2 text-xs" onClick={() => setExtraNotes(k)} data-testid={`arp-extra-${k}`}>
+                      {k === "off" ? "None" : k === "top" ? "Top string" : "Wherever they fit"}
+                    </Button>
+                  ))}
+                </>
+              ) : null}
+            </div>
+          ) : null}
           <Fretboard
             shape={markMode ? userShape : pat ? undefined : shape}
             fingers={!markMode && !pat && shapeFingers ? shapeFingers.fingers : undefined}
@@ -807,7 +856,7 @@ export function Workstation() {
             focus={pat ? { from: pat.from, to: pat.to, label: pat.name } : focus}
             neighbors={pat ? undefined : neighbors}
             pathKeys={pat ? patKeys : pathKeys}
-            pathOrder={pat || pathway === "none" ? undefined : pathOrder}
+            pathOrder={pat ? patOrder : pathway === "none" ? undefined : pathOrder}
             fretFrom={fretFrom}
             fretTo={fretTo}
             leftHanded={leftHanded}
