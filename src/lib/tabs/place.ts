@@ -42,7 +42,7 @@ export function placeMelody(midis: number[], tuning: TabTuning, startAt = 0): (P
   const layers: Node[][] = [];
   /** The hand covers four frets from its index finger: [hand, hand + 3]. Open strings fit anywhere. */
   const shiftTo = (hand: number, f: number) => (f === 0 || (f >= hand && f <= hand + 3) ? hand : f < hand ? f : f - 3);
-  const shiftCost = (from: number, to: number) => (from === to ? 0 : 1 + 0.25 * Math.abs(to - from));
+  const shiftCost = (from: number, to: number) => (from === to ? 0 : 1.6 + 0.2 * Math.abs(to - from));
   options.forEach((opts, i) => {
     const prevLayer = i ? layers[i - 1]! : null;
     const prevOpts = i ? options[i - 1]! : null;
@@ -81,4 +81,50 @@ export function placeMelody(midis: number[], tuning: TabTuning, startAt = 0): (P
     } else j = p;
   }
   return out;
+}
+
+/**
+ * Several notes at once: one string each, as few frets wide as possible and near the hand.
+ * Notes that can't all fit are dropped from the middle first (the bass and the top melody stay).
+ */
+export function placeChord(midis: number[], tuning: TabTuning, handAt = 0, maxFret = MAX_FRET): Placed[] {
+  let notes = [...new Set(midis)].sort((a, b) => a - b);
+  const n = tuning.midis.length;
+  while (notes.length > n) notes = [...notes.slice(0, 1), ...notes.slice(2)];
+  const opts = notes.map((m) => positionsFor(m, tuning, maxFret));
+  for (;;) {
+    let best: Placed[] | null = null;
+    let bestCost = Infinity;
+    const cur: Placed[] = [];
+    const used = new Set<number>();
+    const go = (i: number) => {
+      if (i === notes.length) {
+        const fretted = cur.filter((p) => p.fret > 0).map((p) => p.fret);
+        const lo = fretted.length ? Math.min(...fretted) : handAt;
+        const span = fretted.length ? Math.max(...fretted) - lo : 0;
+        let cost = span + (span > 4 ? 12 * (span - 4) : 0) + Math.abs(lo - handAt) * 0.3 + cur.reduce((a, p) => a + p.fret * 0.02, 0);
+        // Lower notes on lower strings, as chords are normally held.
+        for (let x = 0; x < cur.length; x++) for (let y = x + 1; y < cur.length; y++) if (cur[x]!.s > cur[y]!.s) cost += 1.5;
+        if (cost < bestCost) {
+          bestCost = cost;
+          best = [...cur];
+        }
+        return;
+      }
+      for (const o of opts[i]!) {
+        if (used.has(o.s)) continue;
+        used.add(o.s);
+        cur.push(o);
+        go(i + 1);
+        cur.pop();
+        used.delete(o.s);
+      }
+    };
+    go(0);
+    if (best || notes.length <= 1) return best ?? [];
+    // Doesn't fit: drop an inner note and try again.
+    const drop = notes.length > 2 ? Math.floor(notes.length / 2) : 1;
+    notes = notes.filter((_, i) => i !== drop);
+    opts.splice(drop, 1);
+  }
 }

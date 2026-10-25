@@ -1,21 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AudioLines, Check, ClipboardCopy, Download, FilePlus2, FolderOpen, MessageSquareText, Mic, Play, Redo2, Save, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
+import { AudioLines, Check, FileAudio, ClipboardCopy, Download, FilePlus2, FolderOpen, MessageSquareText, Mic, Play, Redo2, Save, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { NeckPlayer } from "@/components/tabs/NeckPlayer";
 import { TabGrid, type GridOps, type Sel } from "@/components/tabs/TabGrid";
+import { useTabPlayer } from "@/components/tabs/useTabPlayer";
+import { TuningSelect } from "@/components/TuningSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { engine } from "@/lib/engine";
+import { bestTrack, parseMidi, type MidiFile } from "@/lib/midifile/parse";
+import { midiToTab } from "@/lib/midifile/toTab";
 import { useTabActive } from "@/lib/tabActive";
 import { describe, DESCRIBE_EXAMPLES, type DescribeLine } from "@/lib/tabs/describe";
 import { barCol, cloneCols, colId, DEFAULT_BEATS, emptyCells, emptyDoc, refit, restCol, tabTuning, type Column, type TabDoc } from "@/lib/tabs/model";
-import { playEvents, totalSeconds } from "@/lib/tabs/play";
+import { totalSeconds } from "@/lib/tabs/play";
 import { renderAscii } from "@/lib/tabs/render";
 import { deleteTab, loadDraft, loadTabs, saveDraft, upsertTab } from "@/lib/tabs/store";
 import { importText } from "@/lib/tabs/text";
-import { INSTRUMENTS, TUNINGS } from "@/lib/tuner/tunings";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tabs")({
@@ -23,8 +25,9 @@ export const Route = createFileRoute("/tabs")({
   component: TabsPage,
 });
 
-type InputMode = "describe" | "text" | "audio";
+type InputMode = "describe" | "text" | "midi" | "audio";
 const HISTORY = 100;
+const NOTE = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
 
 /** Tab Maker: write tablature by describing what you play, by tapping it in, or by typing tab text. */
 export function TabsPage() {
@@ -102,34 +105,43 @@ export function TabsPage() {
   );
 
   /* ------------------------------------------------------------ playback */
-  const [playing, setPlaying] = useState<number | null>(null);
-  const timers = useRef<number[]>([]);
-  const stop = useCallback(() => {
-    timers.current.forEach((t) => window.clearTimeout(t));
-    timers.current = [];
-    setPlaying(null);
-  }, []);
+  const player = useTabPlayer(doc);
+  const { playing, stop } = player;
   useEffect(() => {
     if (!active) stop();
   }, [active, stop]);
-  useEffect(() => stop, [stop]);
   const play = () => {
-    if (playing !== null) return stop();
+    if (player.isPlaying) return stop();
     const from = sel && sel.col < doc.cols.length ? sel.col : 0;
-    const evs = playEvents(doc, from);
-    if (!evs.length) return note("Nothing to play yet.");
-    engine.unlock();
-    const sound = (e: (typeof evs)[number]) => {
-      setPlaying(e.col);
-      if (e.midis.length) void engine.previewNotes(e.strum < 0 ? [...e.midis].reverse() : e.midis, e.midis.length > 2 ? 0.018 : 0, { velocity: 0.75 });
-    };
-    evs.forEach((e) => {
-      if (e.at === 0) sound(e);
-      else timers.current.push(window.setTimeout(() => sound(e), e.at * 1000));
-      e.extras.forEach((x) => timers.current.push(window.setTimeout(() => void engine.previewNotes([x.midi], 0, { velocity: x.vel }), x.at * 1000)));
-    });
-    const end = evs[evs.length - 1]!;
-    timers.current.push(window.setTimeout(stop, (end.at + Math.max(0.4, end.dur)) * 1000));
+    if (!player.start(from)) note("Nothing to play yet.");
+  };
+
+  /* ------------------------------------------------------------ MIDI */
+  const [midi, setMidi] = useState<{ name: string; file: MidiFile } | null>(null);
+  const [midiTracks, setMidiTracks] = useState<number[]>([]);
+  const [midiGrid, setMidiGrid] = useState(0.25);
+  const [midiFit, setMidiFit] = useState(true);
+  const [midiErr, setMidiErr] = useState<string | null>(null);
+  const loadMidi = async (f: File) => {
+    setMidiErr(null);
+    try {
+      const file = parseMidi(new Uint8Array(await f.arrayBuffer()));
+      if (!file.tracks.some((t) => t.notes.length)) throw new Error("That file has no notes in it.");
+      setMidi({ name: f.name.replace(/\.(mid|midi|rmi)$/i, ""), file });
+      setMidiTracks([bestTrack(file)]);
+    } catch (e) {
+      setMidi(null);
+      setMidiErr(e instanceof Error ? e.message : "Couldn't read that file.");
+    }
+  };
+  const makeFromMidi = () => {
+    if (!midi || !midiTracks.length) return;
+    stop();
+    const r = midiToTab(midi.file, doc.tuning, { tracks: midiTracks, grid: midiGrid, fit: midiFit }, midi.name);
+    commit(() => r.doc.cols);
+    setDoc((d) => ({ ...d, title: r.doc.title, bpm: r.doc.bpm }));
+    setSel(null);
+    note(`Made ${r.doc.cols.filter((c) => c.kind === "notes").length} columns from ${midi.name}${r.moved ? ` · ${r.moved} notes moved an octave to fit` : ""}${r.dropped ? ` · ${r.dropped} left out` : ""}`);
   };
 
   /* ------------------------------------------------------------ describe */
@@ -201,7 +213,6 @@ export function TabsPage() {
   };
 
   const seconds = totalSeconds(doc);
-  const groups = INSTRUMENTS.filter((i) => i.id !== "other").map((i) => ({ i, list: TUNINGS.filter((t) => t.instrument === i.id) }));
 
   return (
     <AppShell>
@@ -211,28 +222,12 @@ export function TabsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Input value={doc.title} onChange={(e) => setDoc((d) => ({ ...d, title: e.target.value.slice(0, 80) }))} className="h-10 min-w-0 flex-1 font-display text-lg font-bold" aria-label="Tab title" data-testid="tab-title" />
             <Button onClick={play} className="h-10 gap-1.5" data-testid="tab-play">
-              {playing !== null ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {playing !== null ? "Stop" : sel ? "Play from here" : "Play"}
+              {player.isPlaying ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              {player.isPlaying ? "Stop" : sel ? "Play from here" : "Play"}
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={doc.tuning.id} onValueChange={setTuning}>
-              <SelectTrigger className="h-9 w-[15.5rem]" aria-label="Tuning" data-testid="tab-tuning">
-                <SelectValue placeholder={doc.tuning.name} />
-              </SelectTrigger>
-              <SelectContent className="max-h-96">
-                {groups.map(({ i, list }) => (
-                  <SelectGroup key={i.id}>
-                    <SelectLabel>{i.name}</SelectLabel>
-                    {list.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name} <span className="text-muted-foreground">· {t.notes.replace(/\d/g, "").replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭")}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
+            <TuningSelect value={doc.tuning.id} onChange={setTuning} placeholder={doc.tuning.name} testId="tab-tuning" />
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
               Tempo
               <Input
@@ -291,6 +286,7 @@ export function TabsPage() {
           <div className="flex flex-wrap gap-1 rounded-lg bg-secondary/60 p-1" role="tablist" aria-label="How to write">
             <ModeBtn on={mode === "describe"} onClick={() => setMode("describe")} icon={<MessageSquareText className="h-4 w-4" />} testId="tab-mode-describe">Describe</ModeBtn>
             <ModeBtn on={mode === "text"} onClick={() => setMode("text")} icon={<Type className="h-4 w-4" />} testId="tab-mode-text">Type tab</ModeBtn>
+            <ModeBtn on={mode === "midi"} onClick={() => setMode("midi")} icon={<FileAudio className="h-4 w-4" />} testId="tab-mode-midi">MIDI</ModeBtn>
             <ModeBtn on={mode === "audio"} onClick={() => setMode("audio")} icon={<AudioLines className="h-4 w-4" />} testId="tab-mode-audio">Audio</ModeBtn>
           </div>
 
@@ -359,6 +355,67 @@ export function TabsPage() {
                 </ul>
               </details>
             </div>
+          ) : mode === "midi" ? (
+            <div className="space-y-2" data-testid="tab-midi">
+              <p className="text-xs text-muted-foreground">
+                Open a MIDI file (.mid) and Fretlab turns it into tab for the tuning above — picking strings and frets you can actually play — and shows it on the fretboard below, where you can slow it down.
+              </p>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border bg-background/40 p-3 text-sm hover:border-primary">
+                <FileAudio className="h-5 w-5 text-primary" />
+                <span className="font-semibold">{midi ? midi.name : "Choose a MIDI file"}</span>
+                <span className="text-xs text-muted-foreground">{midi ? `${midi.file.tracks.length} tracks · ${Math.round(midi.file.bpm)} bpm · ${midi.file.timeSig.num}/${midi.file.timeSig.den} · ${Math.floor(midi.file.duration / 60)}:${String(Math.round(midi.file.duration % 60)).padStart(2, "0")}` : ".mid or .midi"}</span>
+                <input
+                  type="file"
+                  accept=".mid,.midi,.rmi,audio/midi,audio/x-midi"
+                  className="sr-only"
+                  data-testid="tab-midi-file"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void loadMidi(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {midiErr ? <p className="text-xs font-semibold text-third">{midiErr}</p> : null}
+              {midi ? (
+                <>
+                  <p className="text-xs font-semibold">Which parts to put in the tab</p>
+                  <ul className="space-y-1" data-testid="tab-midi-tracks">
+                    {midi.file.tracks.map((t) => {
+                      const on = midiTracks.includes(t.index);
+                      const lo = t.notes.length ? Math.min(...t.notes.map((x) => x.midi)) : 0;
+                      const hi = t.notes.length ? Math.max(...t.notes.map((x) => x.midi)) : 0;
+                      return (
+                        <li key={t.index}>
+                          <button type="button" disabled={t.isDrums || !t.notes.length} onClick={() => setMidiTracks((v) => (on ? v.filter((x) => x !== t.index) : [...v, t.index]))} className={cn("flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm disabled:opacity-40", on ? "border-primary bg-primary/10" : "border-border")}>
+                            <span className={cn("grid h-4 w-4 place-items-center rounded border text-[10px]", on ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{on ? "✓" : ""}</span>
+                            <span className="min-w-0 flex-1 truncate font-semibold">{t.name}</span>
+                            <span className="shrink-0 text-[11px] text-muted-foreground">
+                              {t.instrument} · {t.notes.length} notes{t.notes.length ? ` · ${NOTE[lo % 12]}${Math.floor(lo / 12) - 1}–${NOTE[hi % 12]}${Math.floor(hi / 12) - 1}` : ""}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Rhythm grid</span>
+                    {([[0.5, "8ths"], [0.25, "16ths"], [0.125, "32nds"], [1 / 3, "triplets"]] as const).map(([g, l]) => (
+                      <button key={l} type="button" onClick={() => setMidiGrid(g)} className={cn("rounded-md border px-2 py-1 font-semibold", Math.abs(midiGrid - g) < 1e-6 ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
+                        {l}
+                      </button>
+                    ))}
+                    <label className="ml-1 flex items-center gap-1.5">
+                      <input type="checkbox" checked={midiFit} onChange={(e) => setMidiFit(e.target.checked)} className="accent-[var(--color-primary)]" />
+                      Move notes out of range by an octave
+                    </label>
+                  </div>
+                  <Button onClick={makeFromMidi} disabled={!midiTracks.length} className="gap-1.5" data-testid="tab-midi-make">
+                    <Wand2 className="h-4 w-4" /> Make the tab
+                  </Button>
+                </>
+              ) : null}
+            </div>
           ) : mode === "text" ? (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
@@ -395,6 +452,15 @@ export function TabsPage() {
               </div>
             </div>
           )}
+        </section>
+
+        {/* the tab on a fretboard */}
+        <section className="panel space-y-2 p-3 sm:p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg font-bold">On the fretboard</h2>
+            <span className="text-xs text-muted-foreground">Slow it down to learn it · tap a column below to start there</span>
+          </div>
+          <NeckPlayer doc={doc} at={playing ?? sel?.col ?? null} playing={player.isPlaying} speed={player.speed} setSpeed={player.setSpeed} loop={player.loop} setLoop={player.setLoop} onPlay={play} />
         </section>
 
         {/* the tab */}

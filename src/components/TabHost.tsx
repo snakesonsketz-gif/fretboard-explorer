@@ -9,6 +9,7 @@ import { LuthierPage } from "@/routes/luthier";
 import { PlayPage } from "@/routes/play";
 import { SequencerPage } from "@/routes/sequencer";
 import { TabsPage } from "@/routes/tabs";
+import { FinderPage } from "@/routes/finder";
 import { TunerPage } from "@/routes/tuner";
 import { InstallTip } from "./InstallTip";
 import { WelcomeNote } from "./WelcomeNote";
@@ -19,6 +20,7 @@ const TABS: Record<string, ComponentType> = {
   "/grimoire": GrimoirePage,
   "/tuner": TunerPage,
   "/tabs": TabsPage,
+  "/finder": FinderPage,
   "/sequencer": SequencerPage,
   "/listen": ListenPage,
   "/play": PlayPage,

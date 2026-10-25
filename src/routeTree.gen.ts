@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevelopRouteImport } from './routes/develop'
+import { Route as FinderRouteImport } from './routes/finder'
 import { Route as GrimoireRouteImport } from './routes/grimoire'
 import { Route as ListenRouteImport } from './routes/listen'
 import { Route as LuthierRouteImport } from './routes/luthier'
@@ -27,6 +28,11 @@ const IndexRoute = IndexRouteImport.update({
 const DevelopRoute = DevelopRouteImport.update({
   id: '/develop',
   path: '/develop',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinderRoute = FinderRouteImport.update({
+  id: '/finder',
+  path: '/finder',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GrimoireRoute = GrimoireRouteImport.update({
@@ -68,6 +74,7 @@ const TunerRoute = TunerRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/develop': typeof DevelopRoute
+  '/finder': typeof FinderRoute
   '/grimoire': typeof GrimoireRoute
   '/listen': typeof ListenRoute
   '/luthier': typeof LuthierRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/develop': typeof DevelopRoute
+  '/finder': typeof FinderRoute
   '/grimoire': typeof GrimoireRoute
   '/listen': typeof ListenRoute
   '/luthier': typeof LuthierRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/develop': typeof DevelopRoute
+  '/finder': typeof FinderRoute
   '/grimoire': typeof GrimoireRoute
   '/listen': typeof ListenRoute
   '/luthier': typeof LuthierRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/develop'
+    | '/finder'
     | '/grimoire'
     | '/listen'
     | '/luthier'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/develop'
+    | '/finder'
     | '/grimoire'
     | '/listen'
     | '/luthier'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/develop'
+    | '/finder'
     | '/grimoire'
     | '/listen'
     | '/luthier'
@@ -138,6 +150,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DevelopRoute: typeof DevelopRoute
+  FinderRoute: typeof FinderRoute
   GrimoireRoute: typeof GrimoireRoute
   ListenRoute: typeof ListenRoute
   LuthierRoute: typeof LuthierRoute
@@ -161,6 +174,13 @@ declare module '@tanstack/react-router' {
       path: '/develop'
       fullPath: '/develop'
       preLoaderRoute: typeof DevelopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/finder': {
+      id: '/finder'
+      path: '/finder'
+      fullPath: '/finder'
+      preLoaderRoute: typeof FinderRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/grimoire': {
@@ -218,6 +238,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DevelopRoute: DevelopRoute,
+  FinderRoute: FinderRoute,
   GrimoireRoute: GrimoireRoute,
   ListenRoute: ListenRoute,
   LuthierRoute: LuthierRoute,
