@@ -13,6 +13,8 @@ export interface CyclerItem {
   label: string;
   /** Smaller line under it. */
   detail?: string | undefined;
+  /** Finger placement line (chords). */
+  fingers?: string | undefined;
   /** An extra explanation line (e.g. the inversion and how the note order changed). */
   note?: string | undefined;
   level: VoicingLevel;
@@ -92,6 +94,14 @@ export function ShapeCycler({
               </span>
               {cur.detail ? ` · ${cur.detail}` : ""}
             </div>
+            {cur.fingers ? (
+              <div className="mt-0.5 font-mono text-xs font-semibold text-foreground" data-testid="cycler-fingers">
+                {cur.fingers}
+              </div>
+            ) : null}
+            {cur.fingers ? (
+              <div className="text-[10px] text-muted-foreground">1 index · 2 middle · 3 ring · 4 pinky · 0 open · x not played</div>
+            ) : null}
             {cur.note ? (
               <div className="mt-0.5 text-[11px] text-foreground/85" data-testid="cycler-note">
                 {cur.note}

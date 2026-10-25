@@ -22,7 +22,7 @@ import { ChordLab } from "@/components/ChordLab";
 import { AdvancedTheory } from "@/components/TheoryPanels";
 import { SongWorkspace } from "@/components/SongWorkspace";
 import { InstrumentPicker } from "@/components/InstrumentPicker";
-import { analyzeShape, everyVoicing, inversionName, inversionOrder, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
+import { analyzeShape, everyVoicing, FINGER_NAME, fingering, inversionName, inversionOrder, shapeMidis, shapeToTab, type Shape, type VoicingLevel } from "@/lib/voicings";
 import { neckPatterns } from "@/lib/patterns";
 import { ShapeCycler } from "@/components/ShapeCycler";
 import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
@@ -453,6 +453,18 @@ export function Workstation() {
     return () => window.cancelAnimationFrame(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewKey]);
+  const shapeFingers = useMemo(() => (shape ? fingering(shape) : null), [shape]);
+  /** "Fingers x32010 · index barre on fret 1 (A–high E)" */
+  const fingerText = (sh: Shape) => {
+    const fg = fingering(sh);
+    const last = tuning.strings.length - 1;
+    const dup = tuning.strings[0]!.note === tuning.strings[last]!.note;
+    const name = (si: number) => (dup && si === 0 ? "low " : dup && si === last ? "high " : "") + pretty(tuning.strings[si]!.note);
+    const parts = [`Fingers ${fg.fingers.map((f) => (f === null ? "x" : String(f))).join(" ")}`];
+    for (const b of fg.barres) parts.push(`${FINGER_NAME[b.finger] ?? `finger ${b.finger}`} barre on fret ${b.fret} (${name(b.from)} to ${name(b.to)} string)`);
+    if (fg.count > 4) parts.push(`needs ${fg.count} fingers — one more than a hand has${fg.count > 5 ? ` (${fg.count - 4} more)` : ""}`);
+    return parts.join(" · ");
+  };
   const degreeOfPc = (pc: number) => degrees.find((d) => (root.pc + pcOf(d)) % 12 === pc);
   const voicingLevels = useMemo(() => voicings.map((v) => v.level), [voicings]);
   const patternLevels = useMemo(() => patterns.map((p) => p.level), [patterns]);
@@ -698,6 +710,7 @@ export function Workstation() {
                 return {
                 label: shapeToTab(v.shape),
                 level: v.level,
+                fingers: fingerText(v.shape),
                 note: degs[0] && degs[0] !== "1"
                   ? `${inv.name}. Low → high: ${low.map((m) => pretty(spellDegree(root, degreeOfPc(m % 12) ?? "1"))).join(" ")} (${degs.map(pretty).join(" ")}). ${inversionOrder(degs.map(pretty))}`
                   : `Root position. Low → high: ${low.map((m) => pretty(spellDegree(root, degreeOfPc(m % 12) ?? "1"))).join(" ")} (${degs.map(pretty).join(" ")}).`,
@@ -736,6 +749,7 @@ export function Workstation() {
           )}
           <Fretboard
             shape={markMode ? userShape : pat ? undefined : shape}
+            fingers={!markMode && !pat && shapeFingers ? shapeFingers.fingers : undefined}
             tuning={tuning}
             root={root}
             degrees={fbDegrees}

@@ -34,6 +34,8 @@ export interface FretboardProps {
   onShift?: ((delta: number) => void) | undefined;
   /** Highlight a single playable shape: fret per string, null = muted. */
   shape?: (number | null)[] | undefined;
+  /** Finger numbers for the shape (1 index … 4 pinky), per string, drawn on its notes. */
+  fingers?: (number | null)[] | undefined;
   onNote?: ((info: { midi: number; label: string }) => void) | undefined;
   /** Focused fret window (CAGED position or 4/5-fret position); notes outside are dimmed. */
   focus?: { from: number; to: number; label?: string } | null | undefined;
@@ -77,6 +79,7 @@ export function Fretboard(props: FretboardProps) {
     onShift,
     onNote,
     shape,
+    fingers,
     focus,
     neighbors,
     pathKeys,
@@ -246,6 +249,18 @@ export function Fretboard(props: FretboardProps) {
                           )}
                           style={{ top: "-0.25rem" }}
                         />
+                      ) : null}
+                      {inShape && n.fret > 0 && fingers?.[n.string] ? (
+                        <span
+                          aria-hidden
+                          data-testid="finger"
+                          className={cn(
+                            "pointer-events-none absolute -bottom-1 -right-1 z-20 flex h-4 w-4 items-center justify-center rounded-full border border-background font-sans text-[9px] font-bold leading-none",
+                            fingers[n.string]! > 4 ? "bg-red-500 text-white" : "bg-foreground text-background",
+                          )}
+                        >
+                          {fingers[n.string]}
+                        </span>
                       ) : null}
                       {pathOrder?.has(`${n.string}-${n.fret}`) ? (
                         <span aria-hidden data-testid="path-step" className="pointer-events-none absolute -right-0.5 -top-0.5 z-20 rounded bg-primary px-0.5 font-mono text-[8px] font-bold leading-tight text-primary-foreground">

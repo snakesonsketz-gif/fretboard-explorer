@@ -99,3 +99,23 @@ describe("inversions", () => {
     expect(inversionOrder(["5", "1", "3"])).toContain("above the 5");
   });
 });
+
+import { fingering } from "../src/lib/voicings";
+describe("finger placement", () => {
+  const t = (s: string) => [...s].map((c) => (c === "x" ? null : parseInt(c, 16)));
+  const f = (s: string) => fingering(t(s)).fingers.map((x) => (x === null ? "x" : x)).join("");
+  test("standard fingerings for common shapes", () => {
+    expect(f("x32010")).toBe("x32010"); // open C
+    expect(f("x02210")).toBe("x02310"); // Am
+    expect(f("022100")).toBe("023100"); // E
+    expect(f("xx0232")).toBe("xx0132"); // D
+    expect(f("133211")).toBe("134211"); // F barre
+    expect(f("x24432")).toBe("x13421"); // Bm barre
+    expect(fingering(t("133211")).barres).toEqual([{ finger: 1, fret: 1, from: 0, to: 5 }]);
+  });
+  test("impossible shapes show the fingers they'd need", () => {
+    const g = fingering(t("875587"));
+    expect(g.count).toBe(5);
+    expect(Math.max(...g.fingers.map((x) => x ?? 0))).toBe(5);
+  });
+});

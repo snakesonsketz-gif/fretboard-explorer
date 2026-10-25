@@ -277,6 +277,108 @@ export function fingersNeeded(shape: readonly (number | null)[]): number {
   return best;
 }
 
+/** Which finger presses each string: 1 index, 2 middle, 3 ring, 4 pinky (5+ = a finger you don't have). */
+export interface Fingering {
+  /** Per string, low first: null = not played, 0 = open, 1–4 = finger. */
+  fingers: (number | null)[];
+  /** Fingers that lie flat across several strings. */
+  barres: { finger: number; fret: number; from: number; to: number }[];
+  /** How many fingers it takes (more than 4 = impossible). */
+  count: number;
+}
+
+/**
+ * The most natural fingering for a shape: fingers go in order up the frets (index lowest), a
+ * finger lies flat as a barre only when every string under it is pressed at that fret or higher,
+ * and with room to spare it keeps one finger per fret (x35553: index on 3, ring barre on 5).
+ * Shapes that need more than four fingers still get one, numbered past 4, so you can see why.
+ */
+export function fingering(shape: readonly (number | null)[]): Fingering {
+  const notes = shape
+    .map((f, i) => ({ f, i }))
+    .filter((x): x is { f: number; i: number } => x.f !== null && x.f > 0)
+    .sort((a, b) => a.f - b.f || a.i - b.i);
+  const fingers: (number | null)[] = shape.map((f) => (f === null ? null : f === 0 ? 0 : null));
+  if (!notes.length) return { fingers, barres: [], count: 0 };
+  const minFret = notes[0]!.f;
+  const barreOk = (fret: number, lo: number, hi: number) => {
+    for (let s = lo; s <= hi; s++) {
+      const f = shape[s];
+      if (f === null || f === undefined || f < fret || f === 0) return false;
+    }
+    return true;
+  };
+  type Slot = { fret: number; lo: number; hi: number; strings: number[] };
+  // Cost of a fingering: a full barre on the lowest fret is natural; a partial barre is used
+  // only when the fingers run out; past four fingers it isn't a real fingering at all.
+  const cost = (sl: Slot[]) =>
+    sl.reduce((c, u) => c + (u.strings.length > 1 ? (u.fret === minFret && u.strings.length >= 4 ? 0.2 : 1.5) : 0), 0) + Math.max(0, sl.length - 4) * 10;
+  const solve = (cap: number, strict: boolean) => {
+    const used: Slot[] = [];
+    let best: Slot[] | null = null;
+    let bestCost = Infinity;
+    const place = (k: number) => {
+      if (k === notes.length) {
+        const c = cost(used);
+        if (c < bestCost) {
+          bestCost = c;
+          best = used.map((u) => ({ ...u, strings: [...u.strings] }));
+        }
+        return;
+      }
+      const n = notes[k]!;
+      const last = used[used.length - 1];
+      if (last && last.fret === n.f) {
+        const lo = Math.min(last.lo, n.i), hi = Math.max(last.hi, n.i);
+        if (barreOk(n.f, lo, hi)) {
+          const prev = { ...last, strings: [...last.strings] };
+          last.lo = lo;
+          last.hi = hi;
+          last.strings.push(n.i);
+          place(k + 1);
+          Object.assign(last, prev);
+        }
+      }
+      if (used.length < cap) {
+        const between = (a: number, b: number) => notes.some((m) => m.f > minFret && m.i > Math.min(a, b) && m.i < Math.max(a, b));
+        const clash =
+          strict &&
+          n.f === minFret &&
+          used.some((u) => {
+            if (u.fret !== n.f) return false;
+            const near = Math.abs(u.lo - n.i) < Math.abs(u.hi - n.i) ? u.lo : u.hi;
+            return Math.abs(near - n.i) > 2 && between(near, n.i);
+          });
+        if (!clash) {
+          used.push({ fret: n.f, lo: n.i, hi: n.i, strings: [n.i] });
+          place(k + 1);
+          used.pop();
+        }
+      }
+    };
+    place(0);
+    return best as Slot[] | null;
+  };
+  const slots = solve(4, true) ?? solve(8, false) ?? [];
+  // Number the fingers: in order, but one finger per fret when there's room (stay ≤ 4 if possible).
+  let prev = 0;
+  const labels = slots.map((sl, k) => {
+    const left = slots.length - k - 1;
+    const want = sl.fret - minFret + 1;
+    const lab = Math.max(prev + 1, slots.length <= 4 ? Math.min(want, 4 - left) : prev + 1);
+    prev = lab;
+    return lab;
+  });
+  const barres: Fingering["barres"] = [];
+  slots.forEach((sl, k) => {
+    for (const st of sl.strings) fingers[st] = labels[k]!;
+    if (sl.strings.length > 1) barres.push({ finger: labels[k]!, fret: sl.fret, from: sl.lo, to: sl.hi });
+  });
+  return { fingers, barres, count: slots.length };
+}
+
+export const FINGER_NAME = ["open", "index", "middle", "ring", "pinky"];
+
 /** A shape that can't be held with four fingers (and an optional barre). */
 export const isImpossibleShape = (shape: readonly (number | null)[]) => fingersNeeded(shape) > 4;
 
