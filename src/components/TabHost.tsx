@@ -1,6 +1,7 @@
 import { Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef, useState, type ComponentType } from "react";
 import { TabActiveContext } from "@/lib/tabActive";
+import { useAccidentals } from "@/lib/accidentals";
 import { DevelopPage } from "@/routes/develop";
 import { GrimoirePage } from "@/routes/grimoire";
 import { Workstation } from "@/routes/index";
@@ -10,6 +11,7 @@ import { PlayPage } from "@/routes/play";
 import { SequencerPage } from "@/routes/sequencer";
 import { TabsPage } from "@/routes/tabs";
 import { FinderPage } from "@/routes/finder";
+import { JamPage } from "@/routes/jam";
 import { TunerPage } from "@/routes/tuner";
 import { InstallTip } from "./InstallTip";
 import { WelcomeNote } from "./WelcomeNote";
@@ -21,6 +23,7 @@ const TABS: Record<string, ComponentType> = {
   "/tuner": TunerPage,
   "/tabs": TabsPage,
   "/finder": FinderPage,
+  "/jam": JamPage,
   "/sequencer": SequencerPage,
   "/listen": ListenPage,
   "/play": PlayPage,
@@ -34,6 +37,8 @@ const TABS: Record<string, ComponentType> = {
  * the same scroll position. Other pages (not found) render normally.
  */
 export function TabHost() {
+  // Every tab re-renders when the sharps / flats choice changes, so all note names follow it.
+  useAccidentals();
   const path = useRouterState({ select: (s) => s.location.pathname.replace(/\/+$/, "") || "/" });
   const [visited, setVisited] = useState<string[]>(() => (TABS[path] ? [path] : []));
   useEffect(() => {

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BookOpen, Ear, FileMusic, FlaskConical, Gamepad2, Gauge, Hammer, Music2, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
+import { BookOpen, Ear, FileMusic, FlaskConical, Gamepad2, Gauge, Guitar, Hammer, Music2, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
 import { setDevMode, useDevMode } from "@/lib/devMode";
 import { engine } from "@/lib/engine";
 import { cn } from "@/lib/utils";
+import { SoundAndNames } from "./SoundAndNames";
 
 const TABS = [
   { to: "/", label: "Explore", icon: Search },
@@ -11,6 +12,7 @@ const TABS = [
   { to: "/tuner", label: "Tuner", icon: Gauge },
   { to: "/tabs", label: "Tabs", icon: FileMusic },
   { to: "/finder", label: "Finder", icon: ScanSearch },
+  { to: "/jam", label: "Jam", icon: Guitar },
   { to: "/sequencer", label: "Sequencer", icon: SlidersHorizontal },
   { to: "/listen", label: "Listen", icon: Ear },
   { to: "/play", label: "Play", icon: Gamepad2 },
@@ -66,6 +68,9 @@ export function AppShell({ children, headerRight, room }: { children: ReactNode;
               <h1 className="truncate font-display text-lg font-black tracking-tight sm:text-xl">Fretlab</h1>
               <p className="truncate text-xs text-muted-foreground" aria-live="polite">{devNote ?? "You create · it analyses · you decide"}</p>
             </div>
+            <div className="ml-auto">
+              <SoundAndNames />
+            </div>
             <button
               type="button"
               onClick={toggleDev}
@@ -73,7 +78,7 @@ export function AppShell({ children, headerRight, room }: { children: ReactNode;
               data-testid="dev-mode"
               title={dev ? "Developer mode is on — tap to hide the Develop tab" : "Developer mode: show the Develop tab (Listen tuning lab)"}
               className={cn(
-                "ml-auto flex shrink-0 touch-manipulation items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors",
+                "flex shrink-0 touch-manipulation items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors",
                 dev ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground",
               )}
             >

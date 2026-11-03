@@ -4,6 +4,7 @@
  * show a note, degree or fret number, and the whole neck scrolls sideways on a phone.
  */
 import { useId, type ReactNode } from "react";
+import { applyAccidentals } from "@/lib/accidentals";
 import { cn } from "@/lib/utils";
 
 export type DotTone = "a" | "b" | "both" | "pick" | "now" | "next" | "faint" | "tone";
@@ -114,7 +115,7 @@ export function Neck({ midis, names, from = 0, to = 15, dots, muted, onTap, onNa
           <g key={s} onClick={onName ? () => onName(s) : undefined} style={onName ? { cursor: "pointer" } : undefined}>
             <rect x={0} y={y(s) - gap / 2} width={nameW} height={gap} fill="transparent" />
             <text x={nameW / 2} y={y(s) + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize={muted?.includes(s) ? 12 : 10.5} fontWeight={700} fill={muted?.includes(s) ? "var(--color-third)" : "var(--color-muted-foreground)"}>
-              {muted?.includes(s) ? "×" : nm}
+              {muted?.includes(s) ? "×" : applyAccidentals(nm)}
             </text>
           </g>
         ))}

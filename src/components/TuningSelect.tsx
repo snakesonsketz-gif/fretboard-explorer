@@ -1,9 +1,10 @@
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { INSTRUMENTS, TUNINGS } from "@/lib/tuner/tunings";
+import { applyAccidentals } from "@/lib/accidentals";
 import { cn } from "@/lib/utils";
 
 const GROUPS = INSTRUMENTS.filter((i) => i.id !== "other").map((i) => ({ i, list: TUNINGS.filter((t) => t.instrument === i.id) }));
-const pretty = (notes: string) => notes.replace(/\d/g, "").replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭");
+const pretty = (notes: string) => applyAccidentals(notes.replace(/\d/g, "").replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭"));
 
 /** Every tuning from the tuner, grouped by instrument (guitar, 7- and 8-string, bass, ukulele). */
 export function TuningSelect({ value, onChange, placeholder, className, testId }: { value: string; onChange: (id: string) => void; placeholder?: string; className?: string; testId?: string }) {

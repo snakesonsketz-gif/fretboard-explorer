@@ -1,3 +1,4 @@
+import { pretty } from "@/lib/theory";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AudioLines, Check, FileAudio, ClipboardCopy, Download, FilePlus2, FolderOpen, MessageSquareText, Mic, Play, Redo2, Save, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
@@ -391,7 +392,7 @@ export function TabsPage() {
                             <span className={cn("grid h-4 w-4 place-items-center rounded border text-[10px]", on ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{on ? "✓" : ""}</span>
                             <span className="min-w-0 flex-1 truncate font-semibold">{t.name}</span>
                             <span className="shrink-0 text-[11px] text-muted-foreground">
-                              {t.instrument} · {t.notes.length} notes{t.notes.length ? ` · ${NOTE[lo % 12]}${Math.floor(lo / 12) - 1}–${NOTE[hi % 12]}${Math.floor(hi / 12) - 1}` : ""}
+                              {t.instrument} · {t.notes.length} notes{t.notes.length ? ` · ${pretty(NOTE[lo % 12]!)}${Math.floor(lo / 12) - 1}–${pretty(NOTE[hi % 12]!)}${Math.floor(hi / 12) - 1}` : ""}
                             </span>
                           </button>
                         </li>

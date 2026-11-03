@@ -94,7 +94,7 @@ export function ChordFinder() {
   };
   const dots: NeckDot[] = notes.map((nt, i) => {
     const deg = cur?.degrees[i];
-    const text = label === "degree" && deg ? (deg === "1" ? "R" : pretty(deg)) : cur && deg ? pretty(spellDegree(cur.root, deg)) : SHARP[nt.midi % 12]!;
+    const text = label === "degree" && deg ? (deg === "1" ? "R" : pretty(deg)) : cur && deg ? pretty(spellDegree(cur.root, deg)) : pretty(SHARP[nt.midi % 12]!);
     return { s: nt.s, fret: nt.fret, tone: "pick", label: text, ring: deg === "1" };
   });
   const muted = pickMode === "any" ? [] : shape.map((f, s) => (f === null ? s : -1)).filter((s) => s >= 0);
@@ -146,7 +146,7 @@ export function ChordFinder() {
         ) : null}
         <span className="text-muted-foreground">
           {notes.length
-            ? [...notes].sort((a, b) => a.midi - b.midi).map((x) => SHARP[x.midi % 12]).join(" · ")
+            ? [...notes].sort((a, b) => a.midi - b.midi).map((x) => pretty(SHARP[x.midi % 12]!)).join(" · ")
             : pickMode === "any"
               ? "Tap any frets — as many as you like, anywhere on the neck. Tap a note again to take it off."
               : "Tap a fret on each string you play. Tap a string's name to leave it out."}

@@ -63,17 +63,21 @@ export function useSequencer() {
     setCanUndo(history.current.length > 0);
   }, []);
 
+  // Other tabs (Jam, songs, Listen) take over the engine's listener while they play; claim it back.
+  const listen = useCallback(() => engine.setListener({ onChord: setCurrentChord, onEnded: () => setPlaying(false) }), []);
   const play = useCallback(async () => {
+    listen();
     setPlayMode("all");
     await engine.play(arrRef.current);
     setPlaying(true);
-  }, []);
+  }, [listen]);
   /** Loop just the drum pattern (no chords, no count-in). */
   const playDrums = useCallback(async () => {
+    listen();
     setPlayMode("drums");
     await engine.play(drumsOnly(arrRef.current));
     setPlaying(true);
-  }, []);
+  }, [listen]);
   const stop = useCallback(() => {
     engine.stop();
     setPlaying(false);

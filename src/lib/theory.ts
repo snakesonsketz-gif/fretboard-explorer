@@ -1,3 +1,4 @@
+import { applyAccidentals } from "./accidentals";
 /**
  * Core music theory engine.
  *
@@ -68,6 +69,11 @@ export function accidentalString(alter: number): string {
 export function pretty(text: string): string {
   // A "b" is an accidental before a degree number ("b3", "Bb7"), or right after a note letter at the
   // end of a name ("Bb", "Bbb", "Ab/C"). Anywhere else it is a letter ("sub", "Dumb") and is kept.
+  // Then note names follow the app-wide sharps / flats choice.
+  return applyAccidentals(prettyGlyphs(text));
+}
+
+function prettyGlyphs(text: string): string {
   return text
     .replace(/bb(?=\d)/g, "𝄫")
     .replace(/([A-G])bb(?=$|\)|\/|,| )/g, "$1𝄫")

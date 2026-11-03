@@ -29,6 +29,7 @@ export const INSTRUMENTS: { id: Instrument; name: string }[] = [
   { id: "synth", name: "Synth pad" },
 ];
 const INSTRUMENT_KEY = "fretlab.instrument.v1";
+const MUTE_KEY = "fretlab.muted.v1";
 /** Piano samples (Salamander Grand Piano, CC BY 3.0 — see public/samples/piano/CREDITS.txt), a tritone apart. */
 const PIANO_URLS: Record<string, string> = Object.fromEntries(
   [2, 3, 4, 5, 6].flatMap((o) => [[`C${o}`, `C${o}.mp3`], [`F#${o}`, `Fs${o}.mp3`]]),
@@ -77,11 +78,15 @@ class Engine {
   private instrument: Instrument = "guitar";
   private instrumentListeners = new Set<() => void>();
   playing = false;
+  /** Everything silent (the speaker button in the header); remembered on this device. */
+  private muted = false;
+  private muteListeners = new Set<() => void>();
 
   constructor() {
     try {
       const v = typeof window !== "undefined" ? window.localStorage.getItem(INSTRUMENT_KEY) : null;
       if (v && INSTRUMENTS.some((i) => i.id === v)) this.instrument = v as Instrument;
+      if (typeof window !== "undefined") this.muted = window.localStorage.getItem(MUTE_KEY) === "1";
     } catch {
       /* storage unavailable: default */
     }
@@ -145,6 +150,29 @@ class Engine {
     }
   }
 
+  isMuted(): boolean {
+    return this.muted;
+  }
+
+  /** Silence every sound in the app (or bring it back). */
+  setMuted(muted: boolean) {
+    this.muted = muted;
+    if (this.master) this.master.mute = muted;
+    try {
+      window.localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+    } catch {
+      /* storage unavailable */
+    }
+    for (const l of this.muteListeners) l();
+  }
+
+  onMuteChange(l: () => void) {
+    this.muteListeners.add(l);
+    return () => {
+      this.muteListeners.delete(l);
+    };
+  }
+
   /** Keep the beat events (for timing) but make the click silent. */
   setClickMuted(muted: boolean) {
     this.clickMuted = muted;
@@ -173,6 +201,7 @@ class Engine {
     T.getContext().lookAhead = 0.06;
     T.getTransport().PPQ = PPQ;
     this.master = new T.Volume(-4).toDestination();
+    this.master.mute = this.muted;
     this.chordBus = new T.Volume(0).connect(this.master);
     this.chordBus.mute = this.chordsMuted;
     const chordFilter = new T.Filter(3200, "lowpass").connect(this.chordBus);

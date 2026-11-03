@@ -1,3 +1,4 @@
+import { applyAccidentals } from "@/lib/accidentals";
 /**
  * Tunings for the Tuner tab. Each tuning lists its strings from the thickest (lowest) to the
  * thinnest, spelled the way players name them (E♭ standard is E♭ A♭ D♭ G♭ B♭ E♭, not D♯ …).
@@ -145,7 +146,7 @@ export const midiHz = (midi: number, a4 = 440, cents = 0) => a4 * 2 ** ((midi - 
 const SHARPS = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
 const FLATS = ["C", "D♭", "D", "E♭", "E", "F", "G♭", "G", "A♭", "A", "B♭", "B"];
 /** Name of a MIDI note, sharps or flats. */
-export const midiName = (midi: number, flats = false) => (flats ? FLATS : SHARPS)[((midi % 12) + 12) % 12]!;
+export const midiName = (midi: number, flats = false) => applyAccidentals((flats ? FLATS : SHARPS)[((midi % 12) + 12) % 12]!);
 export const midiOctave = (midi: number) => Math.floor(midi / 12) - 1;
 
 /** Plain notes text for a list of MIDI notes ("C2 G2 …"), for custom tunings. */
