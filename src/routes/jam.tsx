@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Minus, Pause, Play, Plus, Trash2, Volume2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Mic, Minus, Pause, Play, Plus, Square, Trash2, Volume2, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Neck, type NeckDot } from "@/components/Neck";
 import { TuningSelect } from "@/components/TuningSelect";
@@ -33,7 +33,9 @@ import {
 import { useTabActive } from "@/lib/tabActive";
 import { tabTuning } from "@/lib/tabs/model";
 import { ARPEGGIO_VARIANTS, CHORDS, SCALES, chromaticName, degreeToSemitones, pretty, rootByName, spellDegree, type Degree } from "@/lib/theory";
-import { beatTicks, newId } from "@/lib/timeline";
+import { beatTicks, emptyArrangement, newId } from "@/lib/timeline";
+import { beatsToProgression, chordsPerBeat, type BeatChord } from "@/lib/jamListen";
+import { startCapture, type Capture, type MicError } from "@/lib/listen/capture";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/jam")({
@@ -219,6 +221,16 @@ export function JamPage() {
               setPick(jam.chords.length);
               playChord(chordMidisOf(c));
             }} />
+          <MicRecorder
+            bpm={jam.bpm}
+            beatsPerBar={jam.beatsPerBar}
+            onUse={(cs, mode) => {
+              if (playing) stop();
+              setChords((old) => (mode === "replace" ? cs : [...old, ...cs]));
+              setText(progressionText(mode === "replace" ? cs : [...jam.chords, ...cs], jam.beatsPerBar));
+              setPick(mode === "replace" ? 0 : jam.chords.length);
+            }}
+          />
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <span className="text-muted-foreground">Start from:</span>
             {JAM_PRESETS.map((p) => (
@@ -592,6 +604,193 @@ function LayerEditor({
           <Plus className="h-4 w-4" /> Add {kind === "scale" ? pretty(`${root} ${scaleDef(scaleId).name}`) : "arpeggio"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+type RecState = "idle" | "starting" | "recording" | "analysing" | "done" | "error";
+const MIC_ERRORS: Record<MicError, string> = {
+  denied: "The microphone is blocked. Allow it for Fretlab in your browser or phone settings, then try again.",
+  "no-device": "No microphone was found.",
+  insecure: "The microphone only works over a secure (https) connection.",
+  unsupported: "This browser can't record from the microphone.",
+  other: "The microphone couldn't start.",
+};
+const MAX_BARS = 32;
+
+/**
+ * Record a progression by strumming it: a one-bar count-in, then strum along to the click; each
+ * beat is named from what the microphone heard and the beats are joined into chords.
+ */
+function MicRecorder({ bpm, beatsPerBar, onUse }: { bpm: number; beatsPerBar: number; onUse: (chords: JamChord[], mode: "replace" | "append") => void }) {
+  const [state, setState] = useState<RecState>("idle");
+  const [err, setErr] = useState("");
+  const [bars, setBars] = useState(0);
+  const [level, setLevel] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [result, setResult] = useState<JamChord[]>([]);
+  const [unsure, setUnsure] = useState(0);
+  const cap = useRef<Capture | null>(null);
+  const clicks = useRef<number[]>([]);
+  const chunks = useRef<{ frame: number; data: Float32Array }[]>([]);
+  const lastFrame = useRef(0);
+  const timer = useRef<number | null>(null);
+  const tabActive = useTabActive();
+
+  const pull = () => {
+    const c = cap.current;
+    if (!c) return;
+    const end = c.endFrame;
+    const from = Math.max(lastFrame.current, c.firstFrame);
+    if (end > from) {
+      const d = c.read(from, end);
+      if (d) chunks.current.push({ frame: from, data: d });
+      lastFrame.current = end;
+    }
+    setLevel(c.level);
+    const b = Math.floor(clicks.current.length / beatsPerBar);
+    setBars(b);
+    if (b >= MAX_BARS) void finish();
+  };
+
+  const begin = async () => {
+    engine.unlock();
+    setErr("");
+    setResult([]);
+    setState("starting");
+    const ctx = await engine.audioContext();
+    if (!ctx) {
+      setErr(MIC_ERRORS.unsupported);
+      setState("error");
+      return;
+    }
+    if (ctx.state === "suspended") await ctx.resume();
+    const c = await startCapture(ctx);
+    if ("error" in c) {
+      setErr(MIC_ERRORS[c.error]);
+      setState("error");
+      return;
+    }
+    cap.current = c;
+    clicks.current = [];
+    chunks.current = [];
+    lastFrame.current = c.endFrame;
+    engine.setListener({
+      onEvent: (e, time) => {
+        if (e.kind === "click" && !e.countIn) clicks.current.push(time);
+      },
+    });
+    engine.setClickMuted(false);
+    engine.setChordsMuted(false);
+    await engine.play({ ...emptyArrangement(), bpm, ts: { beats: beatsPerBar, unit: 4 }, measures: 1, chords: [], metronome: true, loop: true, countIn: 1 });
+    setBars(0);
+    setState("recording");
+    timer.current = window.setInterval(pull, 150);
+  };
+
+  const finish = async () => {
+    if (timer.current !== null) window.clearInterval(timer.current);
+    timer.current = null;
+    const c = cap.current;
+    if (!c) return;
+    pull();
+    const ctxNow = (await engine.audioContext())?.currentTime ?? Infinity;
+    engine.stop();
+    engine.setListener({});
+    c.stop();
+    cap.current = null;
+    setState("analysing");
+    setProgress(0);
+    const parts = chunks.current;
+    if (!parts.length) {
+      setState("done");
+      return;
+    }
+    const start = parts[0]!.frame;
+    const total = parts.reduce((n, p) => Math.max(n, p.frame + p.data.length - start), 0);
+    const samples = new Float32Array(total);
+    for (const p of parts) samples.set(p.data, p.frame - start);
+    const sr = c.sampleRate;
+    const beatFrames = (60 / bpm) * sr;
+    // Beats that were fully recorded (the last one may be cut short by the stop).
+    const beats = clicks.current.filter((t) => t < ctxNow).map((t) => Math.round(t * sr)).filter((f) => f >= start && f + beatFrames * 0.5 <= start + total);
+    const per: BeatChord[] = [];
+    for (let i = 0; i < beats.length; i += 6) {
+      per.push(...chordsPerBeat(samples, sr, start, beats.slice(i, i + 6), beatFrames));
+      setProgress((i + 6) / Math.max(1, beats.length));
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const prog = beatsToProgression(per);
+    setUnsure(per.filter((b) => b.rootPc !== null && b.confidence < 0.45).length);
+    setResult(prog);
+    setState("done");
+  };
+
+  useEffect(() => {
+    if (!tabActive && state === "recording") void finish();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabActive]);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearInterval(timer.current);
+      cap.current?.stop();
+    },
+    [],
+  );
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-secondary/20 p-2" data-testid="jam-mic">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold">Or strum it:</span>
+        {state === "recording" ? (
+          <Button size="sm" variant="destructive" className="h-9 gap-1.5" onClick={() => void finish()} data-testid="jam-rec-stop">
+            <Square className="h-4 w-4" /> Stop — work out the chords
+          </Button>
+        ) : (
+          <Button size="sm" className="h-9 gap-1.5" disabled={state === "starting" || state === "analysing"} onClick={() => void begin()} data-testid="jam-rec">
+            <Mic className="h-4 w-4" /> {state === "done" ? "Record again" : "Record from the mic"}
+          </Button>
+        )}
+        {state === "recording" ? (
+          <>
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-third">
+              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-third" />
+              {clicks.current.length ? `Bar ${bars + 1}` : "Count-in…"}
+            </span>
+            <span className="h-2 w-24 overflow-hidden rounded-full bg-secondary" aria-label="Input level">
+              <span className="block h-full bg-primary" style={{ width: `${Math.min(100, level * 400)}%` }} />
+            </span>
+          </>
+        ) : null}
+        {state === "analysing" ? <span className="text-xs text-muted-foreground">Listening back… {Math.min(100, Math.round(progress * 100))}%</span> : null}
+        {state === "starting" ? <span className="text-xs text-muted-foreground">Starting the mic…</span> : null}
+      </div>
+      {state === "idle" || state === "starting" ? (
+        <p className="text-[11px] text-muted-foreground">
+          Uses the tempo and beats per bar below. After a one-bar count-in, strum each chord on the beat along with the click, then press Stop. Up to {MAX_BARS} bars. Headphones help, so the mic hears your guitar more than the click.
+        </p>
+      ) : null}
+      {state === "error" ? <p className="text-xs font-semibold text-third">{err}</p> : null}
+      {state === "done" ? (
+        result.length ? (
+          <div className="space-y-1.5" data-testid="jam-rec-result">
+            <p className="text-xs">
+              Heard: <b className="font-mono">{pretty(progressionText(result, beatsPerBar))}</b>
+              {unsure ? <span className="text-muted-foreground"> · {unsure} beat{unsure === 1 ? "" : "s"} sounded unclear — check those chords</span> : null}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <Button size="sm" className="h-8" onClick={() => onUse(result, "replace")} data-testid="jam-rec-use">
+                Use this progression
+              </Button>
+              <Button size="sm" variant="secondary" className="h-8" onClick={() => onUse(result, "append")}>
+                Add to the end
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-third">No chords were heard. Strum a little louder or closer to the phone, and try again.</p>
+        )
+      ) : null}
     </div>
   );
 }
