@@ -16,6 +16,8 @@ export interface JamLayer {
   /** Chord id the arpeggio is built from, and the arpeggio variant (kind "arpeggio"). */
   chordId?: string | undefined;
   variantId?: string | undefined;
+  /** Hidden selections retain their identity and settings; legacy layers default to visible. */
+  visible?: boolean;
 }
 
 export interface JamChord {
@@ -48,6 +50,7 @@ export interface Jam {
   everywhere: JamLayer[];
   /** Hear the chords (off = drums only, you play the chords yourself). */
   chordsOn: boolean;
+  layout?: "overlapping" | "separate";
 }
 
 export const emptyJam = (): Jam => ({ chords: [], bpm: 90, beatsPerBar: 4, drums: "rock", metronome: false, everywhere: [], chordsOn: true });

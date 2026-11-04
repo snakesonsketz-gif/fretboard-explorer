@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Mic, Minus, Pause, Play, Plus, Square, Trash2, Volume2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Mic, Minus, Pause, Play, Plus, Square, Trash2, Volume2, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { Neck, type NeckDot } from "@/components/Neck";
+import { Neck } from "@/components/Neck";
 import { TuningSelect } from "@/components/TuningSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,16 +37,23 @@ import { beatTicks, emptyArrangement, newId } from "@/lib/timeline";
 import { beatsToProgression, chordsPerBeat, type BeatChord } from "@/lib/jamListen";
 import { startCapture, type Capture, type MicError } from "@/lib/listen/capture";
 import { cn } from "@/lib/utils";
+import { jamBoards, jamBoardDots, setLayerVisibility } from "@/lib/jamVisualization";
 
 export const Route = createFileRoute("/jam")({
-  head: () => ({ meta: [{ title: "Jam — Fretlab" }] }),
+  head: () => ({ meta: [
+    { title: "Jam — Fretlab" },
+    { name: "description", content: "Explore your chords with visible scale, arpeggio and shared target tones on Fretlab’s Jam fretboards." },
+    { property: "og:title", content: "Jam — Fretlab" },
+    { property: "og:description", content: "Layer your selected scales and arpeggios over your own chord progression." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary_large_image" },
+  ] }),
   component: JamPage,
 });
 
 const KEY = "fretlab.jam.v1";
 const ROOT_NAMES = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const INTERVAL = ["1", "b2", "2", "b3", "3", "4", "b5", "5", "b6", "6", "b7", "7"];
-const LAYER_COLORS = ["#38bdf8", "#f472b6", "#e5e7eb", "#e5e7eb"];
 const LENGTHS: { beats: (bpb: number) => number; label: string }[] = [
   { beats: () => 1, label: "1 beat" },
   { beats: () => 2, label: "2 beats" },
@@ -161,35 +168,25 @@ export function JamPage() {
 
   // ---- the neck
   const layers = shown ? [...shown.layers, ...jam.everywhere] : jam.everywhere;
-  const layerSets = layers.map((l) => new Set(layerPcs(l)));
+  const visibleLayers = layers.filter((l) => l.visible !== false);
+  const boards = jamBoards(layers, jam.layout ?? "overlapping");
   const chordRoot = shown ? rootByName(shown.rootName) : rootByName("C");
   const chordTones = new Set(shown ? chordPcs(shown) : []);
   const nextTones = new Set(nextChord ? chordPcs(nextChord) : []);
   const previewing = playing && showNext && !!nextChord && beatsLeft <= 1 && pos?.next !== pos?.index;
-  const labelFor = (pc: number) => {
+  const labelFor = (pc: number, boardLayer?: JamLayer) => {
     if (labels === "degree") {
       const own = shown ? chordDef(shown.chordId).degrees.find((d) => (chordRoot.pc + degreeToSemitones(d) + 120) % 12 === pc) : undefined;
       const d = own ?? INTERVAL[(pc - chordRoot.pc + 12) % 12]!;
       return d === "1" ? "R" : pretty(d);
     }
-    for (const l of layers) {
+    for (const l of boardLayer ? [boardLayer] : visibleLayers) {
       const d = layerDegrees(l).find((x) => (rootByName(l.rootName).pc + degreeToSemitones(x) + 120) % 12 === pc);
       if (d) return pretty(spellDegree(rootByName(l.rootName), d as Degree));
     }
     return pretty(chromaticName(pc, chordRoot.alter < 0));
   };
-  const dots: NeckDot[] = [];
-  tuning.midis.forEach((open, s) => {
-    for (let f = 0; f <= toFret; f++) {
-      const pc = (open + f) % 12;
-      const inL = layerSets.map((set) => set.has(pc));
-      const a = inL[0] ?? false;
-      const b = inL[1] ?? false;
-      const any = inL.some(Boolean);
-      if (any) dots.push({ s, fret: f, tone: a && b ? "both" : a ? "a" : b ? "b" : "tone", label: labelFor(pc), ring: pc === chordRoot.pc });
-      else if (previewing && nextTones.has(pc)) dots.push({ s, fret: f, tone: "next" });
-    }
-  });
+
 
   return (
     <AppShell>
@@ -369,31 +366,47 @@ export function JamPage() {
             </Button>
             <Toggle on={showNext} onClick={() => setShowNext((v) => !v)} label="Show next chord" />
           </div>
-          <Neck
-            midis={tuning.midis}
-            names={tuning.names}
-            from={0}
-            to={toFret}
-            dots={dots}
-            onTap={(s, f) => pluck(tuning.midis[s]! + f)}
-            testId="jam-neck"
-            ariaLabel="Notes to play over the current chord — tap to hear them"
-          />
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]" data-testid="jam-legend">
-            {layers.map((l, i) => (
-              <span key={l.id} className="inline-flex items-center gap-1">
-                <span className="h-3 w-3 rounded-full" style={{ background: LAYER_COLORS[Math.min(i, 3)] }} />
-                {pretty(layerName(l))}
-                {i >= (shown?.layers.length ?? 0) ? <span className="text-muted-foreground">(every chord)</span> : null}
-              </span>
+          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Jam fretboard layout">
+            {(["overlapping", "separate"] as const).map((mode) => (
+              <Button key={mode} size="sm" variant={(jam.layout ?? "overlapping") === mode ? "default" : "secondary"} role="radio" aria-checked={(jam.layout ?? "overlapping") === mode} onClick={() => update((j) => ({ ...j, layout: mode }))}>
+                {mode === "overlapping" ? "Overlapping" : "Separate"}
+              </Button>
             ))}
-            {layers.length > 1 ? (
-              <span className="inline-flex items-center gap-1">
-                <span className="h-3 w-3 rounded-full" style={{ background: "linear-gradient(90deg, #38bdf8 50%, #f472b6 50%)" }} /> in the first two
-              </span>
-            ) : null}
+          </div>
+          <ul className="flex flex-wrap gap-1.5" aria-label="Visible Jam selections" data-testid="jam-visible-layers">
+            {layers.map((l) => (
+              <li key={l.id} className="min-w-0 max-w-full">
+                <Button size="sm" variant="secondary" className="h-auto min-h-8 max-w-full gap-2 whitespace-normal text-left text-xs" aria-pressed={l.visible !== false} aria-label={`${l.visible === false ? "Show" : "Hide"} ${layerName(l)}`} onClick={() => editLayers(shown?.layers.some((x) => x.id === l.id) ? shownIndex : "all", (ls) => setLayerVisibility(ls, l.id, l.visible === false))}>
+                  {l.visible === false ? <EyeOff className="h-3.5 w-3.5 shrink-0" /> : <Eye className="h-3.5 w-3.5 shrink-0" />}
+                  <span>{pretty(layerName(l))}{jam.everywhere.some((x) => x.id === l.id) ? " · every chord" : ""}</span>
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]" data-testid="jam-legend">
+            <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-jam-scale" />Scale notes</span>
+            <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-jam-arpeggio" />Arpeggio-only notes</span>
+            <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-full border-2 border-jam-note-foreground bg-jam-target ring-1 ring-jam-target" />Target notes · shared scale + arpeggio</span>
             <span className="text-muted-foreground">White ring = the chord's root · {chordTones.size ? `chord tones ${[...chordTones].map((p) => labelFor(p)).join(" ")}` : ""}</span>
-            {previewing ? <span className="font-semibold text-third">Dashed = next chord ({pretty(nextChord!.label)})</span> : null}
+            {previewing && nextChord ? <span className="font-semibold text-third">Dashed = next chord ({pretty(nextChord.label)})</span> : null}
+          </div>
+          <div className="min-w-0 space-y-3" data-testid="jam-boards">
+            {boards.map((board) => (
+              <div key={board.id} className="min-w-0 space-y-1" data-jam-board={board.id}>
+                {board.layer ? <h4 className="break-words text-sm font-semibold">{pretty(layerName(board.layer))}{jam.everywhere.some((l) => l.id === board.id) ? " · every chord" : ""}</h4> : null}
+                <Neck
+                  midis={tuning.midis}
+                  names={tuning.names}
+                  from={0}
+                  to={toFret}
+                  dots={jamBoardDots(tuning.midis, toFret, board.roles, chordRoot.pc, (pc) => labelFor(pc, board.layer), previewing ? nextTones : undefined)}
+                  onTap={(s, f) => { const open = tuning.midis[s]; if (open !== undefined) pluck(open + f); }}
+                  testId="jam-neck"
+                  ariaLabel={board.layer ? `${pretty(layerName(board.layer))} fretboard — tap to hear notes` : "Notes to play over the current chord — tap to hear them"}
+                />
+              </div>
+            ))}
+            {!visibleLayers.length ? <p className="text-xs text-muted-foreground">All selections are hidden. Show a selection above to display its notes.</p> : null}
           </div>
         </section>
 
@@ -516,12 +529,15 @@ function LayerEditor({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        {target === "all" ? "Shown over every chord, on top of each chord's own choices — e.g. one scale for the whole progression." : chord ? `Shown on the neck while ${pretty(chord.label)} plays. Add as many as you like — the first two get their own colours.` : ""}
+        {target === "all" ? "Shown over every chord, on top of each chord's own choices — e.g. one scale for the whole progression." : chord ? `Shown on the neck while ${pretty(chord.label)} plays. Add as many as you like.` : ""}
       </p>
       <ul className="space-y-1.5" data-testid="jam-layer-list">
-        {layers.map((l, i) => (
+        {layers.map((l) => (
           <li key={l.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/40 px-2 py-1.5">
-            <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: LAYER_COLORS[Math.min(i, 3)] }} />
+            <span className={cn("h-3.5 w-3.5 shrink-0 rounded-full", l.kind === "scale" ? "bg-jam-scale" : "bg-jam-arpeggio")} />
+            <Button size="sm" variant="ghost" className="h-7 w-7 shrink-0 p-0" aria-pressed={l.visible !== false} aria-label={`${l.visible === false ? "Show" : "Hide"} ${layerName(l)}`} onClick={() => onChange((ls) => setLayerVisibility(ls, l.id, l.visible === false))}>
+              {l.visible === false ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
             <span className="min-w-0 flex-1 text-sm font-semibold">{pretty(layerName(l))}</span>
             <span className="font-mono text-[11px] text-muted-foreground">{layerDegrees(l).map(pretty).join(" ")}</span>
             {target !== "all" ? (
