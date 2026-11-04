@@ -1,5 +1,8 @@
 # Fret Lab Roadmap (authoritative priority order)
 
+## Scoped Jam enhancement
+- [x] Three pitch-class layers (scale, arpeggio-only, shared targets), persistent legend, overlapping/separate boards, and independently saved visibility. Validation: automated membership/layout tests and desktop/mobile browser checks.
+
 Preserve all existing features (CAGED, customization, identifier, modes, playback, saving, tuning, fretboard, progression/song workspace, theory panels). Additive, connected theory functionality only. Never generate riffs, licks, solos, progressions or lyrics.
 
 1. [x] CAGED Scale Positions — shape-labelled positions, legend, full scale mapped per shape (window ±1 fret), per-string degree map. Tested desktop+mobile.

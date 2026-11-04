@@ -8,3 +8,6 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Jam visualization uses pitch-class roles from `jamVisualization.ts` for both layouts; only visible scale/arpeggio intersections are targets, so board layout and enharmonic spelling cannot change membership.
+- Extend the shared Neck renderer with opt-in Jam tones rather than duplicating it; other sections retain their existing dot treatments.
