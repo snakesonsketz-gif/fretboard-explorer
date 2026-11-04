@@ -7,7 +7,7 @@ import { useId, type ReactNode } from "react";
 import { applyAccidentals } from "@/lib/accidentals";
 import { cn } from "@/lib/utils";
 
-export type DotTone = "a" | "b" | "both" | "pick" | "now" | "next" | "faint" | "tone";
+export type DotTone = "a" | "b" | "both" | "pick" | "now" | "next" | "faint" | "tone" | "jam-scale" | "jam-arpeggio" | "jam-target";
 
 export interface NeckDot {
   /** String index, low → high. */
@@ -150,6 +150,17 @@ export function Neck({ midis, names, from = 0, to = 15, dots, muted, onTap, onNa
 }
 
 function Dot({ d, cx, cy, r, glow }: { d: NeckDot; cx: number; cy: number; r: number; glow: string }) {
+  if (d.tone === "jam-scale" || d.tone === "jam-arpeggio" || d.tone === "jam-target") {
+    const target = d.tone === "jam-target";
+    return (
+      <g pointerEvents="none" data-jam-role={d.tone} data-string={d.s} data-fret={d.fret}>
+        {d.ring ? <circle cx={cx} cy={cy} r={r + 2.6} fill="none" stroke="var(--color-foreground)" strokeWidth={1.8} /> : null}
+        <circle cx={cx} cy={cy} r={r} fill={`var(--color-${d.tone})`} stroke="var(--color-jam-note-foreground)" strokeWidth={target ? 1.8 : 1} />
+        {target ? <circle cx={cx} cy={cy} r={r - 2} fill="none" stroke="var(--color-jam-note-foreground)" strokeWidth={0.8} /> : null}
+        <text x={cx} y={cy + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize={(d.label?.length ?? 0) > 2 ? 7.5 : 9} fontWeight={800} fill="var(--color-jam-note-foreground)">{d.label}</text>
+      </g>
+    );
+  }
   const text = d.label ? (
     <text x={cx} y={cy + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize={d.label.length > 2 ? 7.5 : 9} fontWeight={800} fill={d.tone === "faint" || d.tone === "next" ? "var(--color-foreground)" : "#0b0f14"} pointerEvents="none">
       {d.label}
