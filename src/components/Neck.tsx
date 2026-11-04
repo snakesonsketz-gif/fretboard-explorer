@@ -155,9 +155,9 @@ function Dot({ d, cx, cy, r, glow }: { d: NeckDot; cx: number; cy: number; r: nu
     return (
       <g pointerEvents="none" data-jam-role={d.tone} data-string={d.s} data-fret={d.fret}>
         {d.ring ? <circle cx={cx} cy={cy} r={r + 2.6} fill="none" stroke="var(--color-foreground)" strokeWidth={1.8} /> : null}
-        <circle cx={cx} cy={cy} r={r} fill={`var(--color-${d.tone})`} stroke="var(--color-jam-note-foreground)" strokeWidth={target ? 1.8 : 1} />
-        {target ? <circle cx={cx} cy={cy} r={r - 2} fill="none" stroke="var(--color-jam-note-foreground)" strokeWidth={0.8} /> : null}
-        <text x={cx} y={cy + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize={(d.label?.length ?? 0) > 2 ? 7.5 : 9} fontWeight={800} fill="var(--color-jam-note-foreground)">{d.label}</text>
+        <circle cx={cx} cy={cy} r={r} fill={target ? "var(--primary)" : d.tone === "jam-scale" ? "var(--jam-scale)" : "var(--jam-arpeggio)"} stroke="var(--background)" strokeWidth={target ? 1.8 : 1} />
+        {target ? <circle cx={cx} cy={cy} r={r - 2} fill="none" stroke="var(--background)" strokeWidth={0.8} /> : null}
+        <text x={cx} y={cy + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize={(d.label?.length ?? 0) > 2 ? 7.5 : 9} fontWeight={800} fill="var(--background)">{d.label}</text>
       </g>
     );
   }
