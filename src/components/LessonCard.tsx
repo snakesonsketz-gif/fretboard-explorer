@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, ChevronDown, ClipboardCopy, Ear, Guitar, Lightbulb, ListChecks, PenLine, TriangleAlert, Users } from "lucide-react";
+import { Check, ChevronDown, ClipboardCopy, Ear, Footprints, Guitar, HelpCircle, Layers, Lightbulb, ListChecks, PenLine, TriangleAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Lesson } from "@/lib/courseLessons";
@@ -92,6 +92,40 @@ export function LessonCard({ lesson: l, done, onToggleDone, onCopy }: { lesson: 
           <Block icon={PenLine} title="Your assignment" tone="border-primary/50 bg-primary/10">
             <List items={l.assignment} />
           </Block>
+          {l.deep ? (
+            <>
+              <Block icon={Layers} title="Go deeper" tone="border-indigo-500/40 bg-indigo-500/5">
+                <div className="space-y-2" data-testid={`deep-${l.id}`}>
+                  {l.deep.dive.map(([t, b]) => (
+                    <div key={t}>
+                      <div className="text-xs font-bold">{t}</div>
+                      <p className="text-xs text-muted-foreground">{b}</p>
+                    </div>
+                  ))}
+                </div>
+              </Block>
+              <Block icon={Footprints} title="Step by step" tone="border-teal-500/40 bg-teal-500/5">
+                <ol className="space-y-1 text-xs">
+                  {l.deep.method.map((m, i) => (
+                    <li key={m} className="flex gap-1.5">
+                      <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-teal-500/30 text-[10px] font-bold">{i + 1}</span>
+                      <span>{m}</span>
+                    </li>
+                  ))}
+                </ol>
+              </Block>
+              <Block icon={HelpCircle} title="Check yourself" tone="border-fuchsia-500/40 bg-fuchsia-500/5">
+                <div className="space-y-1">
+                  {l.deep.check.map(([q, a]) => (
+                    <details key={q} className="text-xs">
+                      <summary className="cursor-pointer font-semibold">{q}</summary>
+                      <p className="mt-0.5 text-muted-foreground">{a}</p>
+                    </details>
+                  ))}
+                </div>
+              </Block>
+            </>
+          ) : null}
           <div className="text-[11px] text-muted-foreground">Next: {l.next}</div>
         </div>
       ) : null}

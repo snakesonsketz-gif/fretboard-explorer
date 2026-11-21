@@ -29,6 +29,17 @@ export interface Lesson {
   covers: number[];
   /** Preview of the next lesson. */
   next: string;
+  deep?: Deep;
+}
+
+/** The deeper layer of a lesson: long-form explanations, a method, and a self-check. */
+export interface Deep {
+  /** [title, explanation] pairs: the "why and how it really works" material. */
+  dive: [string, string][];
+  /** An ordered method to apply the idea to your own writing. */
+  method: string[];
+  /** [question, answer] pairs for checking yourself. */
+  check: [string, string][];
 }
 
 export const lesson = (l: Lesson): Lesson => l;

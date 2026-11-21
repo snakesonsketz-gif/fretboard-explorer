@@ -35,3 +35,17 @@ describe("course lessons", () => {
     for (const m of MODULES) expect((SOURCES[m.id] ?? []).length).toBeGreaterThan(0);
   });
 });
+
+describe("deep layer", () => {
+  test("every lesson has a deep dive, method and self-check", () => {
+    for (const l of LESSONS) {
+      expect(l.deep, l.id).toBeDefined();
+      expect(l.deep!.dive.length).toBeGreaterThanOrEqual(3);
+      expect(l.deep!.method.length).toBeGreaterThanOrEqual(4);
+      expect(l.deep!.check.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+  test("prompt asks the chat to go deep", () => {
+    expect(lessonPrompt(lessonById("16.1")!)).toContain("Go deep on");
+  });
+});

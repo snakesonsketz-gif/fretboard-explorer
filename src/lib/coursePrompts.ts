@@ -10,6 +10,7 @@ export function lessonPrompt(l: Lesson): string {
     `Teach me Module ${l.module}, Lesson ${l.id.split(".")[1]}: ${l.title}.`,
     `Goals: ${l.goals.join("; ")}.`,
     `Key ideas to cover: ${l.ideas.map((i) => i.title).join("; ")}.`,
+    ...(l.deep ? [`Go deep on: ${l.deep.dive.map(([t]) => t).join("; ")}.`] : []),
     `Common mistakes to address: ${l.mistakes.join("; ")}.`,
     RULE,
     `Then quiz me with three short questions before the assignment: ${l.assignment.join("; ")}.`,

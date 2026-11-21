@@ -40,3 +40,5 @@ Approved order: tests → tabs → shared timing engine → chord sequencer → 
 - 1d (build 56): Course lessons are now in-app (~55 lessons, all 14 modules) as visual cards, with "Copy for chat" per lesson and per module and a reading list per module. CAGED explanations use chips, step cards, a shape map and a mode-to-key grid instead of paragraphs. Lessons never contain riffs, progressions or lyrics.
 
 - 1e (build 57): Instrument switch (Guitar / Bass 4 / Bass 5) in Explore with a Bass view showing what each bass note does to the chord. Course grows to 21 modules: added Drum Theory, Feel and Syncopation; How the Bass Changes the Music; Theory/Ear/Notation; Lyric Craft (craft only, never writes lyrics); Recording and Mixing; Instruments, Orchestration and Genre; Writing Process and Finishing.
+
+- 1f (build 58): Every lesson (75) gained a deep layer: "Go deeper" long-form explanations, "Step by step" method and "Check yourself" Q&A. Copy-for-chat prompts ask the chat to go deep on those points.

@@ -21,10 +21,13 @@ import { M19 } from "./m19";
 import { M20 } from "./m20";
 import { M21 } from "./m21";
 
-export type { Lesson, Idea, Source } from "./types";
+export type { Lesson, Idea, Source, Deep } from "./types";
+import { DEEP } from "./deep/index";
 export { SOURCES } from "./sources";
 
-export const LESSONS: Lesson[] = [...M1, ...M2, ...M3, ...M4, ...M5, ...M6, ...M7, ...M8, ...M9, ...M10, ...M11, ...M12, ...M13, ...M14, ...M15, ...M16, ...M17, ...M18, ...M19, ...M20, ...M21];
+const BASE: Lesson[] = [...M1, ...M2, ...M3, ...M4, ...M5, ...M6, ...M7, ...M8, ...M9, ...M10, ...M11, ...M12, ...M13, ...M14, ...M15, ...M16, ...M17, ...M18, ...M19, ...M20, ...M21];
+
+export const LESSONS: Lesson[] = BASE.map((l) => (DEEP[l.id] ? { ...l, deep: DEEP[l.id]! } : l));
 
 export const lessonsFor = (module: number): Lesson[] => LESSONS.filter((l) => l.module === module);
 export const lessonById = (id: string): Lesson | undefined => LESSONS.find((l) => l.id === id);
