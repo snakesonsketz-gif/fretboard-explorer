@@ -10,6 +10,7 @@ import { LuthierPage } from "@/routes/luthier";
 import { PlayPage } from "@/routes/play";
 import { SequencerPage } from "@/routes/sequencer";
 import { TabsPage } from "@/routes/tabs";
+import { CoursePage } from "@/routes/course";
 import { FinderPage } from "@/routes/finder";
 import { JamPage } from "@/routes/jam";
 import { TunerPage } from "@/routes/tuner";
@@ -26,6 +27,7 @@ const TABS: Record<string, ComponentType> = {
   "/jam": JamPage,
   "/sequencer": SequencerPage,
   "/listen": ListenPage,
+  "/course": CoursePage,
   "/play": PlayPage,
   "/develop": DevelopPage,
   "/luthier": LuthierPage,

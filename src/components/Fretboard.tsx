@@ -41,6 +41,8 @@ export interface FretboardProps {
   focus?: { from: number; to: number; label?: string } | null | undefined;
   /** Neighbouring windows drawn with a faint band and label. */
   neighbors?: { from: number; to: number; label: string }[] | undefined;
+  /** Frets whose left edge gets a translucent gold line: where one CAGED shape hands over to the next. */
+  shiftLines?: number[] | undefined;
   /** "string-fret" keys of a visual pathway; set notes off the path are dimmed. */
   pathKeys?: Set<string> | undefined;
   /** "string-fret" -> 1-based step number of an ordered pathway. */
@@ -82,6 +84,7 @@ export function Fretboard(props: FretboardProps) {
     fingers,
     focus,
     neighbors,
+    shiftLines,
     pathKeys,
     pathOrder,
   } = props;
@@ -240,6 +243,13 @@ export function Fretboard(props: FretboardProps) {
                       aria-pressed={isSel}
                       aria-label={`${n.noteName} on ${pretty(open.note)} string, fret ${n.fret}${n.degree ? `, degree ${n.degree}` : ""}${role ? `, ${role === "chord" ? "chord tone" : role === "extension" ? `extension ${degreeLabel}` : "other scale tone"}` : ""}`}
                     >
+                      {shiftLines?.includes(n.fret) ? (
+                        <span
+                          aria-hidden
+                          data-testid="shape-shift-line"
+                          className={cn("pointer-events-none absolute inset-y-0 w-[4px] bg-amber-400/45", leftHanded ? "-right-[4px]" : "-left-[4px]")}
+                        />
+                      ) : null}
                       {ri === Math.floor(nStrings / 2) && INLAY_FRETS.has(n.fret) ? (
                         <span
                           aria-hidden

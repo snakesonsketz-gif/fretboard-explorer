@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CourseRouteImport } from './routes/course'
 import { Route as DevelopRouteImport } from './routes/develop'
 import { Route as FinderRouteImport } from './routes/finder'
 import { Route as GrimoireRouteImport } from './routes/grimoire'
@@ -24,6 +25,11 @@ import { Route as TunerRouteImport } from './routes/tuner'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CourseRoute = CourseRouteImport.update({
+  id: '/course',
+  path: '/course',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevelopRoute = DevelopRouteImport.update({
@@ -79,6 +85,7 @@ const TunerRoute = TunerRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/course': typeof CourseRoute
   '/develop': typeof DevelopRoute
   '/finder': typeof FinderRoute
   '/grimoire': typeof GrimoireRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/course': typeof CourseRoute
   '/develop': typeof DevelopRoute
   '/finder': typeof FinderRoute
   '/grimoire': typeof GrimoireRoute
@@ -106,6 +114,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/course': typeof CourseRoute
   '/develop': typeof DevelopRoute
   '/finder': typeof FinderRoute
   '/grimoire': typeof GrimoireRoute
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/course'
     | '/develop'
     | '/finder'
     | '/grimoire'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/course'
     | '/develop'
     | '/finder'
     | '/grimoire'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/course'
     | '/develop'
     | '/finder'
     | '/grimoire'
@@ -161,6 +173,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CourseRoute: typeof CourseRoute
   DevelopRoute: typeof DevelopRoute
   FinderRoute: typeof FinderRoute
   GrimoireRoute: typeof GrimoireRoute
@@ -180,6 +193,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/course': {
+      id: '/course'
+      path: '/course'
+      fullPath: '/course'
+      preLoaderRoute: typeof CourseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/develop': {
@@ -257,6 +277,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CourseRoute: CourseRoute,
   DevelopRoute: DevelopRoute,
   FinderRoute: FinderRoute,
   GrimoireRoute: GrimoireRoute,

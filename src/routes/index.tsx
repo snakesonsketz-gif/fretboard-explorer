@@ -287,6 +287,12 @@ export function Workstation() {
     : cagedPos
       ? [cagedAll[cagedIdx - 1], cagedAll[cagedIdx + 1]].filter((x): x is NonNullable<typeof x> => !!x).map((w) => ({ from: w.from, to: w.to, label: `${w.form}` }))
       : undefined;
+  // Gold lines: where a shape hands over to the next (every shape's start in the overview; both edges of the focused shape).
+  const shiftLines = cagedOverview
+    ? cagedAll.slice(1).map((w) => w.from)
+    : cagedPos
+      ? [...(focus && focus.from > fretFrom ? [focus.from] : []), ...(focus && focus.to < fretTo ? [focus.to + 1] : [])]
+      : undefined;
   // Ordered pathway: true degree order from a chosen start degree, wrapping cyclically.
   const [pathStart, setPathStart] = useState<string>("1");
   const startDeg = fbDegrees.includes(pathStart) ? pathStart : (fbDegrees[0] ?? "1");
@@ -897,6 +903,7 @@ export function Workstation() {
             fretTo={fretTo}
             leftHanded={leftHanded}
             labelMode={labelMode}
+            shiftLines={shiftLines}
             preferFlats={preferFlatsFor(root)}
             showAllNotes={showAllNotes || markMode}
             overlay={overlay}
@@ -986,6 +993,7 @@ export function Workstation() {
                 <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-third" />3rd</span>
                 <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-fifth" />5th</span>
                 <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-seventh" />7th</span>
+                <span className="flex items-center gap-1"><span className="h-3 w-1 bg-amber-400/45" />gold line = where the next shape takes over</span>
                 <span className="text-muted-foreground">· shape letter = CAGED chord form, not the key</span>
               </div>
             ) : null}
