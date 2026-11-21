@@ -54,4 +54,33 @@ export const SOURCES: Record<number, Source[]> = {
   14: [
     { title: "Open Music Theory", url: "https://viva.pressbooks.pub/" },
   ],
+  15: [
+    { title: "Berklee: two cool rhythmic devices", url: "https://online.berklee.edu/" },
+    { title: "Sweetwater: syncopation and displacement", url: "https://www.sweetwater.com/" },
+    { title: "Soundbrenner: rhythm", url: "https://www.soundbrenner.com/" },
+  ],
+  16: [
+    { title: "Guitar World: a guitarist's guide to bass", url: "https://www.guitarworld.com/" },
+    { title: "iZotope: bass grooves", url: "https://www.izotope.com/" },
+    { title: "MusicRadar: root notes", url: "https://www.musicradar.com/" },
+  ],
+  17: [
+    { title: "Open Music Theory", url: "https://viva.pressbooks.pub/openmusictheory/" },
+    { title: "Hooktheory", url: "https://www.hooktheory.com/" },
+  ],
+  18: [
+    { title: "Berklee Online: songwriting", url: "https://online.berklee.edu/" },
+  ],
+  19: [
+    { title: "iZotope: frequency masking", url: "https://www.izotope.com/" },
+    { title: "Sound on Sound", url: "https://www.soundonsound.com/" },
+    { title: "Mastering The Mix", url: "https://www.masteringthemix.com/" },
+  ],
+  20: [
+    { title: "Native Instruments blog", url: "https://blog.native-instruments.com/" },
+    { title: "Splice blog", url: "https://splice.com/blog" },
+  ],
+  21: [
+    { title: "Soundfly", url: "https://soundfly.com/" },
+  ],
 };

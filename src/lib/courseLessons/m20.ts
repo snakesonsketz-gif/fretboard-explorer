@@ -1,0 +1,45 @@
+import { lesson } from "./types";
+
+export const M20 = [
+  lesson({
+    id: "20.1", module: 20, title: "Writing for keys, strings, horns and synths",
+    blurb: "Understand what each instrument family is good at and how to write for it.",
+    goals: ["Write a keys part that supports the song", "Use strings and pads for sustain", "Use horns and synths with a purpose"],
+    ideas: [
+      { title: "Keys", body: "Piano and keys cover harmony and rhythm in one instrument. Keep left-hand low and sparse, right-hand voicings in the mid-range, and avoid doubling the guitar's exact voicing." },
+      { title: "Strings and pads", body: "Sustained notes under busier parts. Move by step in each voice so chords flow smoothly; high strings add air, low strings add weight." },
+      { title: "Horns and woodwinds", body: "Short punchy hits for rhythm, longer notes for melody. Write in the instrument's comfortable range and leave room to breathe." },
+      { title: "Synths and textures", body: "Choose a sound for its role: pad for harmony, lead for melody, bass for low end, pluck for rhythm. Layer carefully to avoid masking." },
+    ],
+    guitar: "Take a guitar voicing and rewrite it for keys using fewer notes in a different register.",
+    band: "Assign each instrument family a job per section.",
+    why: "Each instrument has strengths. Writing to them gets better sounds with fewer parts.",
+    mistakes: ["Doubling the guitar's exact voicing", "Writing outside an instrument's range", "Too many sustaining layers"],
+    listen: ["Identify each family's role in a song you love"],
+    practice: ["Write a pad that moves by step under four chords"],
+    assignment: ["Choose one instrument family to add to your song", "Describe its part's job in each section", "State what you'd remove from the guitars to make room"],
+    covers: [0, 1, 2, 3],
+    next: "Acoustic versus electric, and genre study.",
+  }),
+  lesson({
+    id: "20.2", module: 20, title: "Genre: learn the rules, then choose",
+    blurb: "Study a genre's conventions to write in it deliberately or to break them effectively.",
+    goals: ["Identify a genre's conventions", "Write in a genre without copying", "Blend genres"],
+    ideas: [
+      { title: "Genres are bundles of choices", body: "Tempo range, feel, instrumentation, typical modes and chords, structure, production style. List them for any genre you study." },
+      { title: "Study by layers", body: "Analyse rhythm, harmony, melody, arrangement and sound separately. Note which are most characteristic." },
+      { title: "Write in the style, not the song", body: "Use the genre's principles with your own material. If your piece could be mistaken for one specific song, change the melody and structure." },
+      { title: "Blending", body: "Keep one or two defining traits from each genre and let the rest serve. Blends work best when the groove or the harmony is consistent." },
+      { title: "Acoustic versus electric", body: "Acoustic textures feel intimate and organic, electric feel bigger and more shaped. Choose by emotion, not habit." },
+    ],
+    guitar: "Take one riff and re-voice it in two genres by changing feel, tone and register.",
+    band: "Pick one genre and agree its three most important traits before writing.",
+    why: "Knowing the rules gives you a choice to follow or break them.",
+    mistakes: ["Imitating a surface sound only", "Combining too many genres at once", "Copying a specific song's structure"],
+    listen: ["List three defining traits of a genre you love"],
+    practice: ["Write the same idea in two genre styles"],
+    assignment: ["Choose a genre and list its conventions", "Write an outline of a song of your own in it, breaking one convention on purpose", "Explain why that break works"],
+    covers: [4, 5, 6, 7],
+    next: "Module 21: the writing process and finishing songs.",
+  }),
+];

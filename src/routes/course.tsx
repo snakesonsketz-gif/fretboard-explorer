@@ -113,7 +113,7 @@ export function CoursePage() {
             <h2 className="font-display text-lg font-black">Songwriting &amp; composition course</h2>
           </div>
           <p className="text-xs text-muted-foreground">
-            Fourteen modules, one lesson a day, taught in chat. This page keeps your place, links each module to the tool that fits it, and holds your own notes. It never writes riffs, progressions or lyrics for you.
+            Twenty-one modules, one lesson a day, taught in chat. This page keeps your place, links each module to the tool that fits it, and holds your own notes. It never writes riffs, progressions or lyrics for you.
           </p>
           <div className="space-y-1" data-testid="course-overall">
             <div className="flex justify-between text-[11px] text-muted-foreground">

@@ -1,0 +1,45 @@
+import { lesson } from "./types";
+
+export const M21 = [
+  lesson({
+    id: "21.1", module: 21, title: "Routine, capturing ideas and getting unstuck",
+    blurb: "Build habits that produce songs consistently.",
+    goals: ["Set a repeatable routine", "Capture ideas reliably", "Break creative blocks with constraints"],
+    ideas: [
+      { title: "Small and regular", body: "Short, frequent sessions beat rare long ones. Have a fixed time and a small goal each day." },
+      { title: "Capture everything", body: "Record ideas immediately, even as a phone memo, with a label. Review and sort them weekly." },
+      { title: "Constraints unblock", body: "Limit yourself to one mode, one rhythm, or four chords. Limits make decisions easier." },
+      { title: "Separate making from judging", body: "Write first, edit later. Judging too early stops flow." },
+    ],
+    guitar: "Make a rule: record every riff you like, even if it seems unfinished.",
+    band: "Share a folder of ideas and rate them once a week.",
+    why: "Process beats inspiration over time.",
+    mistakes: ["Waiting for inspiration", "Never saving rough ideas", "Editing while generating"],
+    listen: ["Review your own idea folder and mark the three strongest"],
+    practice: ["Write for ten minutes with a single constraint"],
+    assignment: ["Write your own weekly writing routine", "Pick a constraint for the next week", "After a week, review what you captured and which constraint worked"],
+    covers: [0, 1, 2],
+    next: "Collaboration, feedback and finishing.",
+  }),
+  lesson({
+    id: "21.2", module: 21, title: "Collaboration, feedback and finishing",
+    blurb: "Work with a band, take feedback well and finish what you start.",
+    goals: ["Run a productive band session", "Give and take useful feedback", "Finish and build a catalogue"],
+    ideas: [
+      { title: "Write with a band", body: "Bring a clear skeleton (key, form, one riff, a rough chorus) and leave parts to each player. Decide who has the final say on each area." },
+      { title: "Charts and rehearsal", body: "Share charts first, rehearse sections separately, record rehearsals and listen back." },
+      { title: "Feedback", body: "Ask specific questions ('where did your attention drop?'). Listen, note patterns, and decide yourself what to change." },
+      { title: "Finishing", body: "Set a definition of finished (arrangement complete, recorded, mixed) and a deadline. Finish and release before starting perfecting." },
+      { title: "A body of work", body: "Songs reveal your style when you finish many. Review across songs to see what repeats." },
+    ],
+    guitar: "Bring a one-page chart to the next rehearsal.",
+    band: "End each session by writing next steps.",
+    why: "Finished songs teach more than perfect fragments.",
+    mistakes: ["Arriving with nothing prepared", "Asking vague questions", "Endlessly polishing"],
+    listen: ["Listen back to a rehearsal recording and note three fixes"],
+    practice: ["Write a one-page chart", "Ask three specific questions after a play-through"],
+    assignment: ["Define what 'finished' means for your next song", "Schedule the steps with dates", "After finishing, list what you'd do differently"],
+    covers: [3, 4, 5, 6, 7],
+    next: "Course complete: keep writing, and revisit any module as you need.",
+  }),
+];

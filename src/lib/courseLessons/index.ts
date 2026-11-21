@@ -13,11 +13,18 @@ import { M11 } from "./m11";
 import { M12 } from "./m12";
 import { M13 } from "./m13";
 import { M14 } from "./m14";
+import { M15 } from "./m15";
+import { M16 } from "./m16";
+import { M17 } from "./m17";
+import { M18 } from "./m18";
+import { M19 } from "./m19";
+import { M20 } from "./m20";
+import { M21 } from "./m21";
 
 export type { Lesson, Idea, Source } from "./types";
 export { SOURCES } from "./sources";
 
-export const LESSONS: Lesson[] = [...M1, ...M2, ...M3, ...M4, ...M5, ...M6, ...M7, ...M8, ...M9, ...M10, ...M11, ...M12, ...M13, ...M14];
+export const LESSONS: Lesson[] = [...M1, ...M2, ...M3, ...M4, ...M5, ...M6, ...M7, ...M8, ...M9, ...M10, ...M11, ...M12, ...M13, ...M14, ...M15, ...M16, ...M17, ...M18, ...M19, ...M20, ...M21];
 
 export const lessonsFor = (module: number): Lesson[] => LESSONS.filter((l) => l.module === module);
 export const lessonById = (id: string): Lesson | undefined => LESSONS.find((l) => l.id === id);

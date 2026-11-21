@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CagedMap, NoteChip, Stat, Step } from "@/components/CagedVisuals";
+import { BassPanel } from "@/components/BassPanel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -109,6 +110,7 @@ export function Workstation() {
   const [search, setSearch] = useState("");
 
   const [tuningId, setTuningId] = useState("standard");
+  const [lastGuitar, setLastGuitar] = useState("standard");
   const [fretFrom, setFretFrom] = useState(0);
   const [fretTo, setFretTo] = useState(15);
   const [leftHanded, setLeftHanded] = useState(false);
@@ -1540,7 +1542,28 @@ export function Workstation() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-widest">Tuning</Label>
-              <Select value={tuningId} onValueChange={setTuningId}>
+              <div className="flex gap-1" role="group" aria-label="Instrument" data-testid="instrument-switch">
+                {([
+                  ["guitar", "Guitar"],
+                  ["bass4", "Bass 4"],
+                  ["bass5", "Bass 5"],
+                ] as const).map(([id, label]) => {
+                  const on = id === "guitar" ? tuning.instrument !== "bass" : tuningId === id;
+                  return (
+                    <Button key={id} size="sm" variant={on ? "default" : "secondary"} className="h-7 flex-1 px-2 text-xs" data-testid={`instrument-${id}`}
+                      onClick={() => {
+                        if (id === "guitar") setTuningId(lastGuitar);
+                        else {
+                          if (tuning.instrument !== "bass") setLastGuitar(tuningId);
+                          setTuningId(id);
+                        }
+                      }}>
+                      {label}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Select value={tuningId} onValueChange={(v) => { if (TUNINGS.find((t) => t.id === v)?.instrument !== "bass") setLastGuitar(v); setTuningId(v); }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -1579,6 +1602,9 @@ export function Workstation() {
               </div>
             </div>
           </div>
+          {tuning.instrument === "bass" ? (
+            <BassPanel root={root} degrees={degrees} suffix={mode === "chord" ? chord.suffix : undefined} pretty={pretty} simple={simpleDegree} />
+          ) : null}
         </section>
 
         {/* ------------------------------------------------ selectors */}

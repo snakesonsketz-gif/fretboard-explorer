@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { CAGED_CROSSWALK, DELIVERED, MODULES, NEXT_PLANNED, defaultProgress, foundationGap, lessonRequest, moduleProgress, nextUp, overallProgress, sanitizeProgress, topicKey } from "../src/lib/course";
 
 describe("course outline", () => {
-  test("14 modules numbered 1-14, each with topics and a tool", () => {
-    expect(MODULES.map((m) => m.id)).toEqual(Array.from({ length: 14 }, (_, i) => i + 1));
+  test("21 modules numbered 1-21, each with topics and a tool", () => {
+    expect(MODULES.map((m) => m.id)).toEqual(Array.from({ length: 21 }, (_, i) => i + 1));
     for (const m of MODULES) {
       expect(m.topics.length).toBeGreaterThan(5);
       expect(m.tools.length).toBeGreaterThan(0);
