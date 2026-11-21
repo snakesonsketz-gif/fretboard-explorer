@@ -233,3 +233,48 @@ export function modeChanges(root: Root, from: Degree[], to: Degree[]): ModeChang
   }
   return out;
 }
+
+// ---- why a shape is used, comparing shapes, keys and moving them
+
+/** Fret of the root in each open-position shape (open C has its root on fret 3 of the A string). */
+export const OPEN_ROOT_FRET: Record<CagedForm, number> = { C: 3, A: 0, G: 3, E: 0, D: 0 };
+
+/** Which way each shape's patch of frets sits relative to its root note. */
+export const FORM_PATCH: Record<CagedForm, "below" | "above"> = { C: "below", A: "above", G: "below", E: "above", D: "above" };
+
+/** How many frets the open shape has been slid up to reach this position (0 = the open chord itself). */
+export const slideOf = (p: CagedPosition) => p.rootFret - OPEN_ROOT_FRET[p.form];
+
+export interface ShapeRow {
+  pos: CagedPosition;
+  slide: number;
+  /** Scale (or chosen set) notes inside the shape's scale window. */
+  notes: number;
+  /** Of those, how many are chord tones. */
+  chordTones: number;
+  /** Roots (the key note) inside the scale window. */
+  roots: number;
+}
+
+/** One row per shape for the compare table. `pcs` and `chordPcs` are absolute pitch classes. */
+export function compareShapes(tuning: Tuning, positions: CagedPosition[], pcs: Set<number>, chordPcs: Set<number>, rootPc: number, fretFrom = 0, fretTo = 24): ShapeRow[] {
+  return positions.map((pos) => {
+    const w = scaleWindow(pos, fretFrom, fretTo);
+    const all = mapSetInWindow(tuning, pcs, w.from, w.to).flat();
+    return {
+      pos,
+      slide: slideOf(pos),
+      notes: all.length,
+      chordTones: all.filter((m) => chordPcs.has(m.pc)).length,
+      roots: all.filter((m) => m.pc === rootPc).length,
+    };
+  });
+}
+
+/** The relative key: a minor key's relative major is 3 semitones up; a major key's relative minor, 3 down. */
+export const relativePc = (pc: number, minor: boolean) => (pc + (minor ? 3 : 9)) % 12;
+
+/** For one root: the parent major key (so, which shapes) of each mode of the major scale. */
+export function modeKeys(rootPc: number): { id: string; parentPc: number }[] {
+  return MODE_INFO.map((m) => ({ id: m.id, parentPc: parentKeyPc(rootPc, m.step) }));
+}

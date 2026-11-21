@@ -40,7 +40,7 @@ import { DegreeAlter } from "@/components/DegreeAlter";
 import { ModeFamily } from "@/components/ModeFamily";
 import { IdentifierPanel } from "@/components/IdentifierPanel";
 import { CircleOfFifths } from "@/components/CircleOfFifths";
-import { cagedPositions, visiblePositions, scaleWindow, mapSetInWindow, formShapeFor, connection, stepIndex, modeInfo, parentKeyPc, tonicsInWindow, simpleDegree, modeTargets, modeChanges } from "@/lib/caged";
+import { cagedPositions, visiblePositions, scaleWindow, mapSetInWindow, formShapeFor, connection, stepIndex, modeInfo, parentKeyPc, tonicsInWindow, simpleDegree, modeTargets, modeChanges, slideOf, FORM_PATCH, compareShapes, relativePc, modeKeys } from "@/lib/caged";
 import { pathwayKeys, orderedPathway, type Pathway } from "@/lib/fretboard";
 import type { ModeRotation } from "@/lib/modes";
 import { moveDegreeInSet, pcOf, togglePc, sortDegrees, CANONICAL } from "@/lib/edit";
@@ -236,6 +236,8 @@ export function Workstation() {
   const modeMeta = mode === "scale" && !custom ? modeInfo(scaleId) : undefined;
   const parentPc = modeMeta ? parentKeyPc(root.pc, modeMeta.step) : root.pc;
   const parentName = (modeMeta ? [7, 2, 9, 4, 11, 6].includes(parentPc) ? SHARP_ROOTS : PREFERRED_ROOTS : PREFERRED_ROOTS)[parentPc]!;
+  const pcName = (pc: number) => ([7, 2, 9, 4, 11, 6].includes(parentPc) ? SHARP_ROOTS : PREFERRED_ROOTS)[((pc % 12) + 12) % 12]!;
+  const ord = (n: number) => (n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`);
   const useParent = !!modeMeta && modeMeta.step !== 0 && cagedBase === "parent";
   const shapesPc = useParent ? parentPc : root.pc;
   const cagedAll = useMemo(() => visiblePositions(cagedPositions(tuning, shapesPc), fretFrom, fretTo), [tuning, shapesPc, fretFrom, fretTo]);
@@ -1060,6 +1062,74 @@ export function Workstation() {
                     )}
                   </div>
                 </details>
+                {cagedAll.length > 0 ? (
+                  <details className="text-[11px] text-muted-foreground" data-testid="caged-compare">
+                    <summary className="cursor-pointer select-none">Compare the shapes</summary>
+                    <div className="mt-1 space-y-1">
+                      <div className="overflow-x-auto">
+                        <table className="font-mono text-[11px]">
+                          <thead>
+                            <tr className="text-left text-muted-foreground">
+                              <th className="pr-2 font-normal">Shape</th><th className="pr-2 font-normal">Frets</th><th className="pr-2 font-normal">Root at</th><th className="pr-2 font-normal">Slide</th><th className="pr-2 font-normal">Notes</th><th className="font-normal">Chord</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {compareShapes(tuning, cagedAll, new Set(degreesToPitchClasses(fbDegrees).map((p) => (p + root.pc) % 12)), new Set([...chordPcSet]), root.pc, fretFrom, fretTo).map((r, i) => (
+                              <tr key={`${r.pos.form}-${r.pos.from}`} className={cn("cursor-pointer", i === cagedIdx && "font-bold text-foreground")} onClick={() => setCagedIdx(i)}>
+                                <td className="pr-2">{r.pos.form}</td>
+                                <td className="pr-2">{r.pos.from}–{r.pos.to}</td>
+                                <td className="pr-2">{pretty(tuning.strings[r.pos.rootString]!.note)} str, fret {r.pos.rootFret}</td>
+                                <td className="pr-2">{r.slide === 0 ? "open" : `+${r.slide}`}</td>
+                                <td className="pr-2">{r.notes}</td>
+                                <td>{r.chordTones}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p>Every shape holds the same notes, just in a different patch of the neck. They differ in where the root sits (which string, left or right of the patch) and how many notes fall in reach; pick the one near where your hand already is. Tap a row to jump to it.</p>
+                    </div>
+                  </details>
+                ) : null}
+                <details className="text-[11px] text-muted-foreground" data-testid="caged-keys">
+                  <summary className="cursor-pointer select-none">Relative keys and moving the shapes</summary>
+                  <div className="mt-1 space-y-1">
+                    {(() => {
+                      const minorish = cagedChord.includes("b3");
+                      const rel = relativePc(root.pc, minorish);
+                      if (modeMeta && scaleId !== "ionian" && scaleId !== "aeolian")
+                        return (
+                          <p data-testid="caged-relative">
+                            <span className="font-semibold text-foreground">Relative key: </span>
+                            {pretty(root.name)} {scaleId} is not plain major or minor. Its notes are {pretty(parentName)} major's, so {pretty(parentName)} major (and {pretty(pcName(relativePc(parentPc, false)))} minor) share its shapes.
+                          </p>
+                        );
+                      return (
+                        <p data-testid="caged-relative">
+                          <span className="font-semibold text-foreground">Relative {minorish ? "major" : "minor"}: </span>
+                          {pretty(root.name)} {minorish ? "minor" : "major"} and {pretty(pcName(rel))} {minorish ? "major" : "minor"} share the same notes and the same five shapes. {minorish
+                            ? `For ${pretty(root.name)} minor, use ${pretty(pcName(rel))} major's shapes and treat ${pretty(root.name)} as home.`
+                            : `For ${pretty(pcName(rel))} minor, use ${pretty(root.name)} major's shapes and treat ${pretty(pcName(rel))} as home.`}
+                        </p>
+                      );
+                    })()}
+                    <p>
+                      <span className="font-semibold text-foreground">New key: </span>
+                      keep the shape, slide it so its root sits on the new key note. Open is slide 0; each fret up is one semitone higher. Read the "Root at" and "Slide" columns above for your key.
+                    </p>
+                    <p>
+                      <span className="font-semibold text-foreground">New mode, same root: </span>
+                      the notes come from a different major key, so use that key's shapes (button above, "Shapes from"). Only the home note changes.
+                    </p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono" data-testid="caged-mode-keys">
+                      {modeKeys(root.pc).map((k) => (
+                        <span key={k.id} className={cn(modeMeta && scaleId === k.id && "font-bold text-foreground")}>
+                          {pretty(root.name)} {k.id} → {pretty(pcName(k.parentPc))} shapes
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </details>
               </>
             ) : null}
             {cagedOn && cagedOverview ? (
@@ -1090,6 +1160,22 @@ export function Workstation() {
                   {cagedChord.map((d) => `${pretty(d)}=${pretty(spellDegree(root, d))}`).join("  ")}
                   {cagedLayer !== "chord" ? " · green = scale notes 2 / 4 / 6, small grey = passing tones" : ""}
                 </p>
+                {(() => {
+                  const curI = Math.min(cagedIdx, cagedAll.length - 1);
+                  const prevP = cagedAll[curI - 1];
+                  const nextP = cagedAll[curI + 1];
+                  const slide = slideOf(cagedPos);
+                  const keyN = pretty(useParent ? parentName : root.name);
+                  const strNo = ord(tuning.strings.length - cagedPos.rootString);
+                  return (
+                    <p className="text-[11px] text-muted-foreground" data-testid="caged-why">
+                      <span className="font-semibold text-foreground">Why the {cagedPos.form} shape here: </span>
+                      the open {cagedPos.form} chord has its root on the {strNo} string. {slide === 0 ? "Played open," : `Slid up ${slide} fret${slide === 1 ? "" : "s"},`} that root
+                      lands on {pretty(tuning.strings[cagedPos.rootString]!.note)} string fret {cagedPos.rootFret}, which is {keyN}. Its patch of frets sits {FORM_PATCH[cagedPos.form]} the root.
+                      {prevP || nextP ? ` Neighbours: ${[prevP && `${prevP.form} below`, nextP && `${nextP.form} above`].filter(Boolean).join(", ")}; each hands over to the next, so every fret is covered.` : ""}
+                    </p>
+                  );
+                })()}
                 {(() => {
                   const form = !useParent && cagedLayer === "chord" ? formShapeFor(tuning, cagedPos, new Set(degreesToPitchClasses(cagedChord))) : null;
                   const win = scaleWindow(cagedPos, fretFrom, fretTo);

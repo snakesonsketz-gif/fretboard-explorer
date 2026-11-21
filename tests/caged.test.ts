@@ -111,3 +111,45 @@ describe("1–7 labels and mode targets", () => {
     expect(ch[0]).toMatchObject({ place: "4th", from: "F", to: "F#", target: false });
   });
 });
+
+import { compareShapes, modeKeys, relativePc, slideOf } from "../src/lib/caged";
+
+describe("why, compare, relatives and moving shapes", () => {
+  test("slide = frets the open shape moved: open positions are 0, and moving up adds fret for fret", () => {
+    const c = cagedPositions(std, 0);
+    expect(slideOf(c.find((p) => p.form === "C")!)).toBe(0); // open C
+    expect(slideOf(c.find((p) => p.form === "E")!)).toBe(8); // E shape barre at 8 = C
+    expect(slideOf(c.find((p) => p.form === "A")!)).toBe(3); // A shape at 3 = C
+    for (let root = 0; root < 12; root++) for (const p of cagedPositions(std, root)) expect(slideOf(p)).toBeGreaterThanOrEqual(0);
+  });
+
+  test("moving an open shape by its slide lands the root on the key note", () => {
+    for (let root = 0; root < 12; root++)
+      for (const p of cagedPositions(std, root)) expect((std.strings[p.rootString]!.pc + p.rootFret) % 12).toBe(root);
+  });
+
+  test("relatives: A minor <-> C major", () => {
+    expect(relativePc(9, true)).toBe(0);
+    expect(relativePc(0, false)).toBe(9);
+  });
+
+  test("every mode maps to the parent key that holds its notes", () => {
+    const major = [0, 2, 4, 5, 7, 9, 11];
+    for (let root = 0; root < 12; root++)
+      for (const k of modeKeys(root)) {
+        const mode = modeInfo(k.id)!;
+        const notes = new Set(major.map((i) => (k.parentPc + i) % 12));
+        expect(notes.has(root)).toBe(true);
+        expect((k.parentPc + mode.step) % 12).toBe(root);
+      }
+  });
+
+  test("compare rows count notes in each shape's window", () => {
+    const major = pcsOf(0, [0, 2, 4, 5, 7, 9, 11]);
+    const rows = compareShapes(std, cagedPositions(std, 0), major, pcsOf(0, [0, 4, 7]), 0);
+    for (const r of rows) {
+      expect(r.notes).toBeGreaterThan(r.chordTones);
+      expect(r.roots).toBeGreaterThan(0);
+    }
+  });
+});
