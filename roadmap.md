@@ -42,3 +42,7 @@ Approved order: tests → tabs → shared timing engine → chord sequencer → 
 - 1e (build 57): Instrument switch (Guitar / Bass 4 / Bass 5) in Explore with a Bass view showing what each bass note does to the chord. Course grows to 21 modules: added Drum Theory, Feel and Syncopation; How the Bass Changes the Music; Theory/Ear/Notation; Lyric Craft (craft only, never writes lyrics); Recording and Mixing; Instruments, Orchestration and Genre; Writing Process and Finishing.
 
 - 1f (build 58): Every lesson (75) gained a deep layer: "Go deeper" long-form explanations, "Step by step" method and "Check yourself" Q&A. Copy-for-chat prompts ask the chat to go deep on those points.
+
+## 1g. Genre sounds and guitar voices (build 59)
+- Module 22 added: 11 lessons (blues, classic/hard rock, metal, alt/grunge, funk, bluegrass/country, neoclassical, how to study a guitarist, then 15 guitarist studies in three groups), each with a deep layer and sources.
+- Paraphrased research only; no riffs, licks or progressions supplied.
