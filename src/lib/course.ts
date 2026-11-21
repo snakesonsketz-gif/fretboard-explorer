@@ -1,5 +1,5 @@
 /**
- * Songwriting & composition course: the 21 modules, the lessons already delivered, and the
+ * Songwriting & composition course: the 22 modules, the lessons already delivered, and the
  * progress a student keeps on this device. Teaching outline only: the course never writes riffs,
  * licks, solos, progressions or lyrics for you (roadmap.md), so every assignment leaves the
  * creative choices to the student.
@@ -416,6 +416,28 @@ export const MODULES: CourseModule[] = [
       "Building a body of work",
     ],
     tools: [{ label: "Jam", to: "/jam", hint: "Loop a section and try variations quickly." }],
+  },
+  {
+    id: 22,
+    title: "Genre Sounds and Guitar Voices",
+    summary: "How each genre makes its sound, and how fifteen guitarists built theirs.",
+    topics: [
+      "Blues: blue notes and the major/minor clash",
+      "Classic and hard rock: pentatonic, Mixolydian, power chords",
+      "Metal: dark scales, tritones, palm-muted rhythm",
+      "Alternative rock and grunge: open voicings and borrowed colour",
+      "Funk and soul: 16th-note grooves and small voicings",
+      "Bluegrass and country: chord tones and flatpicking",
+      "Neoclassical and melodic virtuoso playing",
+      "How to study a guitarist",
+      "Voices I: Berry, B.B. King, Clapton, Hendrix, Vaughan",
+      "Voices II: Van Halen, Slash, Rhoads, Dimebag, Wylde, Vai",
+      "Voices III: Mayer, Govan, Frusciante, Billy Strings",
+    ],
+    tools: [
+      { label: "Explore", to: "/", hint: "See each scale and mode on the neck." },
+      { label: "Jam", to: "/jam", hint: "Loop a genre's chords and test its scales." },
+    ],
   },
 ];
 
