@@ -17,6 +17,8 @@ export interface NeckDot {
   tone: DotTone;
   /** A ring around the dot (the root). */
   ring?: boolean | undefined;
+  /** Jam: colours of the overlaid arpeggios this note belongs to (two or more arpeggios visible). */
+  arpColors?: string[] | undefined;
 }
 
 export const NECK_COLORS = { a: "#38bdf8", b: "#f472b6", both: "#a78bfa" };
@@ -149,13 +151,34 @@ export function Neck({ midis, names, from = 0, to = 15, dots, muted, onTap, onNa
   );
 }
 
+/** A disc split into equal wedges, one per overlaid arpeggio the note belongs to. */
+function ArpDisc({ cx, cy, r, colors }: { cx: number; cy: number; r: number; colors: string[] }) {
+  if (colors.length === 1) return <circle cx={cx} cy={cy} r={r} fill={colors[0]} stroke="var(--background)" strokeWidth={1.4} data-arp-colors="1" />;
+  const n = colors.length;
+  return (
+    <g data-arp-colors={n}>
+      {colors.map((c, i) => {
+        const a0 = (i / n) * Math.PI * 2 - Math.PI / 2;
+        const a1 = ((i + 1) / n) * Math.PI * 2 - Math.PI / 2;
+        const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0), x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+        return <path key={i} d={`M${cx} ${cy} L${x0} ${y0} A${r} ${r} 0 ${n === 1 ? 1 : 0} 1 ${x1} ${y1} Z`} fill={c} />;
+      })}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--background)" strokeWidth={1.4} />
+    </g>
+  );
+}
+
 function Dot({ d, cx, cy, r, glow }: { d: NeckDot; cx: number; cy: number; r: number; glow: string }) {
   if (d.tone === "jam-scale" || d.tone === "jam-arpeggio" || d.tone === "jam-target") {
     const target = d.tone === "jam-target";
     return (
       <g pointerEvents="none" data-jam-role={d.tone} data-string={d.s} data-fret={d.fret}>
         {d.ring ? <circle cx={cx} cy={cy} r={r + 2.6} fill="none" stroke="var(--color-foreground)" strokeWidth={1.8} /> : null}
-        <circle cx={cx} cy={cy} r={r} fill={target ? "var(--primary)" : d.tone === "jam-scale" ? "var(--jam-scale)" : "var(--jam-arpeggio)"} stroke="var(--background)" strokeWidth={target ? 1.8 : 1} />
+        {d.arpColors?.length && d.tone !== "jam-scale" ? (
+          <ArpDisc cx={cx} cy={cy} r={r} colors={d.arpColors} />
+        ) : (
+          <circle cx={cx} cy={cy} r={r} fill={target ? "var(--primary)" : d.tone === "jam-scale" ? "var(--jam-scale)" : "var(--jam-arpeggio)"} stroke="var(--background)" strokeWidth={target ? 1.8 : 1} />
+        )}
         {target ? <circle cx={cx} cy={cy} r={r - 2} fill="none" stroke="var(--background)" strokeWidth={0.8} /> : null}
         <text x={cx} y={cy + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize={(d.label?.length ?? 0) > 2 ? 7.5 : 9} fontWeight={800} fill="var(--background)">{d.label}</text>
       </g>

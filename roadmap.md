@@ -50,3 +50,8 @@ Approved order: tests → tabs → shared timing engine → chord sequencer → 
 ## 1h. Guitarist studies (build 60)
 - Module 23: 45 guitarist studies, one lesson each (story, rig, scales and harmony, touch, rhythm/band role, what set them apart), each with a deep layer, method and self-check. Replaces the three grouped lessons in module 22.
 - Gear and technique details are paraphrased from memory plus research and should be fact-checked before being treated as authoritative.
+
+## 1i — Jam: developing songs + multi-arpeggio colours (build 61)
+- Jam has Free jam / Developing song modes. Songs save everything (chords, selections incl. every-chord layers, tempo, drums, layout, tuning, frets, labels) under a name, with notes, Save / Save as new, My songs (open, rename, duplicate, delete) and an unsaved-changes line. Free jam is parked and restored when you switch back.
+- With two or more arpeggios visible each gets its own colour (first stays pink); notes shared by several are split into wedges; swatches, visible-selection buttons and the legend follow.
+- Next: 1j, build 62.
