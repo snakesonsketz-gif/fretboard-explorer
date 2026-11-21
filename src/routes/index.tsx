@@ -40,7 +40,7 @@ import { DegreeAlter } from "@/components/DegreeAlter";
 import { ModeFamily } from "@/components/ModeFamily";
 import { IdentifierPanel } from "@/components/IdentifierPanel";
 import { CircleOfFifths } from "@/components/CircleOfFifths";
-import { cagedPositions, visiblePositions, scaleWindow, mapSetInWindow } from "@/lib/caged";
+import { cagedPositions, visiblePositions, scaleWindow, mapSetInWindow, formShapeFor, connection, stepIndex, modeInfo, parentKeyPc, tonicsInWindow } from "@/lib/caged";
 import { pathwayKeys, orderedPathway, type Pathway } from "@/lib/fretboard";
 import type { ModeRotation } from "@/lib/modes";
 import { moveDegreeInSet, pcOf, togglePc, sortDegrees, CANONICAL } from "@/lib/edit";
@@ -230,7 +230,14 @@ export function Workstation() {
   const cagedChord = mode === "chord" ? degrees : mode === "arpeggio" ? arpSource : overChord === "chord" ? chord.degrees : (scaleOwn ?? chord.degrees);
   const cagedScale = mode === "scale" ? degrees : scale.degrees;
   const cagedArp = mode === "arpeggio" ? degrees : arp.transform(cagedChord);
-  const cagedAll = useMemo(() => visiblePositions(cagedPositions(tuning, root.pc), fretFrom, fretTo), [tuning, root.pc, fretFrom, fretTo]);
+  // Modes of the major scale: the same notes fit the parent key's five shapes, so the shapes can come from either the mode's root or its parent key.
+  const [cagedBase, setCagedBase] = useState<"mode" | "parent">("mode");
+  const modeMeta = mode === "scale" && !custom ? modeInfo(scaleId) : undefined;
+  const parentPc = modeMeta ? parentKeyPc(root.pc, modeMeta.step) : root.pc;
+  const parentName = (modeMeta ? [7, 2, 9, 4, 11, 6].includes(parentPc) ? SHARP_ROOTS : PREFERRED_ROOTS : PREFERRED_ROOTS)[parentPc]!;
+  const useParent = !!modeMeta && modeMeta.step !== 0 && cagedBase === "parent";
+  const shapesPc = useParent ? parentPc : root.pc;
+  const cagedAll = useMemo(() => visiblePositions(cagedPositions(tuning, shapesPc), fretFrom, fretTo), [tuning, shapesPc, fretFrom, fretTo]);
   const cagedOverview = cagedOn && cagedIdx < 0;
   const cagedPos = cagedOn && !cagedOverview ? cagedAll[Math.min(cagedIdx, cagedAll.length - 1)] : undefined;
   const chordPcSet = new Set(degreesToPitchClasses(cagedChord).map((p) => (p + root.pc) % 12));
@@ -975,6 +982,38 @@ export function Workstation() {
                 <span className="text-muted-foreground">· shape letter = CAGED chord form, not the key</span>
               </div>
             ) : null}
+            {cagedOn ? (
+              <>
+                {modeMeta && modeMeta.step !== 0 ? (
+                  <div className="flex flex-wrap items-center gap-1.5" data-testid="caged-base">
+                    <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Shapes from</span>
+                    <Button size="sm" variant={!useParent ? "default" : "secondary"} className="h-7 px-2 text-xs" onClick={() => { setCagedBase("mode"); setCagedIdx(0); }}>
+                      {pretty(root.name)} (mode root)
+                    </Button>
+                    <Button size="sm" variant={useParent ? "default" : "secondary"} className="h-7 px-2 text-xs" onClick={() => { setCagedBase("parent"); setCagedIdx(0); }}>
+                      {pretty(parentName)} major (parent key)
+                    </Button>
+                  </div>
+                ) : null}
+                <details className="text-[11px] text-muted-foreground" data-testid="caged-guide">
+                  <summary className="cursor-pointer select-none">How CAGED works{modeMeta ? ` with ${pretty(root.name)} ${scaleId}` : ""}</summary>
+                  <div className="mt-1 space-y-1">
+                    <p>Five chord shapes, C A G E D, run end to end up the neck. Each owns a patch of frets; slide into the next patch to change position without changing key.</p>
+                    {modeMeta ? (
+                      modeMeta.step === 0 ? (
+                        <p>{pretty(root.name)} major is the parent of every mode below: the same notes, just a different home note. Pick Dorian, Lydian… to see them in these shapes.</p>
+                      ) : (
+                        <p>
+                          {pretty(root.name)} {scaleId} uses the same notes as {pretty(parentName)} major, so {pretty(parentName)}'s five shapes cover it. Play any shape but treat {pretty(root.name)} as home. Its sound comes from {modeMeta.colourWhy}: {pretty(spellDegree(root, modeMeta.colour))} (dotted underline in the map). Use the buttons above to see shapes built from {pretty(root.name)} or from {pretty(parentName)}.
+                        </p>
+                      )
+                    ) : (
+                      <p>To use a mode, switch to Scale and pick a mode such as Dorian: the shapes then show where its notes and home note sit.</p>
+                    )}
+                  </div>
+                </details>
+              </>
+            ) : null}
             {cagedOn && cagedOverview ? (
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Layer</span>
@@ -999,10 +1038,47 @@ export function Workstation() {
                   </Button>
                 </div>
                 <p className="font-mono text-xs" data-testid="caged-info">
-                  {cagedPos.form} shape · root on {pretty(tuning.strings[cagedPos.rootString]!.note)} string fret {cagedPos.rootFret} · chord tones{" "}
+                  {cagedPos.form} shape · {useParent ? `${pretty(parentName)} major's root` : "root"} on {pretty(tuning.strings[cagedPos.rootString]!.note)} string fret {cagedPos.rootFret} · {pretty(root.name)} chord tones{" "}
                   {cagedChord.map((d) => `${pretty(d)}=${pretty(spellDegree(root, d))}`).join("  ")}
                   {cagedLayer !== "chord" ? " · green = extensions (9/11/13), small grey = other tones" : ""}
                 </p>
+                {(() => {
+                  const form = !useParent && cagedLayer === "chord" ? formShapeFor(tuning, cagedPos, new Set(degreesToPitchClasses(cagedChord))) : null;
+                  const win = scaleWindow(cagedPos, fretFrom, fretTo);
+                  const pcSet = new Set(degreesToPitchClasses(fbDegrees).map((p) => (p + root.pc) % 12));
+                  const curI = Math.min(cagedIdx, cagedAll.length - 1);
+                  const nextI = stepIndex(curI, cagedAll.length, 1);
+                  const next = nextI > curI ? cagedAll[nextI] : undefined;
+                  const link = next ? connection(tuning, pcSet, cagedPos, next, fretFrom, fretTo) : null;
+                  const home = modeMeta ? tonicsInWindow(tuning, root.pc, win.from, win.to) : [];
+                  return (
+                    <div className="space-y-0.5 text-[11px] text-muted-foreground" data-testid="caged-extras">
+                      {cagedLayer === "chord" && !useParent ? (
+                        form ? (
+                          <p data-testid="caged-form">
+                            {form.label}: <span className="font-mono text-foreground">{form.shape.map((f) => (f === null ? "x" : f)).join(" ")}</span> (low to high string)
+                          </p>
+                        ) : (
+                          <p data-testid="caged-form">No everyday {cagedPos.form}-shaped version of this chord; the chord tones in this patch are shown instead.</p>
+                        )
+                      ) : null}
+                      {link ? (
+                        <p data-testid="caged-link">
+                          Next: {link.next} shape (frets {next!.from}–{next!.to}){link.overlap
+                            ? ` · overlaps at frets ${link.overlap.from}–${link.overlap.to}, ${link.shared.length} shared notes: slide there to change shape.`
+                            : " · starts right where this one ends."}
+                        </p>
+                      ) : (
+                        <p data-testid="caged-link">Top shape here. Wrap to the lowest and you are the same notes an octave down.</p>
+                      )}
+                      {modeMeta && home.length ? (
+                        <p data-testid="caged-home">
+                          Home note {pretty(root.name)} here: {home.slice(0, 3).map((h) => `${pretty(tuning.strings[h.string]!.note)} string fret ${h.fret}`).join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })()}
                 {cagedScaleWin ? (
                   <div className="overflow-x-auto" data-testid="caged-scale-map">
                     <p className="text-[11px] text-muted-foreground">
@@ -1019,7 +1095,7 @@ export function Workstation() {
                               {row.map((m) => {
                                 const d = degOfPc(m.pc);
                                 return (
-                                  <td key={m.fret} className={cn("px-1", m.pc === root.pc ? "font-bold text-root" : chordPcSet.has(m.pc) ? "text-foreground" : "text-muted-foreground")}>
+                                  <td key={m.fret} className={cn("px-1", m.pc === root.pc ? "font-bold text-root" : chordPcSet.has(m.pc) ? "text-foreground" : "text-muted-foreground", modeMeta && d === modeMeta.colour && "underline decoration-dotted underline-offset-2")}>
                                     {m.fret}:{pretty(d)}
                                   </td>
                                 );
