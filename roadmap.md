@@ -55,3 +55,8 @@ Approved order: tests → tabs → shared timing engine → chord sequencer → 
 - Jam has Free jam / Developing song modes. Songs save everything (chords, selections incl. every-chord layers, tempo, drums, layout, tuning, frets, labels) under a name, with notes, Save / Save as new, My songs (open, rename, duplicate, delete) and an unsaved-changes line. Free jam is parked and restored when you switch back.
 - With two or more arpeggios visible each gets its own colour (first stays pink); notes shared by several are split into wedges; swatches, visible-selection buttons and the legend follow.
 - Next: 1j, build 62.
+
+## 1j — Progression builder (build 62)
+- New "Prog" tab (/progression): pick key + mode (all 7-note scales), triads or sevenths; every diatonic chord shown with its roman numeral and job (tonic / subdominant / dominant, plus substitute, secondary-dominant notes); borrow chords from any mode or key (quick chips for parallel modes and the V / IV keys; shared chords dimmed); add any chord with optional slash bass; per-chord beats (stepper + presets), move, duplicate, remove, hear, play with click, type/copy as text.
+- Transfer: send to Jam (adds the key's scale over every chord), to an Explore song (rounds to whole bars; the open song is saved to My songs first), and to the Sequencer (exact beats, drum pattern kept when bar length matches); bring a progression in from any of the three; Jam has an "Open in Progression builder" button; each chord can open in Explore.
+- Next: 1k, build 63.

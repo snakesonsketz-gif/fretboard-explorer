@@ -53,6 +53,9 @@ export interface Jam {
   layout?: "overlapping" | "separate";
 }
 
+/** localStorage key the Jam page keeps its working state under. */
+export const JAM_STORAGE_KEY = "fretlab.jam.v1";
+
 export const emptyJam = (): Jam => ({ chords: [], bpm: 90, beatsPerBar: 4, drums: "rock", metronome: false, everywhere: [], chordsOn: true });
 
 export const chordDef = (id: string) => CHORDS.find((c) => c.id === id) ?? CHORDS[0]!;

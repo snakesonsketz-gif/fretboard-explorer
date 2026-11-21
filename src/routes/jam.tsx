@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mic, Minus, Pause, Play, Plus, Square, Trash2, Volume2, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -14,6 +14,7 @@ import {
   DRUM_STYLES,
   emptyJam,
   JAM_PRESETS,
+  JAM_STORAGE_KEY,
   jamArrangement,
   jamPosition,
   layerDegrees,
@@ -39,6 +40,7 @@ import { startCapture, type Capture, type MicError } from "@/lib/listen/capture"
 import { cn } from "@/lib/utils";
 import { jamBoards, jamBoardDots, setLayerVisibility, arpeggioColors } from "@/lib/jamVisualization";
 import type { JamView } from "@/lib/jamSongs";
+import { jamToProg, sendToBuilder } from "@/lib/progressionLink";
 import { JamSongBar } from "@/components/JamSongBar";
 
 export const Route = createFileRoute("/jam")({
@@ -53,7 +55,7 @@ export const Route = createFileRoute("/jam")({
   component: JamPage,
 });
 
-const KEY = "fretlab.jam.v1";
+const KEY = JAM_STORAGE_KEY;
 const ROOT_NAMES = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const INTERVAL = ["1", "b2", "2", "b3", "3", "4", "b5", "5", "b6", "6", "b7", "7"];
 const LENGTHS: { beats: (bpb: number) => number; label: string }[] = [
@@ -81,6 +83,7 @@ function load(): Jam | null {
 
 /** Jam: type or pick a progression, loop it with drums, and solo over it with the scales and arpeggios you choose. */
 export function JamPage() {
+  const navigate = useNavigate();
   const [jam, setJam] = useState<Jam>(() => ({ ...emptyJam(), chords: parseProgression("G D Em C", 4).chords }));
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -215,6 +218,9 @@ export function JamPage() {
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-display text-2xl font-black">Jam</h2>
             <span className="text-xs text-muted-foreground">Type or pick your chords, press play, and solo with the scales and arpeggios you choose.</span>
+            <Button size="sm" variant="secondary" disabled={!jam.chords.length} onClick={() => { stop(); sendToBuilder(jamToProg(jam)); void navigate({ to: "/progression" }); }} data-testid="jam-to-builder">
+              Open in Progression builder
+            </Button>
           </div>
           <form
             className="flex flex-wrap items-center gap-2"

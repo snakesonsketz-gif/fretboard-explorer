@@ -28,6 +28,7 @@ import { analyzeShape, bookFingering, everyVoicing, FINGER_NAME, fingering, inve
 import { neckPatterns, onePerString, type ExtraNotes } from "@/lib/patterns";
 import { LEVEL_STYLE, ShapeCycler } from "@/components/ShapeCycler";
 import { OPEN_EVENT, takePendingChord, type ExploreChord } from "@/lib/exploreLink";
+import { takeScrollToSong } from "@/lib/progressionLink";
 import { matchesPlacement, NotePlacement, type Placement } from "@/components/NotePlacement";
 import { isMarkedImpossible, loadImpossible, markImpossible, unmarkImpossible, type ImpossibleShape } from "@/lib/impossible";
 import { useDevMode } from "@/lib/devMode";
@@ -411,6 +412,7 @@ export function Workstation() {
     };
     const pending = takePendingChord();
     if (pending) apply(pending);
+    else if (takeScrollToSong()) window.setTimeout(() => document.getElementById("song-workspace")?.scrollIntoView({ block: "start", behavior: "smooth" }), 300);
     const on = (e: Event) => {
       takePendingChord();
       apply((e as CustomEvent<ExploreChord>).detail);
@@ -1951,7 +1953,7 @@ export function Workstation() {
         </section>
 
         {/* ------------------------------------------------ progression */}
-        <section>
+        <section id="song-workspace">
           <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-widest">
             Song / idea workspace
           </h3>
