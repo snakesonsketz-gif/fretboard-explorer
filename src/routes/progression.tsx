@@ -10,7 +10,7 @@ import { emptyJam, jamArrangement, jamPosition, makeChord } from "@/lib/jam";
 import { openInExplore } from "@/lib/exploreLink";
 import {
   analyzeChord, analyze, borrowSources, chordById, chordLabel, diatonicChords, emptyProgression, FN_LABEL, FN_MEANING, FN_SHORT, functionPath, KEY_MODES,
-  makeProgChord, modeDef, progressionToText, totalBeats, type ChordOption, type Fn, type ProgChord, type Progression,
+  makeProgChord, modeDef, shiftChord, progressionToText, totalBeats, type ChordOption, type Fn, type ProgChord, type Progression,
 } from "@/lib/progression";
 import {
   arrangementToProg, jamToProg, loadBuilderDraft, readJam, readSequencer, readSongDraft, roundedInSong, saveBuilderDraft, sendToSequencer, sendToSong, sequencerHasChords,
@@ -329,6 +329,8 @@ export function ProgressionPage() {
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Move left" disabled={cur === 0} onClick={() => move(cur - 1)}><ArrowLeft className="h-3.5 w-3.5" /></Button>
                 <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Move right" disabled={cur >= prog.chords.length - 1} onClick={() => move(cur + 1)}><ArrowRight className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Flatten chord (down a semitone)" onClick={() => { const n = shiftChord(picked, -1); setChords((cs) => cs.map((c, i) => (i === cur ? n : c))); hear(n.rootName, n.chordId); }} data-testid="prog-flat">♭</Button>
+                <Button size="sm" variant="secondary" className="h-7 px-2" aria-label="Sharpen chord (up a semitone)" onClick={() => { const n = shiftChord(picked, 1); setChords((cs) => cs.map((c, i) => (i === cur ? n : c))); hear(n.rootName, n.chordId); }} data-testid="prog-sharp">♯</Button>
                 <Button size="sm" variant="secondary" className="h-7 gap-1 px-2" onClick={() => hear(picked.rootName, picked.chordId)}><Volume2 className="h-3.5 w-3.5" /> Hear</Button>
                 <Button size="sm" variant="secondary" className="h-7 gap-1 px-2" onClick={() => { setChords((cs) => [...cs.slice(0, cur + 1), { ...picked, id: newId() }, ...cs.slice(cur + 1)]); setSel(cur + 1); }}>
                   <Copy className="h-3.5 w-3.5" /> Duplicate

@@ -60,3 +60,7 @@ Approved order: tests → tabs → shared timing engine → chord sequencer → 
 - New "Prog" tab (/progression): pick key + mode (all 7-note scales), triads or sevenths; every diatonic chord shown with its roman numeral and job (tonic / subdominant / dominant, plus substitute, secondary-dominant notes); borrow chords from any mode or key (quick chips for parallel modes and the V / IV keys; shared chords dimmed); add any chord with optional slash bass; per-chord beats (stepper + presets), move, duplicate, remove, hear, play with click, type/copy as text.
 - Transfer: send to Jam (adds the key's scale over every chord), to an Explore song (rounds to whole bars; the open song is saved to My songs first), and to the Sequencer (exact beats, drum pattern kept when bar length matches); bring a progression in from any of the three; Jam has an "Open in Progression builder" button; each chord can open in Explore.
 - Next: 1k, build 63.
+
+## 1k — Flatten / sharpen chords (build 63)
+- Progression builder: ♭ and ♯ buttons on the selected chord move it a semitone (slash bass too); numeral and function update.
+- Next: 1l, build 64.

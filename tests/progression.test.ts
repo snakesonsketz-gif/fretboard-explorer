@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { analyze, borrowSources, chordIdForIntervals, chordLabel, diatonicChords, emptyProgression, functionPath, makeProgChord, progressionToText, romanOf, chordById } from "@/lib/progression";
+import { shiftChord, shiftNote, analyze, borrowSources, chordIdForIntervals, chordLabel, diatonicChords, emptyProgression, functionPath, makeProgChord, progressionToText, romanOf, chordById } from "@/lib/progression";
 import { arrangementToProg, barsForBeats, progToArrangement, progToJam, progToSong, jamToProg, roundedInSong, sanitizeProgression, songToProg, textToChords } from "@/lib/progressionLink";
 import { KEY_MODES } from "@/lib/progression";
 
@@ -118,5 +118,22 @@ describe("transfer", () => {
     expect(r.skipped).toBe(0);
     expect(r.prog.chords.map((c) => c.beats)).toEqual([4, 8, 2, 4]);
     expect(r.prog.chords.map((c) => chordLabel(c.rootName, c.chordId))).toEqual(["Am", "D", "Em", "G"]);
+  });
+});
+
+describe("flatten and sharpen", () => {
+  test("note names", () => {
+    expect(shiftNote("B", -1)).toBe("Bb");
+    expect(shiftNote("Bb", 1)).toBe("B");
+    expect(shiftNote("C", -1)).toBe("B");
+    expect(shiftNote("E", 1)).toBe("F");
+    expect(shiftNote("C", 1)).toBe("C#");
+    expect(shiftNote("D", -1)).toBe("Db");
+    expect(shiftNote("G#", 1)).toBe("A");
+  });
+  test("chord keeps quality and slash bass moves with it", () => {
+    const c = shiftChord(makeProgChord("G", "m7", 4, { bassName: "D" }), -1);
+    expect([c.rootName, c.chordId, c.bassName]).toEqual(["Gb", "m7", "Db"]);
+    expect(analyze("C", "ionian", "Bb", "maj").roman).toBe("bVII");
   });
 });

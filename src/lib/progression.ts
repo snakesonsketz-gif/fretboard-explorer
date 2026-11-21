@@ -4,7 +4,7 @@
  * and hand the result to Jam, an Explore song or the Sequencer (and take one back from any of them).
  * Pure — no DOM or audio — so it can be tested.
  */
-import { CHORDS, SCALES, degreeToSemitones, rootByName, spellDegree, type ChordDef, type ScaleDef } from "@/lib/theory";
+import { CHORDS, ROOTS, SCALES, degreeToSemitones, rootByName, spellDegree, type ChordDef, type ScaleDef } from "@/lib/theory";
 import { rootFor } from "@/lib/modes";
 import { newId } from "@/lib/timeline";
 
@@ -231,4 +231,16 @@ export function progressionToText(p: Progression): string {
       return c.beats === p.beatsPerBar ? label : c.beats % p.beatsPerBar === 0 ? `${label}*${c.beats / p.beatsPerBar}` : `${label}:${c.beats}`;
     })
     .join(" ");
+}
+
+/** Raise (+1) or lower (-1) a note name by a semitone: lands on a natural note when it can, else sharp going up, flat going down. */
+export function shiftNote(name: string, dir: 1 | -1): string {
+  const pc = pc12(rootByName(name).pc + dir);
+  const hit = (pred: (n: string) => boolean) => ROOTS.find((r) => r.pc === pc && pred(r.name))?.name;
+  return hit((n) => n.length === 1) ?? hit((n) => (dir === 1 ? n.endsWith("#") : n.endsWith("b"))) ?? rootFor("", pc).name;
+}
+
+/** The same chord moved a semitone: root and slash bass both shift, quality stays. */
+export function shiftChord(c: ProgChord, dir: 1 | -1): ProgChord {
+  return { ...c, rootName: shiftNote(c.rootName, dir), bassName: c.bassName ? shiftNote(c.bassName, dir) : undefined, from: undefined };
 }
