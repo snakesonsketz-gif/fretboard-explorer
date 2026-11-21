@@ -5,6 +5,7 @@ import { Check, Heart, HeartOff, Star, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CagedMap, NoteChip, Stat, Step } from "@/components/CagedVisuals";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -1032,11 +1033,17 @@ export function Workstation() {
                     return (
                       <div className="space-y-0.5 text-[11px] text-muted-foreground" data-testid="caged-targets">
                         {tg ? (
-                          <p>
-                            Target notes in {pretty(root.name)} {scaleId}:{" "}
-                            <span className="font-mono text-foreground">{tg.notes.map((n, i) => `${pretty(simpleDegree(tg.degrees[i]!))}=${pretty(n)}`).join("  ")}</span>
-                            {" "}({pretty(tg.chordName)}). Land on these; the other notes are for passing through.
-                          </p>
+                          <div className="space-y-1">
+                            <div>
+                              Target notes in {pretty(root.name)} {scaleId} ({pretty(tg.chordName)}), land on these:
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {tg.notes.map((n, i) => (
+                                <NoteChip key={`${n}-${i}`} degree={pretty(simpleDegree(tg.degrees[i]!))} note={pretty(n)} accent />
+                              ))}
+                            </div>
+                            <div>The other notes are for passing through.</div>
+                          </div>
                         ) : null}
                         {prev ? (
                           ch.length ? (
@@ -1055,25 +1062,37 @@ export function Workstation() {
                 </div>
                 <details className="text-[11px] text-muted-foreground" data-testid="caged-guide">
                   <summary className="cursor-pointer select-none">How CAGED works{modeMeta ? ` with ${pretty(root.name)} ${scaleId}` : ""}</summary>
-                  <div className="mt-1 space-y-1">
-                    <p>Five chord shapes, C A G E D, run end to end up the neck. Each owns a patch of frets; slide into the next patch to change position without changing key.</p>
-                    {modeMeta ? (
-                      modeMeta.step === 0 ? (
-                        <p>{pretty(root.name)} major is the parent of every mode below: the same notes, just a different home note. Pick Dorian, Lydian… to see them in these shapes.</p>
-                      ) : (
-                        <p>
-                          {pretty(root.name)} {scaleId} uses the same notes as {pretty(parentName)} major, so {pretty(parentName)}'s five shapes cover it. Play any shape but treat {pretty(root.name)} as home. Its sound comes from {modeMeta.colourWhy}: {pretty(spellDegree(root, modeMeta.colour))} (dotted underline in the map). Use the buttons above to see shapes built from {pretty(root.name)} or from {pretty(parentName)}.
-                        </p>
-                      )
+                  <div className="mt-1 space-y-1.5">
+                    <div className="flex items-center justify-center gap-1 py-1" aria-label="The five shapes in order">
+                      {["C", "A", "G", "E", "D"].map((f, i) => (
+                        <span key={f} className="flex items-center gap-1">
+                          <span className={cn("grid h-7 w-7 place-items-center rounded-md border text-xs font-black", cagedPos?.form === f ? "border-primary bg-primary text-primary-foreground" : "border-border bg-secondary")}>{f}</span>
+                          {i < 4 ? <span className="text-muted-foreground">→</span> : <span className="text-muted-foreground">↻</span>}
+                        </span>
+                      ))}
+                    </div>
+                    <Step n={1} title="Five shapes tile the neck">Each owns a patch of frets. Slide to the next patch to change position without changing key.</Step>
+                    {modeMeta && modeMeta.step !== 0 ? (
+                      <>
+                        <Step n={2} title={`Use ${pretty(parentName)} major's shapes`}>
+                          {pretty(root.name)} {scaleId} has the same notes as {pretty(parentName)} major, so those five shapes cover it.
+                        </Step>
+                        <Step n={3} title={`Treat ${pretty(root.name)} as home`}>
+                          Its colour comes from {modeMeta.colourWhy}: <span className="font-bold text-foreground">{pretty(spellDegree(root, modeMeta.colour))}</span> (dotted underline on the map). Use "Shapes from" above to switch views.
+                        </Step>
+                      </>
+                    ) : modeMeta ? (
+                      <Step n={2} title="Major is the parent">Every mode below it uses the same notes with a different home. Pick Dorian, Lydian… to see them.</Step>
                     ) : (
-                      <p>To use a mode, switch to Scale and pick a mode such as Dorian: the shapes then show where its notes and home note sit.</p>
+                      <Step n={2} title="Try a mode">Switch to Scale and pick a mode such as Dorian to see where its notes and home sit.</Step>
                     )}
                   </div>
                 </details>
                 {cagedAll.length > 0 ? (
                   <details className="text-[11px] text-muted-foreground" data-testid="caged-compare">
                     <summary className="cursor-pointer select-none">Compare the shapes</summary>
-                    <div className="mt-1 space-y-1">
+                    <div className="mt-1 space-y-1.5">
+                      <CagedMap positions={cagedAll} current={Math.min(cagedIdx, cagedAll.length - 1)} onPick={setCagedIdx} maxFret={fretTo > 12 ? 22 : 15} />
                       <div className="overflow-x-auto">
                         <table className="font-mono text-[11px]">
                           <thead>
@@ -1095,47 +1114,59 @@ export function Workstation() {
                           </tbody>
                         </table>
                       </div>
-                      <p>Every shape holds the same notes, just in a different patch of the neck. They differ in where the root sits (which string, left or right of the patch) and how many notes fall in reach; pick the one near where your hand already is. Tap a row to jump to it.</p>
+                      <div className="flex flex-wrap gap-1.5 text-[11px]">
+                        <Stat label="Same notes" value="every shape" />
+                        <Stat label="Differs in" value="root string + reach" />
+                        <Stat label="Pick" value="nearest your hand" tone="sky" />
+                      </div>
                     </div>
                   </details>
                 ) : null}
                 <details className="text-[11px] text-muted-foreground" data-testid="caged-keys">
                   <summary className="cursor-pointer select-none">Relative keys and moving the shapes</summary>
-                  <div className="mt-1 space-y-1">
+                  <div className="mt-1 space-y-1.5">
                     {(() => {
                       const minorish = cagedChord.includes("b3");
                       const rel = relativePc(root.pc, minorish);
                       if (modeMeta && scaleId !== "ionian" && scaleId !== "aeolian")
                         return (
-                          <p data-testid="caged-relative">
-                            <span className="font-semibold text-foreground">Relative key: </span>
-                            {pretty(root.name)} {scaleId} is not plain major or minor. Its notes are {pretty(parentName)} major's, so {pretty(parentName)} major (and {pretty(pcName(relativePc(parentPc, false)))} minor) share its shapes.
-                          </p>
+                          <div className="rounded-lg border border-border/70 bg-secondary/30 p-2" data-testid="caged-relative">
+                            <div className="mb-1 text-[9px] uppercase tracking-widest">Same notes as</div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Stat label={`${pretty(root.name)} ${scaleId}`} value="home" tone="gold" />
+                              <span>⇄</span>
+                              <Stat label="Parent major" value={`${pretty(parentName)} major`} tone="sky" />
+                              <span>⇄</span>
+                              <Stat label="Its minor" value={`${pretty(pcName(relativePc(parentPc, false)))} minor`} />
+                            </div>
+                            <div className="mt-1">All three share the same five shapes.</div>
+                          </div>
                         );
                       return (
-                        <p data-testid="caged-relative">
-                          <span className="font-semibold text-foreground">Relative {minorish ? "major" : "minor"}: </span>
-                          {pretty(root.name)} {minorish ? "minor" : "major"} and {pretty(pcName(rel))} {minorish ? "major" : "minor"} share the same notes and the same five shapes. {minorish
-                            ? `For ${pretty(root.name)} minor, use ${pretty(pcName(rel))} major's shapes and treat ${pretty(root.name)} as home.`
-                            : `For ${pretty(pcName(rel))} minor, use ${pretty(root.name)} major's shapes and treat ${pretty(pcName(rel))} as home.`}
-                        </p>
+                        <div className="rounded-lg border border-border/70 bg-secondary/30 p-2" data-testid="caged-relative">
+                          <div className="mb-1 text-[9px] uppercase tracking-widest">Relative {minorish ? "major" : "minor"}</div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Stat label={minorish ? "Minor" : "Major"} value={`${pretty(root.name)} ${minorish ? "minor" : "major"}`} tone="gold" />
+                            <span>⇄</span>
+                            <Stat label={minorish ? "Major" : "Minor"} value={`${pretty(pcName(rel))} ${minorish ? "major" : "minor"}`} tone="sky" />
+                          </div>
+                          <div className="mt-1">
+                            Same notes, same five shapes. For {pretty(minorish ? root.name : pcName(rel))} minor, use {pretty(minorish ? pcName(rel) : root.name)} major's shapes and treat {pretty(minorish ? root.name : pcName(rel))} as home.
+                          </div>
+                        </div>
                       );
                     })()}
-                    <p>
-                      <span className="font-semibold text-foreground">New key: </span>
-                      keep the shape, slide it so its root sits on the new key note. Open is slide 0; each fret up is one semitone higher. Read the "Root at" and "Slide" columns above for your key.
-                    </p>
-                    <p>
-                      <span className="font-semibold text-foreground">New mode, same root: </span>
-                      the notes come from a different major key, so use that key's shapes (button above, "Shapes from"). Only the home note changes.
-                    </p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono" data-testid="caged-mode-keys">
+                    <Step n={1} title="New key: slide the shape">Keep the shape, put its root on the new key note. Open = slide 0, each fret up = one semitone. See "Root at" and "Slide" above.</Step>
+                    <Step n={2} title="New mode, same root: swap the shapes">The notes come from a different major key, so use that key's shapes ("Shapes from" above). Only the home note changes.</Step>
+                    <div className="grid grid-cols-2 gap-1 sm:grid-cols-4" data-testid="caged-mode-keys">
                       {modeKeys(root.pc).map((k) => (
-                        <span key={k.id} className={cn(modeMeta && scaleId === k.id && "font-bold text-foreground")}>
-                          {pretty(root.name)} {k.id} → {pretty(pcName(k.parentPc))} shapes
-                        </span>
+                        <div key={k.id} className={cn("rounded-md border px-1.5 py-1 text-center", modeMeta && scaleId === k.id ? "border-primary bg-primary/15 text-foreground" : "border-border bg-secondary/40")}>
+                          <div className="text-[10px] capitalize">{pretty(root.name)} {k.id}</div>
+                          <div className="font-mono text-xs font-bold text-foreground">{pretty(pcName(k.parentPc))}</div>
+                        </div>
                       ))}
                     </div>
+                    <div className="text-[10px]">Each box: the mode on your root → the major key whose shapes to use.</div>
                   </div>
                 </details>
               </>
@@ -1176,12 +1207,20 @@ export function Workstation() {
                   const keyN = pretty(useParent ? parentName : root.name);
                   const strNo = ord(tuning.strings.length - cagedPos.rootString);
                   return (
-                    <p className="text-[11px] text-muted-foreground" data-testid="caged-why">
-                      <span className="font-semibold text-foreground">Why the {cagedPos.form} shape here: </span>
-                      the open {cagedPos.form} chord has its root on the {strNo} string. {slide === 0 ? "Played open," : `Slid up ${slide} fret${slide === 1 ? "" : "s"},`} that root
-                      lands on {pretty(tuning.strings[cagedPos.rootString]!.note)} string fret {cagedPos.rootFret}, which is {keyN}. Its patch of frets sits {FORM_PATCH[cagedPos.form]} the root.
-                      {prevP || nextP ? ` Neighbours: ${[prevP && `${prevP.form} below`, nextP && `${nextP.form} above`].filter(Boolean).join(", ")}; each hands over to the next, so every fret is covered.` : ""}
-                    </p>
+                    <div className="space-y-1" data-testid="caged-why">
+                      <div className="flex flex-wrap gap-1.5">
+                        <Stat label="Shape" value={`${cagedPos.form} form`} tone="gold" />
+                        <Stat label="Root on" value={`${pretty(tuning.strings[cagedPos.rootString]!.note)} string (${strNo}), fret ${cagedPos.rootFret}`} />
+                        <Stat label="Key note" value={keyN} />
+                        <Stat label="Slide" value={slide === 0 ? "open" : `+${slide} fret${slide === 1 ? "" : "s"}`} />
+                        <Stat label="Patch sits" value={`${FORM_PATCH[cagedPos.form]} the root`} />
+                      </div>
+                      {prevP || nextP ? (
+                        <div className="text-[11px] text-muted-foreground">
+                          Neighbours: {[prevP && `${prevP.form} below`, nextP && `${nextP.form} above`].filter(Boolean).join(" · ")}. Each hands over to the next, so every fret is covered.
+                        </div>
+                      ) : null}
+                    </div>
                   );
                 })()}
                 {(() => {

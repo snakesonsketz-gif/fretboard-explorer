@@ -5,10 +5,8 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import {
   CAGED_CROSSWALK,
-  DELIVERED,
   LESSON_FORMAT,
   MODULES,
-  NEXT_PLANNED,
   defaultProgress,
   foundationGap,
   lessonRequest,
@@ -22,6 +20,9 @@ import {
   type Progress,
 } from "@/lib/course";
 import { cn } from "@/lib/utils";
+import { LessonCard } from "@/components/LessonCard";
+import { SOURCES, lessonsFor } from "@/lib/courseLessons";
+import { lessonPrompt, modulePrompt } from "@/lib/coursePrompts";
 
 export const Route = createFileRoute("/course")({
   head: () => ({ meta: [{ title: "Songwriting course — Fretlab" }] }),
@@ -73,6 +74,25 @@ export function CoursePage() {
       return { ...x, topics, lessons: next.lessonId ? { ...x.lessons, [next.lessonId]: today } : x.lessons };
     });
   };
+  const copyText = async (t: string): Promise<boolean> => {
+    try {
+      await navigator.clipboard.writeText(t);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const toggleLesson = (id: string, covers: number[], mod: number) =>
+    update((x) => {
+      const lessons = { ...x.lessons };
+      const topics = { ...x.topics };
+      if (lessons[id]) delete lessons[id];
+      else {
+        lessons[id] = today;
+        for (const i of covers) topics[topicKey(mod, i)] = true;
+      }
+      return { ...x, lessons, topics };
+    });
   const copyRequest = async () => {
     if (!next) return;
     try {
@@ -162,7 +182,6 @@ export function CoursePage() {
           {MODULES.map((m) => {
             const mp = moduleProgress(m, p);
             const isOpen = open === m.id;
-            const delivered = DELIVERED.filter((l) => l.module === m.id);
             return (
               <div key={m.id} className="panel p-3" data-testid={`module-${m.id}`}>
                 <button type="button" className="flex w-full items-center gap-2 text-left" onClick={() => setOpen(isOpen ? null : m.id)} aria-expanded={isOpen}>
@@ -192,20 +211,23 @@ export function CoursePage() {
                         );
                       })}
                     </ul>
-                    {delivered.map((l) => (
-                      <div key={l.id} className="space-y-1 rounded-md border border-border/70 p-2 text-xs" data-testid={`lesson-${l.id}`}>
-                        <div className="font-bold">
-                          Lesson {l.id.split(".")[1]}: {l.title} <span className="font-normal text-muted-foreground">· done{p.lessons[l.id] ? ` ${p.lessons[l.id]}` : ""}</span>
-                        </div>
-                        <div className="text-muted-foreground">Covered: {l.covered.join("; ")}.</div>
-                        <div className="text-muted-foreground">Assignment: {l.assignment.join("; ")}.</div>
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-[11px] uppercase tracking-widest text-muted-foreground">Lessons</div>
+                        <Button size="sm" variant="secondary" className="h-7 gap-1 text-[11px]" onClick={() => void copyText(modulePrompt(m))} data-testid={`copy-module-${m.id}`}>
+                          <ClipboardCopy className="h-3 w-3" /> Copy whole module for chat
+                        </Button>
                       </div>
-                    ))}
-                    {m.id === NEXT_PLANNED.module ? (
-                      <div className="rounded-md border border-dashed border-border p-2 text-xs text-muted-foreground">
-                        Lesson 4 (planned): {NEXT_PLANNED.title}{p.lessons[NEXT_PLANNED.id] ? ` · done ${p.lessons[NEXT_PLANNED.id]}` : ""}
-                      </div>
-                    ) : null}
+                      {lessonsFor(m.id).map((l) => (
+                        <LessonCard
+                          key={l.id}
+                          lesson={l}
+                          done={p.lessons[l.id]}
+                          onToggleDone={() => toggleLesson(l.id, l.covers, m.id)}
+                          onCopy={() => copyText(lessonPrompt(l))}
+                        />
+                      ))}
+                    </div>
                     {m.id === 8 ? (
                       <div className="space-y-1 rounded-md border border-border/70 p-2 text-xs" data-testid="caged-crosswalk">
                         <div className="font-bold">Where CAGED lives in Fretlab (Explore → CAGED)</div>
@@ -233,6 +255,16 @@ export function CoursePage() {
                         ))}
                       </ul>
                     </div>
+                    {SOURCES[m.id] ? (
+                      <div className="space-y-0.5 text-[11px] text-muted-foreground" data-testid={`sources-${m.id}`}>
+                        <div className="uppercase tracking-widest">Further reading (lessons are paraphrased)</div>
+                        {SOURCES[m.id]!.map((x) => (
+                          <a key={x.title} href={x.url} target="_blank" rel="noreferrer" className="block underline">
+                            {x.title}
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
                     <label className="block space-y-1">
                       <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Your notes and assignment drafts (kept on this device)</span>
                       <textarea

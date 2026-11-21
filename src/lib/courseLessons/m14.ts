@@ -1,0 +1,45 @@
+import { lesson } from "./types";
+
+export const M14 = [
+  lesson({
+    id: "14.1", module: 14, title: "Analysing complete songs",
+    blurb: "Take a song apart and name why it works.",
+    goals: ["Analyse harmony, melody and rhythm", "Spot devices and genre techniques", "Explain why a song works"],
+    ideas: [
+      { title: "Analyse in layers", body: "Form, then harmony, melody, rhythm, arrangement, production. One layer per pass." },
+      { title: "Name the devices", body: "Which cadences, modes, borrowed chords, motifs, rhythmic patterns appear?" },
+      { title: "Ask why", body: "What effect does each choice have, and what would change if you swapped it?" },
+      { title: "Genre vocabulary", body: "Each genre has typical devices; note where the song follows or breaks them." },
+    ],
+    guitar: "Work out the chords by ear and map them in Explore to see their functions.",
+    band: "List each instrument's role in each section.",
+    why: "Analysis turns listening into a toolbox for writing.",
+    mistakes: ["Describing without explaining", "Only analysing harmony", "Copying instead of understanding"],
+    listen: ["Choose one song you love and do a full layer-by-layer pass"],
+    practice: ["Write a one-page analysis"],
+    assignment: ["Analyse a song of your choice by layers", "Name three devices and their effects", "Say what you'd borrow as a principle, not as notes"],
+    covers: [0, 1, 2, 3],
+    next: "Combining concepts and developing identity.",
+  }),
+  lesson({
+    id: "14.2", module: 14, title: "Combining concepts, identity and self-evaluation",
+    blurb: "Bring everything together and write with intention.",
+    goals: ["Combine harmony, melody, rhythm and arrangement", "Define a personal sound", "Evaluate and refine your own work"],
+    ideas: [
+      { title: "Combine deliberately", body: "Pick two or three concepts per song rather than all of them." },
+      { title: "Identity is repeated choices", body: "Your preferred modes, rhythms, textures and structures become a signature over time." },
+      { title: "Evaluate against intent", body: "Compare what you hear to what you meant. List the gaps." },
+      { title: "Refine with constraints", body: "Remove one element, simplify one part, change one section's feel." },
+      { title: "Intention over habit", body: "For each choice ask: is this a decision or a default?" },
+    ],
+    guitar: "Revisit an old riff and rewrite it with a different mode, rhythm or register.",
+    band: "Do a review session where each member explains their part's job.",
+    why: "It turns learning into a repeatable writing process.",
+    mistakes: ["Using every technique", "No feedback loop", "Mistaking habit for style"],
+    listen: ["Compare your earliest and latest demo and name what changed"],
+    practice: ["Write a checklist for self-review"],
+    assignment: ["Write a complete short song (your own) with a stated intent", "Evaluate it against the intent", "Revise one section and note the result"],
+    covers: [4, 5, 6, 7],
+    next: "Course complete: choose a project and keep writing.",
+  }),
+];

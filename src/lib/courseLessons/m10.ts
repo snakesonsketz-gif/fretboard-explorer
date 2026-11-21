@@ -1,0 +1,45 @@
+import { lesson } from "./types";
+
+export const M10 = [
+  lesson({
+    id: "10.1", module: 10, title: "Drum roles, grooves and subdivision",
+    blurb: "Give each part of the kit a job and build a groove from them.",
+    goals: ["Know each drum's role", "Build a basic groove", "Use accents and subdivision"],
+    ideas: [
+      { title: "Kit roles", body: "Kick: low pulse and syncopation. Snare: backbeat and punctuation. Hi-hat: subdivision and feel. Cymbals: energy and section markers. Toms: fills and colour." },
+      { title: "The backbeat", body: "Snare on 2 and 4 in 4/4 is the standard anchor. Moving it changes the feel entirely (half-time puts it on 3)." },
+      { title: "Subdivision sets the feel", body: "Eighth-note hats feel steady, sixteenths feel busy or funky, triplets feel swung or rolling." },
+      { title: "Accents and ghost notes", body: "Louder and softer hits give the groove shape. Ghost notes add movement without clutter." },
+    ],
+    guitar: "Match the guitar's rhythm to kick placement so the two lock.",
+    band: "The bass and kick agree on the low pulse; guitar fills the spaces the drums leave.",
+    why: "Groove is the foundation; a clear structure lets everything else sit on top.",
+    mistakes: ["Playing all limbs on every beat", "No dynamic variation", "Over-busy hats"],
+    listen: ["Isolate the kick and snare pattern in a song you like"],
+    practice: ["Write three grooves with the same snare and different kicks", "Change only the hat subdivision"],
+    assignment: ["Write a one-bar groove for a chosen riff (notation or description)", "Explain each limb's job", "Write a half-time version and describe the change"],
+    covers: [0, 1, 2, 3],
+    next: "Fills, dynamics and supporting the song.",
+  }),
+  lesson({
+    id: "10.2", module: 10, title: "Fills, dynamics, feels and supporting the song",
+    blurb: "Use fills and dynamics to shape sections without overcrowding.",
+    goals: ["Write fills that lead somewhere", "Use dynamics", "Change feel at the same tempo", "Support riffs and vocals"],
+    ideas: [
+      { title: "Fills are transitions", body: "They announce the next section. Keep them short and lead them into a downbeat, often a crash on beat 1." },
+      { title: "Dynamics", body: "Softer verses, stronger choruses, with changes in hat or ride, cymbal choice and rimshot or side-stick." },
+      { title: "Feel at same tempo", body: "Half-time, double-time and shuffle can change the energy without changing the BPM." },
+      { title: "Follow the riff", body: "Match the guitar's rhythmic accents with kick, or contrast them for tension." },
+      { title: "Leave room", body: "Vocal sections need simpler drums; busy patterns compete with the voice." },
+    ],
+    guitar: "Check where your riff accents fall and place kick hits there.",
+    band: "Agree on a signal for build-ups: drums add, guitars thicken, bass pushes.",
+    why: "Drums control the song's energy more than any other instrument.",
+    mistakes: ["Fill every bar", "Same volume everywhere", "Ignoring the vocal"],
+    listen: ["Find a fill that sets up a chorus and note its length"],
+    practice: ["Write four one-bar fills into a crash", "Play a groove at three dynamic levels"],
+    assignment: ["Plan the drum part for verse, pre-chorus and chorus of your song", "Mark fills and dynamics", "Explain how drums leave space for the vocal"],
+    covers: [4, 5, 6, 7, 8],
+    next: "Module 11: bass.",
+  }),
+];
