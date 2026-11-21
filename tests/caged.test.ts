@@ -81,3 +81,33 @@ describe("modes on CAGED", () => {
     expect(mapSetInWindow(std, new Set([2]), 0, 3)[1]!.map((m) => m.fret)).toEqual([]);
   });
 });
+
+import { ROOTS, SCALES } from "../src/lib/theory";
+import { modeChanges, modeTargets, simpleDegree } from "../src/lib/caged";
+
+describe("1–7 labels and mode targets", () => {
+  const C = ROOTS.find((r) => r.name === "C")!;
+  const deg = (id: string) => SCALES.find((s) => s.id === id)!.degrees;
+  test("extension numbers fold back to scale numbers", () => {
+    expect(simpleDegree("9")).toBe("2");
+    expect(simpleDegree("b9")).toBe("b2");
+    expect(simpleDegree("#11")).toBe("#4");
+    expect(simpleDegree("13")).toBe("6");
+    expect(simpleDegree("b3")).toBe("b3");
+  });
+  test("each mode's target notes are its own 1-3-5-7", () => {
+    expect(modeTargets(C, deg("dorian"))!.notes).toEqual(["C", "Eb", "G", "Bb"]);
+    expect(modeTargets(C, deg("lydian"))!.notes).toEqual(["C", "E", "G", "B"]);
+    expect(modeTargets(C, deg("mixolydian"))!.chordName).toMatch(/7/);
+  });
+  test("mixolydian to dorian changes only the 3rd (and says it is a target)", () => {
+    const ch = modeChanges(C, deg("mixolydian"), deg("dorian"));
+    expect(ch.map((c) => c.place)).toEqual(["3rd"]);
+    expect(ch[0]).toMatchObject({ from: "E", to: "Eb", target: true });
+  });
+  test("ionian to lydian changes only the 4th, which is not a target", () => {
+    const ch = modeChanges(C, deg("ionian"), deg("lydian"));
+    expect(ch).toHaveLength(1);
+    expect(ch[0]).toMatchObject({ place: "4th", from: "F", to: "F#", target: false });
+  });
+});

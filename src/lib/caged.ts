@@ -1,5 +1,6 @@
 import type { Tuning } from "./fretboard";
 import { CAGED_TEMPLATES } from "./voicings";
+import { degreesToPitchClasses, identify, ownChord, parseDegree, spellDegree, type Degree, type Root } from "./theory";
 
 /**
  * CAGED positions. Each form is located by the string that carries its root
@@ -176,5 +177,59 @@ export function tonicsInWindow(tuning: Tuning, tonicPc: number, from: number, to
   tuning.strings.forEach((s, si) => {
     for (let f = from; f <= to; f++) if ((s.pc + f) % 12 === tonicPc) out.push({ string: si, fret: f });
   });
+  return out;
+}
+
+// ---- 1–7 labels and mode target notes
+
+/** A degree as a plain scale number: 9→2, 11→4, 13→6 (accidentals kept). */
+export function simpleDegree(d: string): string {
+  const m = d.trim().match(/^([b#x♭♯]*)(\d{1,2})$/);
+  if (!m) return d;
+  return `${m[1]}${((Number(m[2]) - 1) % 7) + 1}`;
+}
+
+const NAME_OF = (n: number) => ["", "root", "2nd", "3rd", "4th", "5th", "6th", "7th"][n]!;
+
+export interface ModeTargets {
+  /** The 1-3-5-7 of the mode, as degrees and as note names. */
+  degrees: Degree[];
+  notes: string[];
+  /** The chord those notes make, e.g. "Cm7". */
+  chordName: string;
+}
+
+export interface ModeChange {
+  degree: string;
+  from: string;
+  to: string;
+  /** e.g. "3rd" */
+  place: string;
+  /** true when the note is one of the 1-3-5-7 target notes in the new mode */
+  target: boolean;
+}
+
+/** The target (chord) notes of a mode over its root. */
+export function modeTargets(root: Root, scaleDegrees: Degree[]): ModeTargets | null {
+  const own = ownChord(scaleDegrees);
+  if (!own) return null;
+  const det = identify(root, degreesToPitchClasses(own), "chord");
+  return {
+    degrees: own,
+    notes: own.map((d) => spellDegree(root, d)),
+    chordName: det.known?.name ?? `${root.name} (${det.formula})`,
+  };
+}
+
+/** Which notes change (by scale number) when a root moves from one scale/mode to another. */
+export function modeChanges(root: Root, from: Degree[], to: Degree[]): ModeChange[] {
+  const targets = new Set(ownChord(to) ?? []);
+  const out: ModeChange[] = [];
+  for (let n = 1; n <= 7; n++) {
+    const a = from.find((d) => parseDegree(d).number === n);
+    const b = to.find((d) => parseDegree(d).number === n);
+    if (!a || !b || a === b) continue;
+    out.push({ degree: b, from: spellDegree(root, a), to: spellDegree(root, b), place: NAME_OF(n), target: targets.has(b) });
+  }
   return out;
 }

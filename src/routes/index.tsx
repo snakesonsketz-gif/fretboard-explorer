@@ -40,7 +40,7 @@ import { DegreeAlter } from "@/components/DegreeAlter";
 import { ModeFamily } from "@/components/ModeFamily";
 import { IdentifierPanel } from "@/components/IdentifierPanel";
 import { CircleOfFifths } from "@/components/CircleOfFifths";
-import { cagedPositions, visiblePositions, scaleWindow, mapSetInWindow, formShapeFor, connection, stepIndex, modeInfo, parentKeyPc, tonicsInWindow } from "@/lib/caged";
+import { cagedPositions, visiblePositions, scaleWindow, mapSetInWindow, formShapeFor, connection, stepIndex, modeInfo, parentKeyPc, tonicsInWindow, simpleDegree, modeTargets, modeChanges } from "@/lib/caged";
 import { pathwayKeys, orderedPathway, type Pathway } from "@/lib/fretboard";
 import type { ModeRotation } from "@/lib/modes";
 import { moveDegreeInSet, pcOf, togglePc, sortDegrees, CANONICAL } from "@/lib/edit";
@@ -232,6 +232,7 @@ export function Workstation() {
   const cagedArp = mode === "arpeggio" ? degrees : arp.transform(cagedChord);
   // Modes of the major scale: the same notes fit the parent key's five shapes, so the shapes can come from either the mode's root or its parent key.
   const [cagedBase, setCagedBase] = useState<"mode" | "parent">("mode");
+  const [prevMode, setPrevMode] = useState("ionian");
   const modeMeta = mode === "scale" && !custom ? modeInfo(scaleId) : undefined;
   const parentPc = modeMeta ? parentKeyPc(root.pc, modeMeta.step) : root.pc;
   const parentName = (modeMeta ? [7, 2, 9, 4, 11, 6].includes(parentPc) ? SHARP_ROOTS : PREFERRED_ROOTS : PREFERRED_ROOTS)[parentPc]!;
@@ -259,10 +260,14 @@ export function Workstation() {
   const overlay = useMemo(() => {
     if (!overlayChord) return undefined;
     const byPc = new Map<number, { role: OverlayRole; label: Degree }>();
-    for (const [pc, v] of chordScaleOverlay(fbDegrees, overlayChord)) byPc.set((pc + root.pc) % 12, v);
+    for (const [pc, v] of chordScaleOverlay(fbDegrees, overlayChord)) {
+      // In CAGED the non-chord notes are numbered as plain scale degrees (2 4 6, b3 …), not 9 / 11 / 13.
+      const own = fbDegrees.find((d) => pcOf(d) === pc);
+      byPc.set((pc + root.pc) % 12, cagedOn && v.role !== "chord" ? { ...v, label: simpleDegree(own ?? v.label) } : v);
+    }
     return byPc;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fbDegrees.join(), overlayChord?.join(), root.pc]);
+  }, [fbDegrees.join(), overlayChord?.join(), root.pc, cagedOn]);
   const overlayGroups = useMemo(() => {
     const g: Record<OverlayRole, string[]> = { chord: [], extension: [], other: [] };
     if (overlay) for (const v of [...overlay.values()].sort((a, b) => degreeToSemitones(a.label) - degreeToSemitones(b.label))) g[v.role].push(v.label);
@@ -937,7 +942,7 @@ export function Workstation() {
               {overlayGroups.extension.length ? (
                 <span className="flex items-center gap-1">
                   <span className="h-3 w-3 rounded-full bg-extension" />
-                  extensions <span className="font-mono">{overlayGroups.extension.map(pretty).join(" ")}</span>
+                  {cagedOn ? "scale notes" : "extensions"} <span className="font-mono">{overlayGroups.extension.map(pretty).join(" ")}</span>
                 </span>
               ) : null}
               {overlayGroups.other.length ? (
@@ -995,6 +1000,49 @@ export function Workstation() {
                     </Button>
                   </div>
                 ) : null}
+                <div className="space-y-1" data-testid="caged-modes">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{pretty(root.name)} mode</span>
+                    {MAJOR_MODES.map((id) => (
+                      <Button key={id} size="sm" variant={modeMeta && scaleId === id ? "default" : "secondary"} className="h-7 px-2 text-xs capitalize"
+                        onClick={() => {
+                          if (modeMeta && scaleId !== id) setPrevMode(scaleId);
+                          setCagedLayer("scale");
+                          pickScale(id);
+                        }}>
+                        {id}
+                      </Button>
+                    ))}
+                  </div>
+                  {(() => {
+                    if (!modeMeta) return <p className="text-[11px] text-muted-foreground">Pick a mode to see its target notes.</p>;
+                    const tg = modeTargets(root, degrees);
+                    const prev = SCALES.find((x) => x.id === prevMode && x.id !== scaleId);
+                    const ch = prev ? modeChanges(root, prev.degrees, degrees) : [];
+                    return (
+                      <div className="space-y-0.5 text-[11px] text-muted-foreground" data-testid="caged-targets">
+                        {tg ? (
+                          <p>
+                            Target notes in {pretty(root.name)} {scaleId}:{" "}
+                            <span className="font-mono text-foreground">{tg.notes.map((n, i) => `${pretty(simpleDegree(tg.degrees[i]!))}=${pretty(n)}`).join("  ")}</span>
+                            {" "}({pretty(tg.chordName)}). Land on these; the other notes are for passing through.
+                          </p>
+                        ) : null}
+                        {prev ? (
+                          ch.length ? (
+                            <p>
+                              From {pretty(root.name)} {prev.id}:{" "}
+                              {ch.map((c) => `${c.place} ${pretty(c.from)}→${pretty(c.to)}${c.target ? " (a target note now)" : " (passing note)"}`).join("; ")}.
+                              Everything else stays put.
+                            </p>
+                          ) : (
+                            <p>Same notes as {pretty(root.name)} {prev.id}.</p>
+                          )
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+                </div>
                 <details className="text-[11px] text-muted-foreground" data-testid="caged-guide">
                   <summary className="cursor-pointer select-none">How CAGED works{modeMeta ? ` with ${pretty(root.name)} ${scaleId}` : ""}</summary>
                   <div className="mt-1 space-y-1">
@@ -1040,7 +1088,7 @@ export function Workstation() {
                 <p className="font-mono text-xs" data-testid="caged-info">
                   {cagedPos.form} shape · {useParent ? `${pretty(parentName)} major's root` : "root"} on {pretty(tuning.strings[cagedPos.rootString]!.note)} string fret {cagedPos.rootFret} · {pretty(root.name)} chord tones{" "}
                   {cagedChord.map((d) => `${pretty(d)}=${pretty(spellDegree(root, d))}`).join("  ")}
-                  {cagedLayer !== "chord" ? " · green = extensions (9/11/13), small grey = other tones" : ""}
+                  {cagedLayer !== "chord" ? " · green = scale notes 2 / 4 / 6, small grey = passing tones" : ""}
                 </p>
                 {(() => {
                   const form = !useParent && cagedLayer === "chord" ? formShapeFor(tuning, cagedPos, new Set(degreesToPitchClasses(cagedChord))) : null;
