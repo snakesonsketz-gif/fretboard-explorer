@@ -46,3 +46,7 @@ Approved order: tests → tabs → shared timing engine → chord sequencer → 
 ## 1g. Genre sounds and guitar voices (build 59)
 - Module 22 added: 11 lessons (blues, classic/hard rock, metal, alt/grunge, funk, bluegrass/country, neoclassical, how to study a guitarist, then 15 guitarist studies in three groups), each with a deep layer and sources.
 - Paraphrased research only; no riffs, licks or progressions supplied.
+
+## 1h. Guitarist studies (build 60)
+- Module 23: 45 guitarist studies, one lesson each (story, rig, scales and harmony, touch, rhythm/band role, what set them apart), each with a deep layer, method and self-check. Replaces the three grouped lessons in module 22.
+- Gear and technique details are paraphrased from memory plus research and should be fact-checked before being treated as authoritative.

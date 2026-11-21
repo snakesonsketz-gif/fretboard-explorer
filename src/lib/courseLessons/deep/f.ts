@@ -113,46 +113,4 @@ export const DEEP_F: DeepMap = {
       ["How do you know a principle is learned?", "You can apply it in a different context."],
     ],
   },
-  "22.9": {
-    dive: [
-      ["Soul behind the rock", "Berry's rhythm came from piano boogie, King's phrasing from singing and horns, Hendrix's rhythm from soul sessions. Each translated another instrument's job to guitar."],
-      ["Tone from the guitar's controls", "Clapton and Vaughan show that volume and tone knobs, pickup choice and picking strength produce dramatic changes before any pedal."],
-      ["Chord-melody and dominant colour", "Hendrix treated a 7#9 or a fretted bass note with embellishments as a complete texture. Static, parallel dominants with pentatonic lines over them became a signature."],
-      ["Rhythm and lead as one", "Berry and Vaughan play bass notes, chords and lead lines in one flow. In a trio this fills the space a missing instrument would occupy."],
-    ],
-    method: ["Pick two players from the list", "Write their four boxes and one-sentence difference", "Choose one principle from each", "Write your own phrase combining the principles", "Mark what is borrowed and what is original"],
-    check: [
-      ["What did Berry take from piano boogie?", "A steady low-string rhythm pattern."],
-      ["How does Clapton get the 'woman tone'?", "Neck pickup, tone control rolled back, volume up, through an overdriven amp."],
-      ["What made Hendrix's rhythm style distinctive?", "Thumb-over-the-neck bass notes with embellished chord-melody."],
-    ],
-  },
-  "22.10": {
-    dive: [
-      ["Hard rock built on blues", "Slash and Zakk Wylde draw on blues pentatonic with heavy gain. The difference is phrasing: Slash sings a melody, Zakk uses harmonic squeals and flurries."],
-      ["Classical discipline in metal", "Rhoads used study, structure and tapped arpeggios to give metal a composed quality. Vai extended that with orchestral thinking."],
-      ["Rhythm as the identity", "Dimebag's riffs are rhythmic first: syncopated, muted and punctuated by harmonics. Van Halen's rhythm swings and leaves space."],
-      ["Technique as colour", "Tapping, harmonics and whammy are part of each player's palette. They work best placed at moments of surprise inside a clear musical idea."],
-    ],
-    method: ["Pick two players with different approaches", "Write what each does with a minor pentatonic phrase", "Choose one technique to use sparingly", "Write the rhythm of your riff before pitches", "Check each technique serves the song"],
-    check: [
-      ["What made Rhoads distinctive?", "Classical structure and harmonic minor ideas in metal."],
-      ["How did Slash's solos differ from pure speed?", "They are built like singable melodies."],
-      ["What does Dimebag's style start from?", "Syncopated rhythmic riffs."],
-    ],
-  },
-  "22.11": {
-    dive: [
-      ["Playing for the vocal", "Mayer and Frusciante shape guitar parts around the voice and bass. Small fills and sparse chords make room for the song."],
-      ["Harmonic fluency", "Govan's headline skill is choosing notes that fit each chord and moving between modes smoothly. It comes from knowing chord tones, not from speed."],
-      ["Traditional technique, new setting", "Billy Strings applies fiddle-tune flatpicking and bluegrass timing to jam and heavy contexts. The deep technical base lets the genre-crossing sound coherent."],
-      ["Simplicity as a choice", "Frusciante's single-note lines and triad parts are simple on purpose. Choosing the simplest effective part is a compositional skill."],
-    ],
-    method: ["Pick one player and three songs", "Write the four boxes", "Find the principle that serves the vocal or the groove", "Apply it to a small part in your own song", "Compare with the original idea and note what is yours"],
-    check: [
-      ["What is Govan's main strength?", "Harmonic and rhythmic fluency across styles."],
-      ["How does Billy Strings combine genres?", "Applying bluegrass flatpicking to rock and jam contexts."],
-      ["What does Frusciante's playing prioritise?", "Simple, memorable, groove-oriented parts."],
-    ],
-  },
 };

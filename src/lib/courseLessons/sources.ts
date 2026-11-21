@@ -90,4 +90,11 @@ export const SOURCES: Record<number, Source[]> = {
     { title: "Guitar Player", url: "https://www.guitarplayer.com/" },
     { title: "Marshall Backstage", url: "https://www.marshall.com/" },
   ],
+  23: [
+    { title: "Guitar World", url: "https://www.guitarworld.com/" },
+    { title: "Premier Guitar", url: "https://www.premierguitar.com/" },
+    { title: "Guitar Player", url: "https://www.guitarplayer.com/" },
+    { title: "MusicRadar", url: "https://www.musicradar.com/" },
+    { title: "Marshall Backstage", url: "https://www.marshall.com/" },
+  ],
 };
