@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { playChord } from "@/lib/audio";
 import { engine } from "@/lib/engine";
+import { ALTER_ROWS, degreeAt, withDegree } from "@/lib/chordAlter";
 import { emptyJam, jamArrangement, jamPosition, makeChord } from "@/lib/jam";
 import { openInExplore } from "@/lib/exploreLink";
 import {
@@ -343,6 +344,40 @@ export function ProgressionPage() {
                 </Button>
               </div>
             </div>
+          ) : null}
+
+          {picked ? (
+            <details className="rounded-xl border border-border bg-card/40 p-2" data-testid="prog-alter">
+              <summary className="cursor-pointer text-xs font-semibold">Change notes in {pretty(chordLabel(picked.rootName, picked.chordId, picked.bassName))} (♭5, ♯9, leave out the 3rd…)</summary>
+              <div className="mt-2 space-y-1.5">
+                {ALTER_ROWS.map((row) => {
+                  const have = degreeAt(picked.chordId, row.n);
+                  return (
+                    <div key={row.n} className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="w-9 text-muted-foreground">{row.label}</span>
+                      {row.options.map((o) => (
+                        <Button
+                          key={o ?? "off"}
+                          size="sm"
+                          variant={have === o ? "default" : "secondary"}
+                          className="h-7 min-w-9 px-2 text-xs"
+                          aria-pressed={have === o}
+                          data-testid={`prog-alter-${row.n}-${o ?? "off"}`}
+                          onClick={() => {
+                            const id = withDegree(picked.chordId, row.n, o);
+                            if (!id) return flash("A chord needs at least two notes.");
+                            setChords((cs) => cs.map((c, i) => (i === cur ? { ...c, chordId: id, from: undefined } : c)));
+                            hear(picked.rootName, id);
+                          }}
+                        >
+                          {o === null ? "off" : o.replace(/b/g, "♭").replace(/#/g, "♯")}
+                        </Button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
           ) : null}
 
           <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); applyText(); }}>

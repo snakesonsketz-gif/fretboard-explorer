@@ -6,6 +6,7 @@
  */
 import { CHORDS, ROOTS, SCALES, degreeToSemitones, rootByName, spellDegree, type ChordDef, type ScaleDef } from "@/lib/theory";
 import { rootFor } from "@/lib/modes";
+import { chordIdForSet, resolveChord } from "@/lib/chordAlter";
 import { newId } from "@/lib/timeline";
 
 export type Fn = "tonic" | "subdominant" | "dominant";
@@ -42,7 +43,7 @@ export const FN_MEANING: Record<Fn, string> = {
 /** Seven-note scales usable as a key / mode. */
 export const KEY_MODES: ScaleDef[] = SCALES.filter((s) => s.degrees.length === 7);
 export const modeDef = (id: string): ScaleDef => KEY_MODES.find((s) => s.id === id) ?? KEY_MODES[0]!;
-export const chordById = (id: string): ChordDef => CHORDS.find((c) => c.id === id) ?? CHORDS[0]!;
+export const chordById = (id: string): ChordDef => resolveChord(id) ?? CHORDS[0]!;
 
 const pc12 = (n: number) => ((n % 12) + 12) % 12;
 const sameSet = (a: number[], b: number[]) => a.length === b.length && a.every((x) => b.includes(x));
@@ -66,7 +67,7 @@ export function chordIdForIntervals(intervals: number[]): string | null {
 }
 
 /** Chord type from a list of degrees (e.g. an Explore song slot), by its sound. */
-export const chordIdForDegrees = (degrees: string[]): string | null => chordIdForIntervals(degrees.map((d) => degreeToSemitones(d)));
+export const chordIdForDegrees = (degrees: string[]): string | null => chordIdForSet(degrees);
 
 /* ------------------------------------------------------------------ roman numerals and function */
 

@@ -137,3 +137,61 @@ describe("flatten and sharpen", () => {
     expect(analyze("C", "ionian", "Bb", "maj").roman).toBe("bVII");
   });
 });
+
+import { resolveChord, withDegree, chordIdForSet, parseAlteredSuffix, applyAlterations } from "@/lib/chordAlter";
+import { parseChordName } from "@/lib/tabs/chords";
+import { parseProgression, makeChord, chordDef } from "@/lib/jam";
+
+describe("altering notes in a chord", () => {
+  test("lands on a known type when one matches", () => {
+    expect(withDegree("7", 5, "b5")).toBe("7b5");
+    expect(withDegree("min", 5, "b5")).toBe("dim");
+    expect(withDegree("7", 5, "#5")).toBe("7s5");
+    expect(withDegree("maj", 3, "b3")).toBe("min");
+  });
+  test("otherwise makes a custom chord with a readable name", () => {
+    const id = withDegree("m7b5", 9, "#9")!;
+    expect(id.startsWith("x:")).toBe(true);
+    const d = resolveChord(id)!;
+    expect(d.degrees).toEqual(["1", "b3", "b5", "b7", "#9"]);
+    expect(d.suffix).toBe("m7b5(#9)");
+    expect(withDegree(id, 9, null)).toBe("m7b5");
+    expect(withDegree("5", 5, null)).toBeNull();
+  });
+  test("names parse back to the same notes", () => {
+    const d = parseAlteredSuffix("m7b5(#9)")!;
+    expect(d.degrees).toEqual(["1", "b3", "b5", "b7", "#9"]);
+    const p = parseChordName("Cm7b5(#9)")!;
+    expect(p.def.degrees).toEqual(d.degrees);
+    expect(parseChordName(`C${p.def.suffix}`)!.def.id).toBe(p.def.id);
+    expect(parseChordName("C7(b5#9)")!.def.degrees).toEqual(["1", "3", "b5", "b7", "#9"]);
+    expect(parseChordName("Cm7(no5)")?.def.degrees).toEqual(["1", "b3", "b7"]);
+    expect(parseChordName("C7(zz)")).toBeNull();
+  });
+  test("every custom chord name parses back to itself", () => {
+    const ids = ["maj", "7", "m7", "m7b5", "maj7", "9", "min"].flatMap((b) => [5, 9, 7, 3].flatMap((n) => ["b5", "#5", "#9", "b9", "b7", "7", "3", "b3", null].map((o) => withDegree(b, n, o)))).filter((x): x is string => !!x && x.startsWith("x:"));
+    expect(ids.length).toBeGreaterThan(10);
+    for (const id of ids) {
+      const d = resolveChord(id)!;
+      expect(parseChordName(`C${d.suffix}`)?.def.id).toBe(id);
+    }
+  });
+  test("applyAlterations replaces only the original notes", () => {
+    expect(applyAlterations(["1", "3", "5", "b7"], ["b9", "#9"])).toEqual(["1", "3", "5", "b7", "b9", "#9"]);
+  });
+  test("works in Jam, the progression text and every transfer", () => {
+    const j = parseProgression("Am7 D7(b5,#9) G", 4);
+    expect(j.chords.length).toBe(3);
+    expect(j.bad).toEqual([]);
+    expect(chordDef(j.chords[1]!.chordId).degrees).toContain("#9");
+    const c = makeChord("D", chordIdForSet(["1", "3", "b5", "b7", "#9"])!, 4);
+    expect(c.layers[0]!.chordId).toBe(c.chordId);
+    const prog = { ...emptyProgression(), chords: textToChords("Am7 D7(b5#9) G", 4).chords };
+    expect(progressionToText(prog)).toBe("Am7 D7(b5,#9) G");
+    const back = jamToProg(progToJam(prog));
+    expect(progressionToText(back)).toBe(progressionToText(prog));
+    expect(songToProg(progToSong(prog)).prog.chords[1]!.chordId).toBe(prog.chords[1]!.chordId);
+    expect(arrangementToProg(progToArrangement(prog)).prog.chords[1]!.chordId).toBe(prog.chords[1]!.chordId);
+    expect(analyze("C", "ionian", "D", prog.chords[1]!.chordId).fn).toBe("dominant");
+  });
+});

@@ -64,3 +64,7 @@ Approved order: tests → tabs → shared timing engine → chord sequencer → 
 ## 1k — Flatten / sharpen chords (build 63)
 - Progression builder: ♭ and ♯ buttons on the selected chord move it a semitone (slash bass too); numeral and function update.
 - Next: 1l, build 64.
+
+## 1l — Change notes inside a chord (build 64)
+- Progression builder: "Change notes" panel on the selected chord — flat/natural/sharp or leave out the 3rd, 5th, 7th, 9th, 11th, 13th. Results that match a known chord type use it (m + ♭5 = dim); others become custom chords ("x:" ids) named like C7(b5,#9) that Jam, Explore songs, the Sequencer and chord-name typing all understand. Jam's chord box no longer splits names on commas inside brackets.
+- Next: 1m, build 65.

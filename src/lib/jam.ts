@@ -2,6 +2,7 @@
  * Jam: a chord progression you type or pick, played back on a loop with drums, and for each
  * chord one or more scales / arpeggios to solo with. Pure (no audio, no DOM) so it can be tested.
  */
+import { resolveChord } from "@/lib/chordAlter";
 import { parseChordName } from "@/lib/tabs/chords";
 import { ARPEGGIO_VARIANTS, CHORDS, ROOTS, SCALES, degreeToSemitones, rootByName, type Degree } from "@/lib/theory";
 import { beatTicks, emptyLanes, newId, type Arrangement, type ChordEvent, type DrumLane, type DrumVoice, type Grid, type TimeSig } from "@/lib/timeline";
@@ -58,7 +59,7 @@ export const JAM_STORAGE_KEY = "fretlab.jam.v1";
 
 export const emptyJam = (): Jam => ({ chords: [], bpm: 90, beatsPerBar: 4, drums: "rock", metronome: false, everywhere: [], chordsOn: true });
 
-export const chordDef = (id: string) => CHORDS.find((c) => c.id === id) ?? CHORDS[0]!;
+export const chordDef = (id: string) => resolveChord(id) ?? CHORDS[0]!;
 export const scaleDef = (id: string | undefined) => SCALES.find((s) => s.id === id) ?? SCALES[0]!;
 export const variantDef = (id: string | undefined) => ARPEGGIO_VARIANTS.find((v) => v.id === id) ?? ARPEGGIO_VARIANTS[0]!;
 
@@ -80,7 +81,8 @@ export function makeChord(rootName: string, chordId: string, beats: number, bass
 export function parseProgression(text: string, beatsPerBar: number): { chords: JamChord[]; bad: string[] } {
   const chords: JamChord[] = [];
   const bad: string[] = [];
-  for (const raw of text.split(/[\s,|]+/).filter(Boolean)) {
+  // Split on spaces, commas and bars — but not inside brackets, e.g. "D7(b5,#9)".
+  for (const raw of text.match(/(?:[^\s,|(]|\([^)]*\))+/g) ?? []) {
     const m = /^(.+?)(?:([:*x])(\d+(?:\.\d+)?))?$/.exec(raw);
     const name = m?.[1] ?? raw;
     const n = m?.[3] ? Number(m[3]) : null;

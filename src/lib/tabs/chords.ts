@@ -1,4 +1,5 @@
 /** Chord names → playable shapes on any tuning (open shapes on standard guitar, the chord finder otherwise). */
+import { parseAlteredSuffix } from "@/lib/chordAlter";
 import { CHORDS, ROOTS, degreeToSemitones, type ChordDef } from "@/lib/theory";
 import { findVoicings, type Shape } from "@/lib/voicings";
 import type { Tuning } from "@/lib/fretboard";
@@ -63,7 +64,7 @@ export function parseChordName(raw: string): ChordName | null {
   }
   for (const [re, to] of SUFFIX_ALIASES) if (re.test(rest)) rest = to;
   rest = rest.replace(/^minor\s*/i, "m").replace(/^major\s*/i, "maj");
-  const def = CHORDS.find((c) => c.suffix === rest) ?? CHORDS.find((c) => c.suffix.toLowerCase() === rest.toLowerCase());
+  const def = CHORDS.find((c) => c.suffix === rest) ?? CHORDS.find((c) => c.suffix.toLowerCase() === rest.toLowerCase()) ?? parseAlteredSuffix(rest);
   if (!def) return null;
   const label = `${rootName}${def.suffix}${bassPc !== null ? `/${ROOTS.find((r) => r.pc === bassPc && r.name.length === 1)?.name ?? slash![1]}` : ""}`;
   return { root, def, bassPc, label };
