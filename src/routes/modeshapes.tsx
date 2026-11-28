@@ -36,6 +36,7 @@ function ModeShapesPage() {
   const [tonic, setTonic] = useState(4);
   const [modeId, setModeId] = useState("mixolydian");
   const [anchor, setAnchor] = useState(DEFAULT_ANCHOR);
+  const [showAnchor, setShowAnchor] = useState(false);
   const [formPick, setFormPick] = useState<CagedForm | null>(null);
 
   const rel = useMemo(() => modeRelations(tonic, modeId, anchor)!, [tonic, modeId, anchor]);
@@ -56,8 +57,8 @@ function ModeShapesPage() {
     if (ti >= 0 && inChordWindow) shapeDots.push({ s: n.string, fret: n.fret, label: ["1", "3", "5"][ti]!, tone: "b", ring: ti === 0 });
     else shapeDots.push({ s: n.string, fret: n.fret, tone: "faint" });
   });
-  const from = Math.max(0, cur.from - 2);
-  const to = Math.min(24, cur.to + 3);
+  const from = 0;
+  const to = Math.min(24, Math.max(12, cur.to + 3));
   const hear = (s: number, f: number) => { const open = tt.midis[s]; if (open !== undefined) pluck(open + f); };
   const sorted = rel.rels.slice().sort((a, b) => a.from - b.from);
 
@@ -81,13 +82,22 @@ function ModeShapesPage() {
                 className={cn("h-8 rounded-md border px-2.5 text-sm font-semibold", m.id === modeId ? "border-primary bg-primary text-primary-foreground" : "border-border bg-secondary")}>{NAME[m.id]}</button>
             ))}
           </div>
-          <label className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            Measure from the {TONICS[tonic]} on the
-            <select className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground" value={anchor} onChange={(e) => setAnchor(Number(e.target.value))} data-testid="shapes-anchor">
-              {STRING_NAMES.map((n, i) => <option key={i} value={i}>{n} string</option>)}
-            </select>
-            <span>(fret {rel.tonicFret})</span>
-          </label>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <button type="button" aria-pressed={showAnchor} data-testid="shapes-anchor-toggle"
+              onClick={() => { setShowAnchor((v) => !v); if (showAnchor) setAnchor(DEFAULT_ANCHOR); }}
+              className={cn("h-8 rounded-md border px-2.5 text-sm font-semibold", showAnchor ? "border-primary bg-primary text-primary-foreground" : "border-border bg-secondary text-foreground")}>
+              Measure from…
+            </button>
+            {showAnchor ? (
+              <>
+                <span>the {TONICS[tonic]} on the</span>
+                <select className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground" value={anchor} onChange={(e) => setAnchor(Number(e.target.value))} data-testid="shapes-anchor">
+                  {STRING_NAMES.map((n, i) => <option key={i} value={i}>{n} string</option>)}
+                </select>
+                <span>(fret {rel.tonicFret})</span>
+              </>
+            ) : <span>D string by default</span>}
+          </div>
         </section>
 
         <section className="panel space-y-2 p-3 sm:p-4" data-testid="shapes-verdict">
