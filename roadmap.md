@@ -68,3 +68,8 @@ Approved order: tests → tabs → shared timing engine → chord sequencer → 
 ## 1l — Change notes inside a chord (build 64)
 - Progression builder: "Change notes" panel on the selected chord — flat/natural/sharp or leave out the 3rd, 5th, 7th, 9th, 11th, 13th. Results that match a known chord type use it (m + ♭5 = dim); others become custom chords ("x:" ids) named like C7(b5,#9) that Jam, Explore songs, the Sequencer and chord-name typing all understand. Jam's chord box no longer splits names on commas inside brackets.
 - Next: 1m, build 65.
+
+## 1m — Mode shapes: parallel modes vs CAGED (build 65)
+- New "Shapes" tab (/modeshapes): pick a tonic and a mode, see the CAGED shape of its parent key next to the actual modal pattern (intervals from the tonic), fret offsets for all five shapes, the shapes laid along the neck, and a table of all seven parallel modes on that tonic. Choose which string the offset is measured from (default D).
+- Tested over all 84 tonic × mode combinations: Ionian→D, Dorian→C, Mixolydian→G exact; Phrygian→A, Aeolian→E one fret off; Lydian→G (+2) and Locrian→C (+3) do not hold on the D string (closest: Lydian→A, Locrian→E −1). The existing CAGED system is untouched (only `FORMS` is now exported).
+- Next: 1n, build 66.

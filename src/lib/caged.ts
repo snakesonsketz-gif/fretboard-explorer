@@ -9,7 +9,7 @@ import { degreesToPitchClasses, identify, ownChord, parseDegree, spellDegree, ty
  */
 export type CagedForm = "C" | "A" | "G" | "E" | "D";
 
-const FORMS: Record<CagedForm, { rootString: number; lo: number; hi: number }> = {
+export const FORMS: Record<CagedForm, { rootString: number; lo: number; hi: number }> = {
   C: { rootString: 1, lo: -3, hi: 0 },
   A: { rootString: 1, lo: 0, hi: 3 },
   G: { rootString: 0, lo: -3, hi: 0 },
