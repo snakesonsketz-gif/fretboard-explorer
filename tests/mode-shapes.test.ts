@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { TUNINGS } from "../src/lib/fretboard";
 import { CAGED_ORDER, FORMS, MODE_INFO, cagedPositions } from "../src/lib/caged";
-import { CLAIMED, DEFAULT_ANCHOR, anchorsSupporting, checkClaim, modeFormula, modeRelations, modeShapeNotes, shapeSignature, STD_OPEN_PCS } from "../src/lib/modeShapes";
+import { CLAIMED, DEFAULT_ANCHOR, anchorsSupporting, checkClaim, modeFormula, modeRelations, modeShapeNotes, shapeSignature, STD_OPEN_PCS, PATTERN_ORDER, PENTATONIC_STEPS, inCagedPattern } from "../src/lib/modeShapes";
 
 const std = TUNINGS[0]!;
 const MAJOR = new Set([0, 2, 4, 5, 7, 9, 11]);
@@ -152,5 +152,22 @@ describe("compatibility with the existing CAGED system", () => {
       const all = cagedPositions(std, r.parentPc);
       for (const rel of r.rels) expect(all.some((p) => p.form === rel.form && p.from === rel.from && p.to === rel.to && p.rootFret === rel.rootFret)).toBe(true);
     }
+  });
+});
+
+describe("the five-mode CAGED pattern (Lydian and Locrian excluded)", () => {
+  test("sorted by step, the five pentatonic-start modes claim C, A, G, E, D in order", () => {
+    expect(PATTERN_ORDER.map((m) => CLAIMED[m])).toEqual(["C", "A", "G", "E", "D"]);
+    expect(PATTERN_ORDER.map((m) => MODE_INFO.find((x) => x.id === m)!.step)).toEqual([2, 4, 7, 9, 0]);
+    expect(PENTATONIC_STEPS.sort((a, b) => a - b)).toEqual([0, 2, 4, 7, 9]);
+  });
+  test("those five hold (exact or ±1) in all 60 keys × modes; Lydian and Locrian never do", () => {
+    for (let t = 0; t < 12; t++) for (const m of MODE_INFO) {
+      const c = checkClaim(t, m.id)!;
+      expect(inCagedPattern(m.id)).toBe(c.status !== "no");
+    }
+  });
+  test("offsets run 0, +1, 0, +1, 0 along the pattern", () => {
+    expect(PATTERN_ORDER.map((m) => checkClaim(4, m)!.offset)).toEqual([0, 1, 0, 1, 0]);
   });
 });

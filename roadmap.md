@@ -73,3 +73,4 @@ Approved order: tests → tabs → shared timing engine → chord sequencer → 
 - New "Shapes" tab (/modeshapes): pick a tonic and a mode, see the CAGED shape of its parent key next to the actual modal pattern (intervals from the tonic), fret offsets for all five shapes, the shapes laid along the neck, and a table of all seven parallel modes on that tonic. Choose which string the offset is measured from (default D).
 - Tested over all 84 tonic × mode combinations: Ionian→D, Dorian→C, Mixolydian→G exact; Phrygian→A, Aeolian→E one fret off; Lydian→G (+2) and Locrian→C (+3) do not hold on the D string (closest: Lydian→A, Locrian→E −1). The existing CAGED system is untouched (only `FORMS` is now exported).
 - Next: 1n, build 66.
+- 1m follow-up: Shapes tab marks Lydian and Locrian "outside the pattern"; the other five run C, A, G, E, D in order of their step (tested).

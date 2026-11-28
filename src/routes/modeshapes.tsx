@@ -6,7 +6,7 @@ import { pluck } from "@/lib/audio";
 import { CAGED_ORDER, MODE_INFO, type CagedForm } from "@/lib/caged";
 import { TUNINGS } from "@/lib/fretboard";
 import { tabTuning } from "@/lib/tabs/model";
-import { CLAIMED, DEFAULT_ANCHOR, STRING_NAMES, anchorsSupporting, checkClaim, modeFormula, modeRelations, modeShapeNotes, type ClaimStatus } from "@/lib/modeShapes";
+import { CLAIMED, DEFAULT_ANCHOR, STRING_NAMES, anchorsSupporting, checkClaim, inCagedPattern, modeFormula, modeRelations, modeShapeNotes, type ClaimStatus } from "@/lib/modeShapes";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/modeshapes")({
@@ -97,6 +97,7 @@ function ModeShapesPage() {
           </div>
           <p className="text-sm">
             Claimed shape: <b>{claim.claimed}</b> <Chip status={claim.status} />{" "}
+            {inCagedPattern(modeId) ? null : <span className="mr-1 rounded-full border border-border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground" data-testid="shapes-outside">outside the pattern</span>}
             <span className="text-muted-foreground">window starts {claim.offset === 0 ? "on the tonic fret" : `${signed(claim.offset)} fret${Math.abs(claim.offset) === 1 ? "" : "s"} from it`}.</span>
           </p>
           {claim.best !== claim.claimed && Math.abs(claim.bestOffset) < Math.abs(claim.offset) ? (
@@ -154,7 +155,7 @@ function ModeShapesPage() {
                   const r = modeRelations(tonic, m.id, anchor)!;
                   return (
                     <tr key={m.id} className={cn("border-t border-border/60", m.id === modeId && "bg-primary/10")} data-testid={`shapes-row-${m.id}`}>
-                      <td className="py-1 pr-2"><button type="button" className="font-semibold underline-offset-2 hover:underline" onClick={() => { setModeId(m.id); setFormPick(null); }}>{NAME[m.id]}</button></td>
+                      <td className="py-1 pr-2"><button type="button" className="font-semibold underline-offset-2 hover:underline" onClick={() => { setModeId(m.id); setFormPick(null); }}>{NAME[m.id]}</button>{inCagedPattern(m.id) ? null : <span className="ml-1 text-[10px] text-muted-foreground">outside</span>}</td>
                       <td className="pr-2">{TONICS[r.parentPc]}</td>
                       <td className="pr-2 font-bold">{c.claimed}</td>
                       <td className="pr-2">{signed(c.offset)}</td>
@@ -166,7 +167,7 @@ function ModeShapesPage() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-muted-foreground">Every mode contains all five shapes of its parent key. "Offset" is how far the claimed shape's window starts from the {TONICS[tonic]} on the {STRING_NAMES[anchor]} string.</p>
+          <p className="text-xs text-muted-foreground">Dorian, Phrygian, Mixolydian, Aeolian and Ionian run through C, A, G, E, D in order — Lydian and Locrian start on the two notes the pentatonic skips and sit outside it. Every mode contains all five shapes of its parent key. "Offset" is how far the claimed shape's window starts from the {TONICS[tonic]} on the {STRING_NAMES[anchor]} string.</p>
         </section>
       </main>
     </AppShell>

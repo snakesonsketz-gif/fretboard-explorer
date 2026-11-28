@@ -158,3 +158,13 @@ export function modeShapeNotes(tuning: Tuning, tonicPc: number, modeId: string, 
 export function shapeSignature(notes: ShapeNote[], windowFrom: number): string {
   return notes.map((n) => `${n.string}:${n.fret - windowFrom}:${n.degree}`).sort().join("|");
 }
+
+/**
+ * The five modes that start on a note of the parent key's major pentatonic (steps 0, 2, 4, 7, 9) follow the
+ * CAGED order when sorted by step (Dorian C, Phrygian A, Mixolydian G, Aeolian E, Ionian D). Lydian (5) and
+ * Locrian (11) start on the two notes the pentatonic leaves out and sit outside the pattern.
+ */
+export const PENTATONIC_STEPS = [0, 2, 4, 7, 9];
+export const inCagedPattern = (modeId: string): boolean => PENTATONIC_STEPS.includes(MODE_INFO.find((m) => m.id === modeId)?.step ?? -1);
+/** Mode ids in the order their claimed shapes run C, A, G, E, D. */
+export const PATTERN_ORDER = ["dorian", "phrygian", "mixolydian", "aeolian", "ionian"];
